@@ -1,0 +1,24 @@
+# Services locaux de développement.
+# Staging et production tournent chez OVH (voir docs/tech-stack.md) — ce fichier
+# ne sert qu'à l'environnement `development`.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: seuil-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: seuil
+      POSTGRES_PASSWORD: seuil
+      POSTGRES_DB: seuil_dev
+    ports:
+      - '5433:5432'
+    volumes:
+      - seuil-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U seuil -d seuil_dev']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  seuil-pgdata:

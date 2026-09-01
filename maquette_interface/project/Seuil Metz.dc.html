@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f2f1ed;color:#16181a;font-family:'Space Grotesk',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#7a1f2b;text-decoration:none}
+a:hover{color:#5a141f;text-decoration:underline}
+input,button,select,textarea{font:inherit;color:inherit}
+input[type=range]{accent-color:#7a1f2b}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes pop{0%{opacity:0;transform:scale(.8)}60%{transform:scale(1.07)}100%{opacity:1;transform:scale(1)}}
+@keyframes barIn{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+html{scroll-behavior:smooth}
+[data-reveal]{opacity:0;transform:translateY(22px);transition:opacity .75s cubic-bezier(.16,.84,.24,1),transform .75s cubic-bezier(.16,.84,.24,1)}
+[data-reveal][data-shown]{opacity:1;transform:none}
+@media (prefers-reduced-motion:reduce){[data-reveal]{opacity:1;transform:none;transition:none}}
+</style>
+</helmet>
+
+<header style="position:sticky;top:0;z-index:30;background:rgba(242,241,237,.94);backdrop-filter:blur(10px);border-bottom:1px solid rgba(22,24,26,.16)">
+  <div style="max-width:1340px;margin:0 auto;padding:13px 28px;display:flex;align-items:center;gap:24px;flex-wrap:wrap">
+    <div style="display:flex;align-items:baseline;gap:10px">
+      <span style="font-size:18px;font-weight:600;letter-spacing:.16em">SEUIL</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#6b6f70">METZ · 57000</span>
+    </div>
+    <div style="display:flex;gap:4px;margin-left:auto;flex-wrap:wrap">
+      <sc-for list="{{ tabs }}" as="tab" hint-placeholder-count="4">
+        <button onClick="{{ tab.go }}" style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.08em;padding:7px 11px;border:1px solid rgba(22,24,26,.18);background:{{ tab.bg }};color:{{ tab.fg }};cursor:pointer;transition:background .18s,color .18s" style-hover="border-color:rgba(122,31,43,.6)">{{ tab.label }}</button>
+      </sc-for>
+    </div>
+    <div style="display:flex;align-items:center;gap:18px">
+      <a href="#" style="font-size:13px;color:#16181a">Espace propriétaire</a>
+      <button onClick="{{ goDossier }}" style="font-size:13px;font-weight:500;padding:9px 16px;background:#7a1f2b;color:#f2f1ed;border:none;cursor:pointer;transition:background .18s" style-hover="background:#5a141f">Créer mon dossier</button>
+    </div>
+  </div>
+  <div style="height:2px;background:rgba(122,31,43,.12)">
+    <div ref="{{ barRef }}" style="height:2px;width:0%;background:#7a1f2b;transition:width .1s linear"></div>
+  </div>
+</header>
+
+<sc-if value="{{ isAccueil }}" hint-placeholder-val="{{ true }}">
+<main style="max-width:1340px;margin:0 auto;padding:0 28px 96px">
+  <div style="display:flex;flex-wrap:wrap;gap:48px;padding:64px 0 56px;border-bottom:1px solid rgba(22,24,26,.16)">
+    <div style="flex:3 1 460px;animation:fadeUp .6s cubic-bezier(.2,.7,.2,1) both">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;color:#7a1f2b;margin-bottom:20px">PREMIER MARCHÉ — METZ MÉTROPOLE</div>
+      <h1 style="font-size:clamp(34px,4.6vw,58px);line-height:1.04;letter-spacing:-.025em;font-weight:600;margin:0 0 20px;text-wrap:balance">Louer sans agence.<br>Candidater sans dossier papier.</h1>
+      <p style="font-size:16.5px;line-height:1.6;color:#4a4f50;max-width:52ch;margin:0 0 32px;text-wrap:pretty">Les propriétaires publient leur bien avec un abonnement mensuel, sans commission. Les locataires déposent un dossier vérifié une seule fois, puis candidatent en un clic.</p>
+      <div style="display:flex;flex-wrap:wrap;border:1px solid rgba(22,24,26,.22);background:#fff">
+        <label style="flex:2 1 190px;display:block;padding:12px 14px;border-right:1px solid rgba(22,24,26,.14)">
+          <span style="display:block;font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.12em;color:#6b6f70;margin-bottom:5px">QUARTIER</span>
+          <select style="width:100%;border:none;outline:none;background:transparent;font-size:14.5px;cursor:pointer">
+            <option>Tous les quartiers</option>
+            <option>Centre-ville</option>
+            <option>Sablon</option>
+            <option>Nouvelle Ville</option>
+            <option>Queuleu</option>
+            <option>Devant-les-Ponts</option>
+            <option>Outre-Seille</option>
+          </select>
+        </label>
+        <label style="flex:1 1 140px;display:block;padding:12px 14px;border-right:1px solid rgba(22,24,26,.14)">
+          <span style="display:block;font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.12em;color:#6b6f70;margin-bottom:5px">LOYER MAX</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:14.5px">1 200 €</span>
+        </label>
+        <label style="flex:1 1 140px;display:block;padding:12px 14px;border-right:1px solid rgba(22,24,26,.14)">
+          <span style="display:block;font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.12em;color:#6b6f70;margin-bottom:5px">PIÈCES</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:14.5px">2 — 3</span>
+        </label>
+        <button onClick="{{ goResultats }}" style="flex:0 0 auto;padding:14px 26px;background:#7a1f2b;color:#f2f1ed;border:none;cursor:pointer;font-size:14px;font-weight:500;transition:background .18s" style-hover="background:#5a141f">Rechercher</button>
+      </div>
+      <div style="display:flex;gap:22px;flex-wrap:wrap;margin-top:16px;font-size:12.5px;color:#6b6f70">
+        <span>Dossier vérifié en 24 h</span>
+        <span>Aucun frais d'agence</span>
+        <span>Bail et état des lieux en ligne</span>
+      </div>
+    </div>
+    <div style="flex:1 1 300px;animation:fadeUp .6s cubic-bezier(.2,.7,.2,1) .12s both">
+      <div style="border:1px solid rgba(22,24,26,.22);background:#fff">
+        <div style="padding:22px 20px 18px;border-bottom:1px solid rgba(22,24,26,.14)">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.12em;color:#6b6f70;margin-bottom:10px">BIENS VÉRIFIÉS · MOSELLE</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:clamp(40px,5vw,58px);line-height:1;font-weight:500;letter-spacing:-.03em;color:#7a1f2b;font-variant-numeric:tabular-nums">{{ counter }}</div>
+          <div style="height:2px;background:rgba(122,31,43,.16);margin-top:14px;overflow:hidden">
+            <div style="height:2px;background:#7a1f2b;transform-origin:left;animation:barIn 1.1s cubic-bezier(.2,.7,.2,1) .2s both"></div>
+          </div>
+        </div>
+        <sc-for list="{{ registry }}" as="row" hint-placeholder-count="4">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:14px;padding:12px 20px;border-bottom:1px solid rgba(22,24,26,.09)">
+            <span style="font-size:12.5px;color:#4a4f50">{{ row.k }}</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:500;font-variant-numeric:tabular-nums">{{ row.v }}</span>
+          </div>
+        </sc-for>
+        <div style="padding:14px 20px;display:flex;align-items:center;gap:9px">
+          <span style="display:inline-block;width:7px;height:7px;background:#7a1f2b;border-radius:50%;animation:pop .5s cubic-bezier(.2,.7,.2,1) .5s both"></span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.08em;color:#6b6f70">VÉRIFICATION AUTOMATISÉE ACTIVE</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section data-reveal style="padding:52px 0 0">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:26px">
+      <h2 style="font-size:19px;font-weight:600;letter-spacing:-.01em;margin:0">Biens en avant à Metz</h2>
+      <button onClick="{{ goResultats }}" style="background:none;border:none;padding:0;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.1em;color:#7a1f2b">VOIR LES 12 BIENS →</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:24px">
+      <sc-for list="{{ featured }}" as="p" hint-placeholder-count="3">
+        <div onClick="{{ p.open }}" data-reveal style="border:1px solid rgba(22,24,26,.18);background:#fff;cursor:pointer;transition:opacity .7s cubic-bezier(.16,.84,.24,1),transform .34s cubic-bezier(.2,.7,.2,1),box-shadow .3s,border-color .22s" style-hover="transform:translateY(-4px);box-shadow:0 12px 28px rgba(22,24,26,.11);border-color:rgba(122,31,43,.55)">
+          <div style="height:186px;background:repeating-linear-gradient(135deg,#e8e6e0 0 7px,#f1efe9 7px 14px);border-bottom:1px solid rgba(22,24,26,.14);display:flex;align-items:flex-end;justify-content:space-between;padding:12px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.1em;color:#8a8d8b">{{ p.photo }}</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.1em;padding:4px 7px;background:#7a1f2b;color:#f2f1ed;animation:pop .5s cubic-bezier(.2,.7,.2,1) .45s both">VÉRIFIÉ</span>
+          </div>
+          <div style="padding:16px 18px 18px">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:6px">
+              <span style="font-size:15.5px;font-weight:500">{{ p.titre }}</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:500;white-space:nowrap">{{ p.loyerFmt }}</span>
+            </div>
+            <div style="font-size:13px;color:#6b6f70;margin-bottom:14px">{{ p.quartier }} · {{ p.ref }}</div>
+            <div style="display:flex;gap:0;border-top:1px solid rgba(22,24,26,.12);padding-top:12px">
+              <div style="flex:1;border-right:1px solid rgba(22,24,26,.1)">
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.1em;color:#8a8d8b">SURFACE</div>
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:12.5px">{{ p.surfaceFmt }}</div>
+              </div>
+              <div style="flex:1;padding-left:12px;border-right:1px solid rgba(22,24,26,.1)">
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.1em;color:#8a8d8b">MEUBLÉ</div>
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:12.5px">{{ p.meubleFmt }}</div>
+              </div>
+              <div style="flex:1;padding-left:12px">
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.1em;color:#8a8d8b">DPE</div>
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:12.5px">{{ p.dpe }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section data-reveal style="margin-top:64px;border-top:1px solid rgba(22,24,26,.16);padding-top:44px;display:flex;flex-wrap:wrap;gap:48px">
+    <div style="flex:1 1 300px">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.14em;color:#7a1f2b;margin-bottom:14px">PROPRIÉTAIRES</div>
+      <h2 style="font-size:clamp(24px,2.6vw,32px);line-height:1.15;font-weight:600;letter-spacing:-.02em;margin:0 0 14px">Un abonnement, pas une commission.</h2>
+      <p style="font-size:15px;line-height:1.6;color:#4a4f50;max-width:46ch;margin:0 0 22px">Vous gardez la main sur la sélection. Nous vérifions l'identité, les revenus et la cohérence des dossiers avant qu'ils arrivent chez vous.</p>
+      <div style="display:flex;align-items:baseline;gap:10px">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:34px;font-weight:500;letter-spacing:-.02em">39 €</span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.1em;color:#6b6f70">/ MOIS / BIEN · SANS ENGAGEMENT</span>
+      </div>
+    </div>
+    <div style="flex:1 1 340px;border:1px solid rgba(22,24,26,.22);background:#fff">
+      <sc-for list="{{ ownerSteps }}" as="s" hint-placeholder-count="3">
+        <div style="display:flex;gap:16px;padding:18px 20px;border-bottom:1px solid rgba(22,24,26,.1)">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#7a1f2b;padding-top:2px">{{ s.n }}</span>
+          <div>
+            <div style="font-size:14.5px;font-weight:500;margin-bottom:3px">{{ s.t }}</div>
+            <div style="font-size:13px;line-height:1.5;color:#6b6f70">{{ s.d }}</div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+</main>
+</sc-if>
+
+<sc-if value="{{ isResultats }}" hint-placeholder-val="{{ false }}">
+<main style="max-width:1340px;margin:0 auto;padding:34px 28px 96px;display:flex;flex-wrap:wrap;gap:36px;animation:fadeIn .35s both">
+  <aside style="flex:1 1 236px;max-width:290px;align-self:flex-start;position:sticky;top:82px">
+    <div style="border:1px solid rgba(22,24,26,.22);background:#fff">
+      <div style="padding:14px 18px;border-bottom:1px solid rgba(22,24,26,.14);font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.12em;color:#6b6f70">FILTRES</div>
+      <div style="padding:18px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
+          <span style="font-size:13px;font-weight:500">Loyer maximum</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;font-variant-numeric:tabular-nums">{{ maxLoyerFmt }}</span>
+        </div>
+        <input type="range" min="400" max="1600" step="50" value="{{ maxLoyer }}" onChange="{{ setMaxLoyer }}" onInput="{{ setMaxLoyer }}" style="width:100%">
+        <div style="display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:#8a8d8b;margin-top:4px"><span>400</span><span>1 600</span></div>
+      </div>
+      <div style="padding:16px 18px;border-top:1px solid rgba(22,24,26,.1)">
+        <div style="font-size:13px;font-weight:500;margin-bottom:11px">Surface minimum</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          <sc-for list="{{ surfaceOptions }}" as="s" hint-placeholder-count="4">
+            <button onClick="{{ s.go }}" style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;padding:6px 10px;border:1px solid rgba(22,24,26,.2);background:{{ s.bg }};color:{{ s.fg }};cursor:pointer;transition:background .16s">{{ s.label }}</button>
+          </sc-for>
+        </div>
+      </div>
+      <div style="padding:16px 18px;border-top:1px solid rgba(22,24,26,.1)">
+        <div style="font-size:13px;font-weight:500;margin-bottom:11px">Quartier</div>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <sc-for list="{{ quartierOptions }}" as="q" hint-placeholder-count="6">
+            <label onClick="{{ q.go }}" style="display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;font-size:13.5px" style-hover="color:#7a1f2b">
+              <span style="display:flex;align-items:center;gap:9px">
+                <span style="width:12px;height:12px;border:1px solid rgba(22,24,26,.4);background:{{ q.bg }};display:inline-block"></span>
+                {{ q.label }}
+              </span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#8a8d8b">{{ q.n }}</span>
+            </label>
+          </sc-for>
+        </div>
+      </div>
+      <div style="padding:16px 18px;border-top:1px solid rgba(22,24,26,.1)">
+        <div style="font-size:13px;font-weight:500;margin-bottom:11px">Ameublement</div>
+        <div style="display:flex">
+          <sc-for list="{{ meubleOptions }}" as="m" hint-placeholder-count="3">
+            <button onClick="{{ m.go }}" style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:10.5px;padding:7px 4px;border:1px solid rgba(22,24,26,.2);background:{{ m.bg }};color:{{ m.fg }};cursor:pointer;margin-left:-1px;transition:background .16s">{{ m.label }}</button>
+          </sc-for>
+        </div>
+      </div>
+      <button onClick="{{ resetFilters }}" style="width:100%;padding:12px;border:none;border-top:1px solid rgba(22,24,26,.14);background:transparent;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#6b6f70" style-hover="color:#7a1f2b">RÉINITIALISER</button>
+    </div>
+  </aside>
+
+  <section style="flex:5 1 460px;min-width:0">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;padding-bottom:14px;border-bottom:1px solid rgba(22,24,26,.22)">
+      <h1 style="font-size:18px;font-weight:600;margin:0">Biens à louer · Metz</h1>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#6b6f70;font-variant-numeric:tabular-nums">{{ resultCount }} RÉSULTATS · TRI : COMPATIBILITÉ</span>
+    </div>
+    <sc-for list="{{ results }}" as="p" hint-placeholder-count="5">
+      <div onClick="{{ p.open }}" data-reveal style="display:flex;flex-wrap:wrap;gap:20px;padding:20px 0;border-bottom:1px solid rgba(22,24,26,.12);cursor:pointer;transition:opacity .7s cubic-bezier(.16,.84,.24,1),transform .5s cubic-bezier(.16,.84,.24,1),background .2s,padding-left .2s" style-hover="background:rgba(255,255,255,.75);padding-left:8px">
+        <div style="flex:0 0 168px;height:118px;background:repeating-linear-gradient(135deg,#e8e6e0 0 7px,#f1efe9 7px 14px);border:1px solid rgba(22,24,26,.14);display:flex;align-items:flex-end;padding:8px">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.08em;color:#8a8d8b">{{ p.photo }}</span>
+        </div>
+        <div style="flex:2 1 220px;min-width:0">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:5px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8a8d8b">{{ p.ref }}</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.09em;padding:3px 6px;border:1px solid {{ p.compatBorder }};color:{{ p.compatColor }};animation:pop .45s cubic-bezier(.2,.7,.2,1) .2s both">{{ p.compatLabel }}</span>
+          </div>
+          <div style="font-size:16px;font-weight:500;margin-bottom:4px">{{ p.titre }}</div>
+          <div style="font-size:13.5px;color:#6b6f70;margin-bottom:10px">{{ p.quartier }} · {{ p.adresse }}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:14px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#4a4f50">
+            <span>{{ p.surfaceFmt }}</span>
+            <span>{{ p.piecesFmt }}</span>
+            <span>ÉTAGE {{ p.etage }}</span>
+            <span>DPE {{ p.dpe }}</span>
+            <span>{{ p.meubleFmt }}</span>
+          </div>
+        </div>
+        <div style="flex:0 0 128px;text-align:right">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:19px;font-weight:500;letter-spacing:-.01em">{{ p.loyerFmt }}</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#6b6f70;margin-top:3px">+ {{ p.chargesFmt }} CH.</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8a8d8b;margin-top:10px">LIBRE {{ p.dispo }}</div>
+        </div>
+      </div>
+    </sc-for>
+    <sc-if value="{{ noResults }}" hint-placeholder-val="{{ false }}">
+      <div style="padding:52px 0;text-align:center;color:#6b6f70;font-size:14px">Aucun bien ne correspond à ces critères. Élargissez le loyer ou les quartiers.</div>
+    </sc-if>
+  </section>
+</main>
+</sc-if>
+
+<sc-if value="{{ isFiche }}" hint-placeholder-val="{{ false }}">
+<main style="max-width:1340px;margin:0 auto;padding:28px 28px 96px;animation:fadeIn .35s both">
+  <button onClick="{{ goResultats }}" style="background:none;border:none;padding:0;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.1em;color:#6b6f70;margin-bottom:20px" style-hover="color:#7a1f2b">← RETOUR AUX RÉSULTATS</button>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:2px;margin-bottom:32px;animation:fadeUp .5s cubic-bezier(.2,.7,.2,1) both">
+    <sc-for list="{{ fichePhotos }}" as="ph" hint-placeholder-count="4">
+      <div style="height:236px;background:repeating-linear-gradient(135deg,#e8e6e0 0 7px,#f1efe9 7px 14px);border:1px solid rgba(22,24,26,.14);display:flex;align-items:flex-end;padding:10px">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.08em;color:#8a8d8b">{{ ph }}</span>
+      </div>
+    </sc-for>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:44px">
+    <div style="flex:3 1 420px;min-width:0">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.1em;color:#8a8d8b;margin-bottom:10px">{{ sel.ref }} · MIS EN LIGNE PAR LE PROPRIÉTAIRE</div>
+      <h1 style="font-size:clamp(26px,3.2vw,38px);line-height:1.1;letter-spacing:-.022em;font-weight:600;margin:0 0 8px">{{ sel.titre }}</h1>
+      <div style="font-size:15px;color:#4a4f50;margin-bottom:26px">{{ sel.adresse }} · {{ sel.quartier }}, Metz</div>
+      <div data-reveal style="display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));border-top:1px solid rgba(22,24,26,.2);border-left:1px solid rgba(22,24,26,.2);background:#fff">
+        <sc-for list="{{ specs }}" as="s" hint-placeholder-count="8">
+          <div style="padding:14px 16px;border-right:1px solid rgba(22,24,26,.12);border-bottom:1px solid rgba(22,24,26,.12)">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.1em;color:#8a8d8b;margin-bottom:6px">{{ s.k }}</div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:500">{{ s.v }}</div>
+          </div>
+        </sc-for>
+      </div>
+      <h2 data-reveal style="font-size:16px;font-weight:600;margin:38px 0 12px">Le bien</h2>
+      <p style="font-size:15px;line-height:1.65;color:#4a4f50;max-width:62ch;margin:0 0 16px;text-wrap:pretty">Appartement traversant dans un immeuble de 1930, parquet d'origine et hauteur sous plafond de 2,90 m. Cuisine équipée séparée, salle de bain refaite en 2024, chauffage collectif au gaz. Cave privative en sous-sol.</p>
+      <p style="font-size:15px;line-height:1.65;color:#4a4f50;max-width:62ch;margin:0 0 30px;text-wrap:pretty">À cinq minutes à pied de la gare de Metz et des lignes Mettis A et B. Commerces de proximité au pied de l'immeuble.</p>
+      <div data-reveal style="border:1px solid rgba(22,24,26,.2);background:#fff;padding:20px">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.12em;color:#6b6f70;margin-bottom:14px">CRITÈRES DU PROPRIÉTAIRE</div>
+        <sc-for list="{{ criteria }}" as="c" hint-placeholder-count="3">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;padding:9px 0;border-bottom:1px solid rgba(22,24,26,.09)">
+            <span style="font-size:13.5px;color:#4a4f50">{{ c.k }}</span>
+            <span style="display:flex;align-items:center;gap:9px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px">{{ c.v }}</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.08em;color:{{ c.color }}">{{ c.tag }}</span>
+            </span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <aside style="flex:1 1 300px;align-self:flex-start;position:sticky;top:82px">
+      <div style="border:1px solid rgba(22,24,26,.22);background:#fff;animation:fadeUp .5s cubic-bezier(.2,.7,.2,1) .1s both">
+        <div style="padding:20px;border-bottom:1px solid rgba(22,24,26,.14)">
+          <div style="display:flex;align-items:baseline;gap:8px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:28px;font-weight:500;letter-spacing:-.02em">{{ sel.loyerFmt }}</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#6b6f70">/ MOIS CC</span>
+          </div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#8a8d8b;margin-top:6px">DONT {{ sel.chargesFmt }} DE CHARGES · DÉPÔT {{ sel.depot }}</div>
+        </div>
+        <div style="padding:20px;border-bottom:1px solid rgba(22,24,26,.14);background:rgba(122,31,43,.05)">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+            <span style="width:18px;height:18px;background:#7a1f2b;color:#f2f1ed;display:flex;align-items:center;justify-content:center;font-size:11px;animation:pop .5s cubic-bezier(.2,.7,.2,1) .3s both">✓</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.1em;color:#7a1f2b;font-weight:500">DOSSIER COMPATIBLE</span>
+          </div>
+          <div style="font-size:13.5px;line-height:1.55;color:#3f1a20;margin-bottom:14px">Vos revenus vérifiés couvrent 3,4× le loyer. Le propriétaire recevra votre dossier complet, sans pièce à renvoyer.</div>
+          <div style="height:3px;background:rgba(122,31,43,.18);overflow:hidden">
+            <div style="height:3px;width:88%;background:#7a1f2b;transform-origin:left;animation:barIn .9s cubic-bezier(.2,.7,.2,1) .35s both"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:#8a5158;margin-top:6px"><span>SCORE DE DOSSIER</span><span>88 / 100</span></div>
+        </div>
+        <div style="padding:20px">
+          <button onClick="{{ apply }}" style="width:100%;padding:14px;background:#7a1f2b;color:#f2f1ed;border:none;cursor:pointer;font-size:14.5px;font-weight:500;transition:background .18s" style-hover="background:#5a141f">{{ applyLabel }}</button>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.08em;color:#8a8d8b;text-align:center;margin:10px 0 18px">RÉPONSE MOYENNE SOUS 32 H</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.12em;color:#6b6f70;margin-bottom:10px">PRENDRE RDV DE VISITE</div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <sc-for list="{{ slots }}" as="sl" hint-placeholder-count="3">
+              <button onClick="{{ sl.go }}" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid {{ sl.border }};background:{{ sl.bg }};color:{{ sl.fg }};cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:11.5px;transition:border-color .16s,background .16s">
+                <span>{{ sl.date }}</span>
+                <span>{{ sl.heure }}</span>
+              </button>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+      <div style="border:1px solid rgba(22,24,26,.16);border-top:none;padding:14px 20px;font-size:12.5px;color:#6b6f70;line-height:1.5">Louer en direct : aucun frais de dossier, aucun honoraire d'agence.</div>
+    </aside>
+  </div>
+</main>
+</sc-if>
+
+<sc-if value="{{ isDossier }}" hint-placeholder-val="{{ false }}">
+<main style="max-width:1340px;margin:0 auto;padding:34px 28px 96px;animation:fadeIn .35s both">
+  <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:flex-end;justify-content:space-between;padding-bottom:20px;border-bottom:1px solid rgba(22,24,26,.22)">
+    <div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.12em;color:#6b6f70;margin-bottom:8px">ESPACE LOCATAIRE · DOSSIER LOC-2026-0871</div>
+      <h1 style="font-size:clamp(24px,3vw,34px);letter-spacing:-.022em;font-weight:600;margin:0">Camille Ferry</h1>
+    </div>
+    <div style="display:flex;gap:26px;flex-wrap:wrap">
+      <sc-for list="{{ dossierStats }}" as="d" hint-placeholder-count="3">
+        <div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.1em;color:#8a8d8b;margin-bottom:4px">{{ d.k }}</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:17px;font-weight:500">{{ d.v }}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-wrap:wrap;gap:36px;margin-top:32px">
+    <section style="flex:3 1 420px;min-width:0">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:16px">
+        <h2 style="font-size:17px;font-weight:600;margin:0">Dossier numérique</h2>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#6b6f70">4 / 5 PIÈCES VÉRIFIÉES</span>
+      </div>
+      <div style="height:3px;background:rgba(22,24,26,.12);margin-bottom:24px;overflow:hidden">
+        <div style="height:3px;width:80%;background:#7a1f2b;transform-origin:left;animation:barIn 1s cubic-bezier(.2,.7,.2,1) .15s both"></div>
+      </div>
+      <div style="border:1px solid rgba(22,24,26,.22);background:#fff">
+        <sc-for list="{{ docs }}" as="d" hint-placeholder-count="5">
+          <div data-reveal style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;padding:16px 18px;border-bottom:1px solid rgba(22,24,26,.1);transition:opacity .7s cubic-bezier(.16,.84,.24,1),transform .5s cubic-bezier(.16,.84,.24,1),background .18s" style-hover="background:rgba(122,31,43,.035)">
+            <div style="flex:2 1 200px;min-width:0">
+              <div style="font-size:14.5px;font-weight:500;margin-bottom:3px">{{ d.nom }}</div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#8a8d8b">{{ d.meta }}</div>
+            </div>
+            <div style="flex:1 1 130px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#6b6f70">{{ d.check }}</div>
+            <span style="flex:0 0 auto;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.09em;padding:5px 8px;border:1px solid {{ d.border }};background:{{ d.bg }};color:{{ d.color }};animation:pop .45s cubic-bezier(.2,.7,.2,1) .25s both">{{ d.statut }}</span>
+          </div>
+        </sc-for>
+        <div style="padding:18px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between">
+          <span style="font-size:13px;color:#6b6f70">Avis d'imposition 2025 manquant — bloque 2 candidatures.</span>
+          <button style="padding:10px 16px;background:#16181a;color:#f2f1ed;border:none;cursor:pointer;font-size:13px;transition:background .18s" style-hover="background:#7a1f2b">Déposer le document</button>
+        </div>
+      </div>
+
+      <h2 data-reveal style="font-size:17px;font-weight:600;margin:40px 0 16px">Suivi des candidatures</h2>
+      <div style="border:1px solid rgba(22,24,26,.22);background:#fff">
+        <div style="display:flex;gap:16px;padding:11px 18px;border-bottom:1px solid rgba(22,24,26,.16);font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.1em;color:#8a8d8b">
+          <span style="flex:2 1 180px">BIEN</span>
+          <span style="flex:1 1 90px">LOYER</span>
+          <span style="flex:1 1 90px">ENVOYÉE</span>
+          <span style="flex:0 0 110px;text-align:right">STATUT</span>
+        </div>
+        <sc-for list="{{ applications }}" as="a" hint-placeholder-count="4">
+          <div data-reveal style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;padding:15px 18px;border-bottom:1px solid rgba(22,24,26,.09);transition:opacity .7s cubic-bezier(.16,.84,.24,1),transform .5s cubic-bezier(.16,.84,.24,1),background .18s" style-hover="background:rgba(255,255,255,.9)">
+            <div style="flex:2 1 180px;min-width:0">
+              <div style="font-size:14px;font-weight:500">{{ a.titre }}</div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8a8d8b;margin-top:2px">{{ a.ref }} · {{ a.quartier }}</div>
+            </div>
+            <span style="flex:1 1 90px;font-family:'IBM Plex Mono',monospace;font-size:12.5px">{{ a.loyer }}</span>
+            <span style="flex:1 1 90px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#6b6f70">{{ a.date }}</span>
+            <span style="flex:0 0 110px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.09em;color:{{ a.color }}">{{ a.statut }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+
+    <aside data-reveal style="flex:1 1 280px;align-self:flex-start">
+      <div style="border:1px solid rgba(22,24,26,.22);background:#fff">
+        <div style="padding:18px 20px;border-bottom:1px solid rgba(22,24,26,.14)">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.12em;color:#6b6f70;margin-bottom:12px">VÉRIFICATION AUTOMATISÉE</div>
+          <sc-for list="{{ checks }}" as="c" hint-placeholder-count="4">
+            <div style="display:flex;align-items:center;gap:10px;padding:7px 0">
+              <span style="width:14px;height:14px;display:flex;align-items:center;justify-content:center;font-size:9px;background:{{ c.bg }};color:{{ c.fg }};animation:pop .4s cubic-bezier(.2,.7,.2,1) .3s both">{{ c.icon }}</span>
+              <span style="font-size:13px;color:#4a4f50">{{ c.label }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="padding:18px 20px;background:rgba(122,31,43,.05)">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.1em;color:#8a5158;margin-bottom:8px">SCORE DE DOSSIER</div>
+          <div style="display:flex;align-items:baseline;gap:8px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:34px;font-weight:500;color:#7a1f2b;letter-spacing:-.02em">88</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a5158">/ 100</span>
+          </div>
+          <div style="font-size:12.5px;line-height:1.5;color:#3f1a20;margin-top:10px">Ajoutez l'avis d'imposition pour atteindre 96 et débloquer les biens à plus de 900 €.</div>
+        </div>
+      </div>
+      <div style="border:1px solid rgba(22,24,26,.16);border-top:none;padding:16px 20px">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.12em;color:#6b6f70;margin-bottom:10px">PROCHAINE VISITE</div>
+        <div style="font-size:14px;font-weight:500;margin-bottom:3px">3 pièces, Sablon</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#4a4f50">JEU 10.09 · 18:30 · 14 RUE DE VERDUN</div>
+      </div>
+    </aside>
+  </div>
+</main>
+</sc-if>
+
+<footer style="border-top:1px solid rgba(22,24,26,.16);padding:28px;display:flex;flex-wrap:wrap;gap:18px;justify-content:space-between;align-items:center;max-width:1340px;margin:0 auto">
+  <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#8a8d8b">SEUIL · LOCATION LONGUE DURÉE EN DIRECT · METZ 2026</span>
+  <span style="display:flex;gap:20px;font-size:12.5px;color:#6b6f70">
+    <a href="#" style="color:#6b6f70">Propriétaires</a>
+    <a href="#" style="color:#6b6f70">Locataires</a>
+    <a href="#" style="color:#6b6f70">Vérification</a>
+    <a href="#" style="color:#6b6f70">Mentions légales</a>
+  </span>
+</footer>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;verifiedTarget&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:1248,&quot;tsType&quot;:&quot;number&quot;,&quot;min&quot;:100,&quot;max&quot;:9999,&quot;section&quot;:&quot;Données&quot;}}">
+const ACC = '#7a1f2b', AMBER = '#8a5a12', INK = '#16181a';
+
+const LISTINGS = [
+  {ref:'MZ-0142', titre:'2 pièces, Centre-ville', quartier:'Centre-ville', adresse:'8 rue Dupont des Loges', loyer:690, charges:60, surface:47, pieces:2, etage:'3/4', meuble:false, dpe:'C', dispo:'01.10.26', compat:'ok', photo:'photo · séjour'},
+  {ref:'MZ-0155', titre:'3 pièces, Sablon', quartier:'Sablon', adresse:'14 rue de Verdun', loyer:880, charges:85, surface:68, pieces:3, etage:'1/3', meuble:false, dpe:'D', dispo:'15.09.26', compat:'ok', photo:'photo · façade'},
+  {ref:'MZ-0161', titre:'Studio meublé, Nouvelle Ville', quartier:'Nouvelle Ville', adresse:'22 avenue Foch', loyer:540, charges:45, surface:26, pieces:1, etage:'5/5', meuble:true, dpe:'C', dispo:'immédiat', compat:'ok', photo:'photo · pièce'},
+  {ref:'MZ-0168', titre:'4 pièces, Queuleu', quartier:'Queuleu', adresse:'3 rue des Alliés', loyer:1150, charges:110, surface:92, pieces:4, etage:'RDC', meuble:false, dpe:'B', dispo:'01.11.26', compat:'partiel', photo:'photo · jardin'},
+  {ref:'MZ-0173', titre:'2 pièces meublé, Outre-Seille', quartier:'Outre-Seille', adresse:'11 rue Mazelle', loyer:720, charges:70, surface:44, pieces:2, etage:'2/3', meuble:true, dpe:'D', dispo:'01.10.26', compat:'ok', photo:'photo · cuisine'},
+  {ref:'MZ-0180', titre:'3 pièces, Devant-les-Ponts', quartier:'Devant-les-Ponts', adresse:'27 rue de Paris', loyer:820, charges:75, surface:71, pieces:3, etage:'2/4', meuble:false, dpe:'C', dispo:'20.09.26', compat:'ok', photo:'photo · séjour'},
+  {ref:'MZ-0186', titre:'Loft, Nouvelle Ville', quartier:'Nouvelle Ville', adresse:'5 rue Charlemagne', loyer:1320, charges:120, surface:104, pieces:3, etage:'4/4', meuble:false, dpe:'B', dispo:'01.12.26', compat:'partiel', photo:'photo · volume'},
+  {ref:'MZ-0191', titre:'Studio, Centre-ville', quartier:'Centre-ville', adresse:'2 place Saint-Louis', loyer:480, charges:40, surface:21, pieces:1, etage:'1/3', meuble:true, dpe:'E', dispo:'immédiat', compat:'ok', photo:'photo · pièce'}
+];
+const QUARTIERS = ['Centre-ville','Sablon','Nouvelle Ville','Queuleu','Devant-les-Ponts','Outre-Seille'];
+const SURFACES = [{label:'TOUTES',v:0},{label:'30 M²+',v:30},{label:'50 M²+',v:50},{label:'80 M²+',v:80}];
+const MEUBLES = [{label:'TOUS',v:'tous'},{label:'MEUBLÉ',v:'meuble'},{label:'NU',v:'nu'}];
+const SLOTS = [{date:'MAR 08.09', heure:'17:00'},{date:'JEU 10.09', heure:'18:30'},{date:'SAM 12.09', heure:'11:00'}];
+
+const eur = n => n.toLocaleString('fr-FR') + ' €';
+
+class Component extends DCLogic {
+  state = {screen:'accueil', counter:0, maxLoyer:1200, surfaceMin:0, meuble:'tous', quartiers:[], selRef:'MZ-0155', slot:null, applied:false};
+
+  barRef = React.createRef();
+
+  componentDidMount(){
+    this.runCounter();
+    this.setupReveal();
+    this.onScroll = () => {
+      const d = document.documentElement;
+      const p = d.scrollTop / Math.max(1, d.scrollHeight - d.clientHeight);
+      if (this.barRef.current) this.barRef.current.style.width = Math.min(100, p * 100).toFixed(1) + '%';
+    };
+    window.addEventListener('scroll', this.onScroll, {passive:true});
+  }
+
+  componentDidUpdate(){ this.setupReveal(); }
+
+  componentWillUnmount(){
+    window.removeEventListener('scroll', this.onScroll);
+    if (this.io) this.io.disconnect();
+  }
+
+  setupReveal(){
+    if (!('IntersectionObserver' in window)) return;
+    if (!this.io) {
+      this.io = new IntersectionObserver(ents => {
+        ents.filter(e => e.isIntersecting).forEach((e, i) => {
+          const el = e.target;
+          setTimeout(() => el.setAttribute('data-shown', '1'), i * 70);
+          this.io.unobserve(el);
+        });
+      }, {rootMargin:'0px 0px -6% 0px', threshold:0.06});
+    }
+    requestAnimationFrame(() => {
+      document.querySelectorAll('[data-reveal]:not([data-shown])').forEach(el => this.io.observe(el));
+    });
+  }
+
+  runCounter(){
+    const target = this.props.verifiedTarget ?? 1248, t0 = performance.now(), dur = 1300;
+    const step = () => {
+      const p = Math.min(1, (performance.now() - t0) / dur);
+      const e = 1 - Math.pow(1 - p, 3);
+      this.setState({counter: Math.round(target * e)});
+      if (p < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
+  go(screen){ this.setState({screen}); window.scrollTo(0,0); if (screen === 'accueil') this.runCounter(); }
+  open(ref){ this.setState({screen:'fiche', selRef:ref, applied:false, slot:null}); window.scrollTo(0,0); }
+
+  decorate(p){
+    return Object.assign({}, p, {
+      loyerFmt: eur(p.loyer),
+      chargesFmt: eur(p.charges),
+      surfaceFmt: p.surface + ' M²',
+      piecesFmt: p.pieces + (p.pieces > 1 ? ' PIÈCES' : ' PIÈCE'),
+      meubleFmt: p.meuble ? 'MEUBLÉ' : 'NU',
+      depot: eur(p.loyer),
+      compatLabel: p.compat === 'ok' ? 'DOSSIER COMPATIBLE' : 'REVENUS À CONFIRMER',
+      compatColor: p.compat === 'ok' ? ACC : AMBER,
+      compatBorder: p.compat === 'ok' ? 'rgba(122,31,43,.55)' : 'rgba(138,90,18,.5)',
+      open: () => this.open(p.ref)
+    });
+  }
+
+  filtered(){
+    return LISTINGS.filter(p =>
+      p.loyer <= this.state.maxLoyer &&
+      p.surface >= this.state.surfaceMin &&
+      (this.state.meuble === 'tous' || (this.state.meuble === 'meuble') === p.meuble) &&
+      (this.state.quartiers.length === 0 || this.state.quartiers.includes(p.quartier))
+    ).map(p => this.decorate(p));
+  }
+
+  toggleQuartier(q){
+    const cur = this.state.quartiers;
+    this.setState({quartiers: cur.includes(q) ? cur.filter(x => x !== q) : cur.concat(q)});
+  }
+
+  renderVals(){
+    const s = this.state;
+    const sel = this.decorate(LISTINGS.find(p => p.ref === s.selRef) || LISTINGS[0]);
+    const results = this.filtered();
+    const tab = (key, label) => ({label, go: () => this.go(key),
+      bg: s.screen === key ? INK : 'transparent', fg: s.screen === key ? '#f2f1ed' : '#16181a'});
+
+    return {
+      barRef: this.barRef,
+      isAccueil: s.screen === 'accueil', isResultats: s.screen === 'resultats',
+      isFiche: s.screen === 'fiche', isDossier: s.screen === 'dossier',
+      tabs: [tab('accueil','01 ACCUEIL'), tab('resultats','02 RÉSULTATS'), tab('fiche','03 FICHE BIEN'), tab('dossier','04 ESPACE LOCATAIRE')],
+      goResultats: () => this.go('resultats'),
+      goDossier: () => this.go('dossier'),
+      counter: s.counter.toLocaleString('fr-FR'),
+      registry: [
+        {k:'Loyer médian · 2 pièces', v:'695 €'},
+        {k:'Surface médiane', v:'54 m²'},
+        {k:'Délai moyen de réponse', v:'32 h'},
+        {k:'Dossiers vérifiés sans échange', v:'96 %'}
+      ],
+      featured: LISTINGS.slice(0,3).map(p => this.decorate(p)),
+      ownerSteps: [
+        {n:'01', t:'Décrivez le bien', d:'Diagnostics, photos et critères de sélection. Publication sous 2 h après contrôle.'},
+        {n:'02', t:'Recevez des dossiers vérifiés', d:'Identité, revenus et cohérence contrôlés automatiquement avant transmission.'},
+        {n:'03', t:'Signez le bail en ligne', d:'Bail conforme, état des lieux photo, quittances mensuelles automatiques.'}
+      ],
+      maxLoyer: s.maxLoyer,
+      maxLoyerFmt: eur(s.maxLoyer),
+      setMaxLoyer: e => this.setState({maxLoyer: Number(e.target.value)}),
+      surfaceOptions: SURFACES.map(o => ({label:o.label, go: () => this.setState({surfaceMin:o.v}),
+        bg: s.surfaceMin === o.v ? ACC : 'transparent', fg: s.surfaceMin === o.v ? '#f2f1ed' : '#16181a'})),
+      meubleOptions: MEUBLES.map(o => ({label:o.label, go: () => this.setState({meuble:o.v}),
+        bg: s.meuble === o.v ? ACC : 'transparent', fg: s.meuble === o.v ? '#f2f1ed' : '#16181a'})),
+      quartierOptions: QUARTIERS.map(q => ({label:q, n: LISTINGS.filter(p => p.quartier === q).length,
+        go: () => this.toggleQuartier(q), bg: s.quartiers.includes(q) ? ACC : 'transparent'})),
+      resetFilters: () => this.setState({maxLoyer:1200, surfaceMin:0, meuble:'tous', quartiers:[]}),
+      results,
+      resultCount: results.length,
+      noResults: results.length === 0,
+      sel,
+      fichePhotos: ['photo · séjour','photo · cuisine','photo · chambre','photo · immeuble'],
+      specs: [
+        {k:'SURFACE', v: sel.surface + ' m²'}, {k:'PIÈCES', v: String(sel.pieces)},
+        {k:'ÉTAGE', v: sel.etage}, {k:'DPE', v: sel.dpe},
+        {k:'AMEUBLEMENT', v: sel.meuble ? 'Meublé' : 'Nu'}, {k:'CHARGES', v: eur(sel.charges)},
+        {k:'DISPONIBLE', v: sel.dispo}, {k:'BAIL', v: '3 ans'}
+      ],
+      criteria: [
+        {k:'Revenus minimum', v:'2 640 € net', tag:'VOUS : 3 000 €', color:ACC},
+        {k:'Garant', v:'Facultatif', tag:'NON REQUIS', color:'#6b6f70'},
+        {k:'Type de contrat', v:'CDI ou fonction publique', tag:'CONFORME', color:ACC}
+      ],
+      slots: SLOTS.map(o => ({date:o.date, heure:o.heure, go: () => this.setState({slot:o.date}),
+        bg: s.slot === o.date ? ACC : 'transparent', fg: s.slot === o.date ? '#f2f1ed' : '#16181a',
+        border: s.slot === o.date ? ACC : 'rgba(22,24,26,.2)'})),
+      apply: () => this.setState({applied:true}),
+      applyLabel: s.applied ? 'Candidature envoyée ✓' : 'Candidater avec mon dossier',
+      dossierStats: [{k:'SCORE', v:'88 / 100'}, {k:'CANDIDATURES', v:'4'}, {k:'VISITES', v:'1'}],
+      docs: [
+        {nom:'Pièce d\'identité', meta:'CNI · PDF · 1,2 MO', check:'Contrôle MRZ · OK', statut:'VÉRIFIÉ', color:ACC, border:'rgba(122,31,43,.5)', bg:'rgba(122,31,43,.07)'},
+        {nom:'Bulletins de salaire', meta:'3 fichiers · JUIN—AOÛT 2026', check:'Moyenne 3 000 € net', statut:'VÉRIFIÉ', color:ACC, border:'rgba(122,31,43,.5)', bg:'rgba(122,31,43,.07)'},
+        {nom:'Contrat de travail', meta:'PDF · 380 KO', check:'CDI · hors période d\'essai', statut:'VÉRIFIÉ', color:ACC, border:'rgba(122,31,43,.5)', bg:'rgba(122,31,43,.07)'},
+        {nom:'Attestation d\'hébergement', meta:'PDF · 210 KO', check:'Lecture en cours', statut:'EN COURS', color:AMBER, border:'rgba(138,90,18,.45)', bg:'rgba(138,90,18,.07)'},
+        {nom:'Avis d\'imposition 2025', meta:'—', check:'Requis par 2 propriétaires', statut:'MANQUANT', color:'#8a8d8b', border:'rgba(22,24,26,.25)', bg:'transparent'}
+      ],
+      applications: [
+        {titre:'3 pièces, Sablon', ref:'MZ-0155', quartier:'Sablon', loyer:'880 €', date:'28.08.26', statut:'VISITE PLANIFIÉE', color:ACC},
+        {titre:'2 pièces, Centre-ville', ref:'MZ-0142', quartier:'Centre-ville', loyer:'690 €', date:'26.08.26', statut:'DOSSIER LU', color:INK},
+        {titre:'3 pièces, Devant-les-Ponts', ref:'MZ-0180', quartier:'Devant-les-Ponts', loyer:'820 €', date:'22.08.26', statut:'EN ATTENTE', color:'#6b6f70'},
+        {titre:'4 pièces, Queuleu', ref:'MZ-0168', quartier:'Queuleu', loyer:'1 150 €', date:'19.08.26', statut:'NON RETENUE', color:'#8a8d8b'}
+      ],
+      checks: [
+        {label:'Identité confirmée', icon:'✓', bg:ACC, fg:'#f2f1ed'},
+        {label:'Revenus recoupés (3 mois)', icon:'✓', bg:ACC, fg:'#f2f1ed'},
+        {label:'Stabilité professionnelle', icon:'✓', bg:ACC, fg:'#f2f1ed'},
+        {label:'Justificatif fiscal en attente', icon:'!', bg:'rgba(138,90,18,.15)', fg:AMBER}
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

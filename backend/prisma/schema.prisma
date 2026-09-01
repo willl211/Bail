@@ -1,0 +1,913 @@
+// =============================================================================
+// Seuil — schéma de base de données (MVP v0, pilote Metz)
+//
+// Source : docs/data-model.md. Les 7 entités confirmées y sont toutes présentes :
+//   Utilisateur, Bien, Dossier locataire, Candidature, Visite, Bail,
+//   Paiement / honoraire.
+//
+// Extensions ajoutées par nécessité technique (docs/data-model.md autorise
+// l'extension à condition de la signaler) :
+//   - LeaseTemplate     : matérialise le « modèle légal verrouillé » du bail.
+//   - FeeSchedule       : barème d'honoraires versionné et paramétrable en base.
+//   - PlatformSetting   : réglages modifiables sans redéploiement.
+//   - KycCheck          : vérification d'identité, partagée dossier <-> visite.
+//   - Subscription      : abonnement propriétaire (module « espace propriétaire »).
+//   - Mandate           : registre des mandats (module « back-office agence »).
+//   - District          : référentiel des quartiers de la zone pilote.
+//   - PropertyPhoto / TenantDocument / Guarantor : détail des entités ci-dessus.
+//
+// Convention monétaire : tous les montants sont des entiers en CENTIMES d'euro.
+// Aucun Float sur de l'argent.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// UTILISATEUR
+// =============================================================================
+
+enum UserRole {
+  OWNER // propriétaire
+  TENANT // locataire
+  AGENT // agent interne (back-office agence)
+  ADMIN
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String?
+  role         UserRole
+  firstName    String
+  lastName     String
+  phone        String?
+
+  emailVerifiedAt DateTime?
+  lastLoginAt     DateTime?
+  isActive        Boolean   @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Propriétaire
+  properties      Property[]     @relation("PropertyOwner")
+  subscriptions   Subscription[]
+  mandatesAsOwner Mandate[]      @relation("MandateOwner")
+
+  // Locataire
+  tenantFile     TenantFile?
+  applications   Application[]
+  visitsAsTenant Visit[]       @relation("VisitTenant")
+  leasesAsTenant Lease[]       @relation("LeaseTenant")
+
+  // Agent interne
+  visitsAsAgent   Visit[]   @relation("VisitAgent")
+  mandatesAsAgent Mandate[] @relation("MandateAgent")
+
+  kycChecks KycCheck[]
+  payments  Payment[]  @relation("PaymentPayer")
+
+  @@index([role])
+  @@map("users")
+}
+
+// =============================================================================
+// BIEN (annonce)
+// =============================================================================
+
+enum PropertyStatus {
+  DRAFT // brouillon propriétaire
+  PENDING_REVIEW // contrôle avant publication
+  ONLINE // en ligne
+  VISITS_IN_PROGRESS // en cours de visite
+  RENTED // loué
+  ARCHIVED
+}
+
+/// Type de bail applicable. Conditionne le modèle légal utilisé pour la
+/// génération du bail (docs/legal-context.md).
+enum LeaseType {
+  NU // location vide — bail 3 ans
+  MEUBLE // location meublée — bail 1 an
+}
+
+/// Diagnostic de performance énergétique.
+enum EnergyRating {
+  A
+  B
+  C
+  D
+  E
+  F
+  G
+}
+
+enum GuarantorRequirement {
+  NONE
+  OPTIONAL
+  REQUIRED
+}
+
+model Property {
+  id        String @id @default(uuid())
+  reference String @unique // ex. MZ-0142
+  ownerId   String
+  owner     User   @relation("PropertyOwner", fields: [ownerId], references: [id])
+
+  title       String
+  description String @db.Text
+
+  // Localisation
+  addressLine String
+  districtId  String
+  district    District @relation(fields: [districtId], references: [id])
+  city        String   @default("Metz")
+  postalCode  String   @default("57000")
+  latitude    Float?
+  longitude   Float?
+
+  // Caractéristiques
+  surfaceM2        Float
+  rooms            Int
+  bedrooms         Int?
+  floor            String? // « 3/4 », « RDC »
+  furnished        Boolean       @default(false)
+  leaseType        LeaseType
+  energyRating     EnergyRating
+  gesRating        EnergyRating?
+  constructionYear Int?
+
+  // Loyer (centimes)
+  rentCents    Int // hors charges
+  chargesCents Int @default(0)
+  depositCents Int
+
+  // Disponibilité
+  availableFrom        DateTime?
+  availableImmediately Boolean   @default(false)
+
+  // Critères de sélection du propriétaire, affichés sur la fiche annonce
+  minMonthlyIncomeCents Int?
+  guarantorRequirement  GuarantorRequirement @default(OPTIONAL)
+  acceptedContractTypes String[]             @default([])
+
+  status      PropertyStatus @default(DRAFT)
+  publishedAt DateTime?
+  rentedAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  photos       PropertyPhoto[]
+  applications Application[]
+  visits       Visit[]
+  leases       Lease[]
+  payments     Payment[]
+  mandate      Mandate?
+
+  @@index([status, publishedAt])
+  @@index([districtId])
+  @@index([rentCents])
+  @@index([surfaceM2])
+  @@map("properties")
+}
+
+/// Référentiel des quartiers de la zone pilote (Metz centre-ville et quartiers
+/// proches, docs/market-context.md). En table plutôt qu'en dur : la zone
+/// s'étendra au-delà des 6 quartiers du lancement.
+model District {
+  id       String @id @default(uuid())
+  slug     String @unique
+  name     String
+  city     String @default("Metz")
+  position Int    @default(0)
+
+  properties Property[]
+
+  @@map("districts")
+}
+
+model PropertyPhoto {
+  id         String   @id @default(uuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  storageKey String
+  caption    String?
+  position   Int     @default(0)
+  width      Int?
+  height     Int?
+
+  createdAt DateTime @default(now())
+
+  @@index([propertyId, position])
+  @@map("property_photos")
+}
+
+// =============================================================================
+// DOSSIER LOCATAIRE
+// =============================================================================
+
+enum TenantFileStatus {
+  DRAFT // en cours de constitution
+  SUBMITTED // déposé, en attente de vérification
+  UNDER_REVIEW // vérification en cours
+  VERIFIED // vérifié, candidatable
+  INCOMPLETE // pièce manquante bloquante
+  REJECTED
+}
+
+enum DocumentType {
+  ID_CARD
+  PASSPORT
+  PAYSLIP
+  EMPLOYMENT_CONTRACT
+  TAX_NOTICE // avis d'imposition
+  PROOF_OF_ADDRESS // attestation d'hébergement / quittance
+  STUDENT_CARD
+  GUARANTOR_ID
+  GUARANTOR_INCOME
+  OTHER
+}
+
+enum DocumentStatus {
+  MISSING
+  PENDING // déposé, pas encore analysé
+  PROCESSING // lecture en cours
+  VERIFIED
+  REJECTED
+  EXPIRED
+}
+
+enum EmploymentContractType {
+  CDI
+  CDD
+  PUBLIC_SECTOR
+  SELF_EMPLOYED
+  STUDENT
+  RETIRED
+  OTHER
+}
+
+model TenantFile {
+  id        String @id @default(uuid())
+  reference String @unique // ex. LOC-2026-0871
+  tenantId  String @unique
+  tenant    User   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  status TenantFileStatus @default(DRAFT)
+
+  /// Score de dossier 0-100 affiché au locataire et au propriétaire.
+  /// La règle de calcul reste à figer : aucun document du dossier docs/ ne la
+  /// définit. Le champ est persisté, le calcul vivra dans un service dédié.
+  score Int?
+
+  // Situation déclarée, puis recoupée avec les justificatifs
+  netMonthlyIncomeCents Int?
+  contractType          EmploymentContractType?
+  employerName          String?
+  inProbationPeriod     Boolean?
+
+  submittedAt DateTime?
+  verifiedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  documents    TenantDocument[]
+  guarantors   Guarantor[]
+  applications Application[]
+  kycChecks    KycCheck[]
+
+  @@index([status])
+  @@map("tenant_files")
+}
+
+model TenantDocument {
+  id           String     @id @default(uuid())
+  tenantFileId String
+  tenantFile   TenantFile @relation(fields: [tenantFileId], references: [id], onDelete: Cascade)
+
+  type   DocumentType
+  status DocumentStatus @default(PENDING)
+
+  fileName   String?
+  mimeType   String?
+  fileSize   Int?
+  storageKey String?
+
+  /// Résultat lisible du contrôle automatique (« Contrôle MRZ · OK »,
+  /// « Moyenne 3 000 € net »), tel qu'affiché dans l'espace locataire.
+  verificationNote String?
+  verifiedAt       DateTime?
+  rejectionReason  String?
+
+  periodStart DateTime? // pour les bulletins de salaire
+  periodEnd   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantFileId, type])
+  @@map("tenant_documents")
+}
+
+enum GuarantorKind {
+  INDIVIDUAL // personne physique
+  ORGANISATION // organisme de cautionnement
+}
+
+model Guarantor {
+  id           String     @id @default(uuid())
+  tenantFileId String
+  tenantFile   TenantFile @relation(fields: [tenantFileId], references: [id], onDelete: Cascade)
+
+  kind                  GuarantorKind @default(INDIVIDUAL)
+  firstName             String?
+  lastName              String?
+  organisationName      String?
+  relationship          String?
+  netMonthlyIncomeCents Int?
+  contractType          EmploymentContractType?
+
+  status DocumentStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantFileId])
+  @@map("guarantors")
+}
+
+// =============================================================================
+// VÉRIFICATION D'IDENTITÉ (KYC)
+//
+// Prestataire non choisi (docs/integrations.md) : le driver `mock` simule une
+// réponse « vérifié » / « rejeté ». Le modèle est indépendant du prestataire
+// pour qu'un branchement réel ne casse rien.
+// =============================================================================
+
+enum KycStatus {
+  NOT_STARTED
+  PENDING
+  VERIFIED
+  REJECTED
+  EXPIRED
+}
+
+enum KycPurpose {
+  TENANT_FILE // constitution du dossier locataire
+  VISIT // contrôle préalable à un RDV de visite
+  LEASE_SIGNATURE
+}
+
+model KycCheck {
+  id        String @id @default(uuid())
+  subjectId String
+  subject   User   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  purpose KycPurpose
+  status  KycStatus  @default(NOT_STARTED)
+
+  /// « mock » tant qu'aucun prestataire n'est retenu.
+  provider          String  @default("mock")
+  providerReference String?
+  providerPayload   Json?
+  failureReason     String?
+
+  requestedAt DateTime  @default(now())
+  resolvedAt  DateTime?
+  expiresAt   DateTime?
+
+  tenantFileId String?
+  tenantFile   TenantFile? @relation(fields: [tenantFileId], references: [id], onDelete: SetNull)
+  visit        Visit?
+
+  @@index([subjectId, purpose, status])
+  @@map("kyc_checks")
+}
+
+// =============================================================================
+// CANDIDATURE
+// =============================================================================
+
+enum ApplicationStatus {
+  SUBMITTED // envoyée
+  READ // dossier lu par le propriétaire
+  SHORTLISTED
+  VISIT_SCHEDULED // visite planifiée
+  ACCEPTED
+  REJECTED // non retenue
+  WITHDRAWN // retirée par le locataire
+  EXPIRED
+}
+
+model Application {
+  id String @id @default(uuid())
+
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  tenantId String
+  tenant   User   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  tenantFileId String
+  tenantFile   TenantFile @relation(fields: [tenantFileId], references: [id])
+
+  status ApplicationStatus @default(SUBMITTED)
+
+  /// Compatibilité dossier / critères du propriétaire au moment de l'envoi,
+  /// figée pour garder trace de ce que le propriétaire a réellement vu.
+  compatibilityScore Int?
+  incomeRatio        Float? // revenus vérifiés / loyer charges comprises
+
+  message         String? @db.Text
+  ownerNote       String? @db.Text
+  rejectionReason String?
+
+  submittedAt DateTime  @default(now())
+  readAt      DateTime?
+  decidedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  visits   Visit[]
+  lease    Lease?
+  payments Payment[]
+
+  @@unique([propertyId, tenantId])
+  @@index([tenantId, status])
+  @@index([propertyId, status])
+  @@map("applications")
+}
+
+// =============================================================================
+// VISITE
+//
+// MVP v0 : visite ACCOMPAGNÉE (agent sur place) ou VISIO en direct, au choix du
+// locataire. Le boîtier connecté et la visite autonome sont HORS PÉRIMÈTRE v0
+// (docs/product-brief.md, CLAUDE.md règle 1) — aucun champ ici ne prépare cette
+// fonctionnalité.
+//
+// Protocole de sécurité v0 (docs/integrations.md) :
+//   - KYC du visiteur avant le RDV
+//   - pré-autorisation carte bancaire
+//   - caméra obligatoire pendant la visite (pas d'option de désactivation)
+//   - enregistrement conservé 15 jours, puis purgé automatiquement
+// =============================================================================
+
+enum VisitType {
+  ACCOMPANIED // visite physique avec un agent
+  VIDEO // visio en direct
+}
+
+enum VisitStatus {
+  REQUESTED // créneau demandé
+  PENDING_CHECKS // en attente du KYC et/ou de la pré-autorisation CB
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum PreauthorizationStatus {
+  NOT_REQUIRED
+  PENDING
+  AUTHORIZED
+  FAILED
+  RELEASED
+  CAPTURED
+}
+
+model Visit {
+  id String @id @default(uuid())
+
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  tenantId String
+  tenant   User   @relation("VisitTenant", fields: [tenantId], references: [id])
+
+  applicationId String?
+  application   Application? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+
+  /// Agent interne présent sur place, ou animateur de la visio.
+  agentId String?
+  agent   User?   @relation("VisitAgent", fields: [agentId], references: [id])
+
+  type   VisitType
+  status VisitStatus @default(REQUESTED)
+
+  scheduledAt        DateTime
+  durationMinutes    Int       @default(30)
+  cancelledAt        DateTime?
+  cancellationReason String?
+
+  // --- Visio ---------------------------------------------------------------
+  /// Prestataire non tranché ; recommandation Daily.co (docs/integrations.md).
+  videoProvider String?
+  videoRoomUrl  String?
+  videoRoomId   String?
+
+  /// Caméra obligatoire pendant la visite — décision confirmée, non
+  /// désactivable. Le champ existe pour être lisible dans les exports et les
+  /// contrôles, pas pour être passé à false.
+  cameraRequired Boolean @default(true)
+
+  // --- Enregistrement (rétention 15 jours) ---------------------------------
+  recordingStorageKey String?
+  recordingStartedAt  DateTime?
+  /// Date de purge automatique = recordingStartedAt + 15 jours.
+  recordingExpiresAt  DateTime?
+  recordingPurgedAt   DateTime?
+
+  // --- Contrôles préalables ------------------------------------------------
+  kycCheckId String?   @unique
+  kycCheck   KycCheck? @relation(fields: [kycCheckId], references: [id], onDelete: SetNull)
+
+  preauthorizationStatus      PreauthorizationStatus @default(PENDING)
+  preauthorizationReference   String?
+  preauthorizationAmountCents Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([propertyId, scheduledAt])
+  @@index([tenantId, status])
+  @@index([recordingExpiresAt])
+  @@map("visits")
+}
+
+// =============================================================================
+// BAIL
+//
+// CONTRAINTE NON NÉGOCIABLE (CLAUDE.md règle 2, docs/legal-context.md) :
+// le bail est généré à partir d'un MODÈLE LÉGAL VERROUILLÉ. L'IA vérifie la
+// cohérence des champs (noms, adresse, loyer, durée) — elle n'invente pas de
+// clauses et ne rédige pas librement. D'où la séparation stricte :
+//   LeaseTemplate  = le texte légal, verrouillé, versionné, avec checksum.
+//   Lease.fieldValues = uniquement les valeurs injectées dans les champs.
+// Il n'existe volontairement AUCUN champ « corps de texte libre » sur Lease.
+// =============================================================================
+
+/// Modèle légal de bail. Immuable une fois publié : toute correction crée une
+/// nouvelle version. Le checksum permet de vérifier qu'un modèle servi n'a pas
+/// été altéré entre sa publication et la génération.
+model LeaseTemplate {
+  id      String    @id @default(uuid())
+  code    String // ex. BAIL_NU_LOI_1989
+  version Int
+  label   String
+  type    LeaseType
+
+  /// Texte légal verrouillé, contenant uniquement des marqueurs de champs.
+  body String @db.Text
+
+  /// Schéma des champs autorisés (nom, type, obligatoire, règle de contrôle).
+  /// Aucun champ hors de ce schéma ne peut être injecté.
+  fieldSchema Json
+
+  /// Empreinte du corps du modèle, contrôlée avant chaque génération.
+  checksum String
+
+  legalReference String? // ex. « Loi n° 89-462 du 6 juillet 1989 »
+  isActive       Boolean   @default(false)
+  publishedAt    DateTime?
+
+  createdAt DateTime @default(now())
+
+  leases Lease[]
+
+  @@unique([code, version])
+  @@index([type, isActive])
+  @@map("lease_templates")
+}
+
+enum LeaseStatus {
+  DRAFT // champs en cours de saisie
+  FIELDS_VALIDATED // cohérence des champs contrôlée
+  SENT_FOR_SIGNATURE // enveloppe DocuSign envoyée
+  PARTIALLY_SIGNED
+  SIGNED
+  DECLINED // refusé par un signataire
+  EXPIRED
+  CANCELLED
+}
+
+model Lease {
+  id        String @id @default(uuid())
+  reference String @unique
+
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id])
+
+  tenantId String
+  tenant   User   @relation("LeaseTenant", fields: [tenantId], references: [id])
+
+  applicationId String?      @unique
+  application   Application? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+
+  templateId String
+  template   LeaseTemplate @relation(fields: [templateId], references: [id])
+  /// Copie du checksum du modèle au moment de la génération : prouve sur quel
+  /// texte exact la signature porte.
+  templateChecksum String
+
+  type LeaseType
+
+  /// Champs injectés dans le modèle — et rien d'autre.
+  fieldValues Json
+
+  startDate      DateTime
+  endDate        DateTime
+  durationMonths Int
+  rentCents      Int
+  chargesCents   Int
+  depositCents   Int
+
+  /// Rapport du contrôle de cohérence des champs (incohérences détectées,
+  /// champs manquants). Vérification, jamais rédaction.
+  validationReport Json?
+  validatedAt      DateTime?
+
+  documentStorageKey String?
+
+  status LeaseStatus @default(DRAFT)
+
+  // --- Signature électronique (DocuSign, sandbox pendant le dev) ------------
+  signatureProvider   String?   @default("docusign")
+  signatureEnvelopeId String?
+  sentForSignatureAt  DateTime?
+  signedAt            DateTime?
+  declinedAt          DateTime?
+  declineReason       String?
+  signatureEvents     Json? // journal des événements d'enveloppe
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  payments Payment[]
+
+  @@index([status])
+  @@index([tenantId])
+  @@map("leases")
+}
+
+// =============================================================================
+// PAIEMENT / HONORAIRE
+//
+// docs/legal-context.md : la plateforme ENCAISSE POUR LE COMPTE DU PROPRIÉTAIRE.
+// Le statut du paiement (payé / échoué) et le circuit des fonds (détenus par la
+// plateforme / reversés au propriétaire) sont donc deux axes distincts.
+//
+// Le barème d'honoraires n'est pas figé : les montants viennent de FeeSchedule
+// et de PlatformSetting, jamais du code.
+// =============================================================================
+
+enum PaymentType {
+  OWNER_SUBSCRIPTION // abonnement mensuel propriétaire
+  TENANT_FEE // honoraires, part locataire
+  OWNER_FEE // honoraires, part propriétaire
+  INVENTORY_FEE // état des lieux
+  DEPOSIT // dépôt de garantie
+  RENT // loyer
+  VISIT_PREAUTHORIZATION // pré-autorisation CB avant visite
+}
+
+enum PaymentStatus {
+  PENDING
+  AUTHORIZED
+  PAID
+  FAILED
+  REFUNDED
+  CANCELLED
+}
+
+/// Circuit des fonds — distinct du statut de paiement. Nécessaire parce que la
+/// plateforme encaisse pour le compte du propriétaire (implique la carte G).
+enum FundsStatus {
+  NOT_APPLICABLE // encaissement pour compte propre (abonnement, honoraires)
+  HELD_BY_PLATFORM // fonds reçus, détenus par la plateforme
+  PAYOUT_PENDING // reversement au propriétaire en cours
+  PAID_OUT_TO_OWNER // reversé au propriétaire
+  PAYOUT_FAILED
+  REFUNDED_TO_PAYER
+}
+
+enum PaymentMethod {
+  CARD
+  SEPA_DEBIT
+  BANK_TRANSFER
+}
+
+model Payment {
+  id        String @id @default(uuid())
+  reference String @unique
+
+  type   PaymentType
+  status PaymentStatus @default(PENDING)
+
+  payerId String
+  payer   User   @relation("PaymentPayer", fields: [payerId], references: [id])
+
+  propertyId String?
+  property   Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+
+  applicationId String?
+  application   Application? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+
+  leaseId String?
+  lease   Lease?  @relation(fields: [leaseId], references: [id], onDelete: SetNull)
+
+  subscriptionId String?
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+
+  amountCents Int
+  currency    String @default("EUR")
+
+  /// Ventilation du barème entre les deux parties : les deux parts peuvent
+  /// coexister sur une même prestation (ex. rédaction de bail).
+  tenantShareCents Int @default(0)
+  ownerShareCents  Int @default(0)
+
+  /// Barème appliqué, pour retrouver la version sur laquelle le montant a été
+  /// calculé même après une révision du barème.
+  feeScheduleId String?
+  feeSchedule   FeeSchedule? @relation(fields: [feeScheduleId], references: [id])
+
+  method PaymentMethod @default(CARD)
+
+  // --- Circuit des fonds ---------------------------------------------------
+  fundsStatus         FundsStatus @default(NOT_APPLICABLE)
+  payoutReference     String?
+  paidOutAt           DateTime?
+  payoutFailureReason String?
+
+  // --- Stripe (mode test pendant tout le développement) --------------------
+  stripePaymentIntentId String?
+  stripeChargeId        String?
+  providerPayload       Json?
+
+  paidAt        DateTime?
+  failedAt      DateTime?
+  refundedAt    DateTime?
+  failureReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([payerId, type])
+  @@index([status, fundsStatus])
+  @@map("payments")
+}
+
+// =============================================================================
+// ABONNEMENT PROPRIÉTAIRE
+// =============================================================================
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+}
+
+model Subscription {
+  id      String @id @default(uuid())
+  ownerId String
+  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  status SubscriptionStatus @default(TRIALING)
+
+  /// Montant facturé, repris du barème en base — jamais codé en dur.
+  monthlyAmountCents Int
+  feeScheduleId      String?
+  feeSchedule        FeeSchedule? @relation(fields: [feeScheduleId], references: [id])
+
+  startedAt        DateTime  @default(now())
+  currentPeriodEnd DateTime?
+  cancelledAt      DateTime?
+
+  stripeSubscriptionId String?
+  stripeCustomerId     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  payments Payment[]
+
+  @@index([ownerId, status])
+  @@map("subscriptions")
+}
+
+// =============================================================================
+// BARÈME D'HONORAIRES ET RÉGLAGES
+//
+// docs/legal-context.md : « Le module de facturation doit être paramétrable
+// (montants modifiables sans redéploiement) plutôt que codé en dur. »
+// Chaque barème est daté : changer les tarifs crée une nouvelle version, on ne
+// modifie jamais l'ancienne — les paiements passés y font référence.
+// =============================================================================
+
+/// Zone de tension locative — conditionne le plafond légal d'honoraires au m².
+enum RentalZone {
+  ZONE_TRES_TENDUE
+  ZONE_TENDUE
+  ZONE_NON_TENDUE
+}
+
+model FeeSchedule {
+  id    String @id @default(uuid())
+  code  String @unique
+  label String
+
+  zone RentalZone @default(ZONE_NON_TENDUE)
+
+  /// Honoraires à la charge du locataire, plafonnés par m² de surface habitable.
+  /// VALEURS À FIGER avec l'avocat (docs/legal-context.md) : ce qui est seedé
+  /// n'est qu'un placeholder aligné sur les plafonds légaux.
+  tenantVisitFeeCentsPerSqm     Int @default(0) // visite, dossier, rédaction de bail
+  tenantInventoryFeeCentsPerSqm Int @default(0) // état des lieux
+  ownerFeeCentsPerSqm           Int @default(0)
+
+  /// Abonnement mensuel par bien, côté propriétaire.
+  ownerSubscriptionMonthlyCents Int @default(0)
+
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+  isActive      Boolean   @default(false)
+
+  /// Barème non validé juridiquement tant que ce drapeau est faux.
+  isLegallyApproved Boolean @default(false)
+  notes             String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  payments      Payment[]
+  subscriptions Subscription[]
+
+  @@index([isActive, effectiveFrom])
+  @@map("fee_schedules")
+}
+
+/// Réglages modifiables en base, sans redéploiement.
+model PlatformSetting {
+  key         String   @id
+  value       Json
+  description String?
+  updatedAt   DateTime @updatedAt
+
+  @@map("platform_settings")
+}
+
+// =============================================================================
+// BACK-OFFICE AGENCE — REGISTRE DES MANDATS
+//
+// Obligation liée à la carte professionnelle T (docs/legal-context.md). Ce
+// modèle stocke le registre ; le modèle de mandat lui-même doit être figé avec
+// un avocat avant le lancement commercial.
+// =============================================================================
+
+enum MandateStatus {
+  DRAFT
+  ACTIVE
+  EXPIRED
+  TERMINATED
+}
+
+model Mandate {
+  id String @id @default(uuid())
+  /// Numéro d'ordre continu du registre des mandats.
+  registryNumber Int @unique
+
+  propertyId String   @unique
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  ownerId String
+  owner   User   @relation("MandateOwner", fields: [ownerId], references: [id])
+
+  agentId String?
+  agent   User?   @relation("MandateAgent", fields: [agentId], references: [id])
+
+  status             MandateStatus @default(DRAFT)
+  signedAt           DateTime?
+  startDate          DateTime?
+  endDate            DateTime?
+  documentStorageKey String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@map("mandates")
+}

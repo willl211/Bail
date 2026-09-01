@@ -1,0 +1,45 @@
+# Dépendances
+node_modules/
+.pnp
+.pnp.js
+
+# Build
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# Environnements — ne jamais committer les vraies valeurs
+.env
+.env.local
+.env.development
+.env.staging
+.env.production
+.env.*.local
+!.env.example
+!env/*.env.example
+
+# Stockage local des fichiers uploadés (dev)
+storage/
+uploads/
+
+# Logs
+*.log
+npm-debug.log*
+logs/
+
+# Tests / couverture
+coverage/
+.nyc_output/
+
+# Éditeurs / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Divers
+.turbo/
+.cache/
