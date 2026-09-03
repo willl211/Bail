@@ -120,8 +120,14 @@ export interface ActiveFeeSchedule {
   isLegallyApproved: boolean;
 }
 
-function computeTenantFees(
-  property: PropertyWithRelations,
+/**
+ * Ne dépend que de la surface, pas de tout `PropertyWithRelations` : c'est ce
+ * qui permet à l'écran de candidature (module `applications`) de calculer les
+ * mêmes honoraires sans requêter les photos et le quartier dont il n'a rien à
+ * faire.
+ */
+export function computeTenantFees(
+  property: { surfaceM2: number },
   schedule: ActiveFeeSchedule | null,
 ): TenantFees | null {
   if (!schedule) return null;

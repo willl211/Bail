@@ -543,3 +543,70 @@ export interface TenantFileView {
 export function getTenantFile() {
   return apiFetchAuthed<TenantFileView>('/tenant/file');
 }
+
+// --- Candidature à un bien ---------------------------------------------------
+
+export interface CandidacyPropertySummary {
+  reference: string;
+  title: string;
+  district: string;
+  addressLine: string;
+  city: string;
+  surfaceM2: number;
+  rooms: number;
+  energyRating: string | null;
+  totalRentCents: number;
+  photoLabel: string;
+  photoUrl: string | null;
+  applicationCount: number;
+}
+
+export interface CandidacyFileSummary {
+  holderName: string;
+  contractType: EmploymentContractType | null;
+  netMonthlyIncomeCents: number | null;
+  incomeVerified: boolean;
+  guarantor: { label: string; verified: boolean } | null;
+}
+
+export interface TenantFeesQuote {
+  totalCents: number;
+  visitAndFileCents: number;
+  inventoryCents: number;
+  centsPerSqm: number;
+  feeScheduleCode: string | null;
+  isLegallyApproved: boolean;
+}
+
+export interface CandidacyPreview {
+  property: CandidacyPropertySummary;
+  fees: TenantFeesQuote | null;
+  effortRate: number | null;
+  file: CandidacyFileSummary;
+  blockers: string[];
+  warnings: string[];
+  alreadyApplied: boolean;
+  applicationStatus: ApplicationStatus | null;
+  averageResponseDelay: string | null;
+}
+
+export interface TenantApplicationSummary {
+  id: string;
+  propertyReference: string;
+  propertyTitle: string;
+  district: string;
+  totalRentCents: number;
+  submittedAt: string;
+  status: ApplicationStatus;
+  stepLabel: string;
+}
+
+export function getCandidacyPreview(reference: string) {
+  return apiFetchAuthed<CandidacyPreview>(
+    `/tenant/applications/${encodeURIComponent(reference)}/preview`,
+  );
+}
+
+export function getTenantApplications() {
+  return apiFetchAuthed<TenantApplicationSummary[]>('/tenant/applications');
+}

@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { PhotoPlaceholder } from '@/components/photo-placeholder';
-import { ApiError, getMarketSnapshot, getProperty } from '@/lib/api';
+import { ApiError, getCurrentUser, getMarketSnapshot, getProperty } from '@/lib/api';
 import * as fmt from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
@@ -33,14 +33,29 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 
 export default async function PropertyPage({ params }: Params) {
   const { reference } = await params;
-  const property = await loadProperty(reference);
-  const market = await getMarketSnapshot().catch(() => null);
+  const [property, market, user] = await Promise.all([
+    loadProperty(reference),
+    getMarketSnapshot().catch(() => null),
+    getCurrentUser(),
+  ]);
 
   const responseDelay =
     market?.metrics.find((metric) => metric.key === 'averageResponseDelay')?.value ?? null;
 
   const visiting = property.status === 'VISITS_IN_PROGRESS';
   const fees = property.tenantFees;
+
+  // Un locataire connecté candidate directement ; un visiteur crée d'abord son
+  // dossier, avec l'intention conservée pour y revenir une fois inscrit
+  // (`?candidature=`). Un propriétaire ou un agent n'a rien à candidater ici :
+  // le bouton s'efface plutôt que de mener à un 403.
+  const candidacyHref =
+    user?.role === 'TENANT'
+      ? `/biens/${property.reference}/candidater`
+      : user
+        ? null
+        : `/dossier?candidature=${encodeURIComponent(property.reference)}`;
+  const candidacyLabel = user?.role === 'TENANT' ? 'Candidater à ce bien' : 'Créer mon dossier pour candidater';
 
   const specs = [
     { key: 'Surface', value: fmt.surfaceLower(property.surfaceM2) },
@@ -193,9 +208,11 @@ export default async function PropertyPage({ params }: Params) {
             ) : null}
 
             <div className="booking__body">
-              <Link href="/dossier" className="btn btn-block">
-                Créer mon dossier pour candidater
-              </Link>
+              {candidacyHref ? (
+                <Link href={candidacyHref} className="btn btn-block">
+                  {candidacyLabel}
+                </Link>
+              ) : null}
               {responseDelay ? (
                 <p className="booking__response">Réponse moyenne sous {responseDelay}</p>
               ) : null}

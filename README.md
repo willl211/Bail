@@ -119,14 +119,15 @@ un écran doit être fonctionnel avant de passer au suivant.
 | 1 | Recherche et fiche annonce (sans compte) | **fait** — accueil, résultats filtrés, fiche, alignés sur la maquette Bail |
 | 2 | Compte + espace propriétaire | **fait** — authentification, dépôt d'annonce, photos, diagnostics, abonnement, candidatures reçues (lecture seule) |
 | 3 | Compte + dossier locataire | **fait** — compte, situation, dépôt des pièces, garant, transmission au contrôle |
-| 4 | Candidature à un bien | à faire |
+| 4 | Candidature à un bien | **fait** — aperçu, blocages/avis selon les critères du bien, envoi, suivi |
 | 5 | Prise de RDV de visite | à faire |
 | 6 | Génération de bail + signature | à faire |
 | 7 | Paiement des honoraires | à faire |
 
-Le schéma de base couvre déjà les sept étapes. Les étapes 1 à 3 sont complètes.
-L'écran « Candidatures reçues » de l'étape 2 est en lecture seule : accepter ou
-écarter un candidat relève de l'étape 4.
+Le schéma de base couvre déjà les sept étapes. Les étapes 1 à 4 sont complètes.
+L'écran « Candidatures reçues » de l'étape 2 reste en lecture seule : accepter
+ou écarter un candidat relève de l'étape 5 (prise de RDV de visite), pas de
+l'étape 4 — celle-ci ne fait qu'envoyer la candidature.
 
 ### Comptes de démonstration
 

@@ -160,22 +160,58 @@ export class TenantService {
    * back-office devrait trier.
    */
   private async fileOf(tenantId: string): Promise<FileWithRelations> {
-    const existing = await this.prisma.tenantFile.findUnique({
-      where: { tenantId },
-      include: { documents: true, guarantors: true },
-    });
-    if (existing) return existing;
+    // « Lire puis créer » n'est pas atomique, et deux requêtes simultanées sur
+    // un compte sans dossier sont un cas ordinaire : deux onglets, un
+    // rechargement pendant le chargement, l'écran de candidature qui lit le
+    // dossier en même temps que l'espace locataire. Les deux passent le
+    // `findUnique`, puis se disputent la création. Deux issues, toutes deux
+    // normales, aucune n'étant une erreur à remonter au locataire :
+    //
+    //  - P2002, l'autre a déjà créé le dossier : on relit le sien ;
+    //  - P2034, conflit de sérialisation (l'isolation `Serializable` protège
+    //    la numérotation des références) : PostgreSQL demande de rejouer.
+    for (let attempt = 0; ; attempt += 1) {
+      const existing = await this.prisma.tenantFile.findUnique({
+        where: { tenantId },
+        include: { documents: true, guarantors: true },
+      });
+      if (existing) return existing;
 
-    return this.prisma.$transaction(
-      async (tx) =>
-        tx.tenantFile.create({
-          data: { tenantId, reference: await this.nextReference(tx) },
-          include: { documents: true, guarantors: true },
-        }),
-      // `Serializable` : deux onglets ouverts en même temps ne doivent pas
-      // pouvoir réserver la même référence.
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-    );
+      try {
+        return await this.prisma.$transaction(
+          async (tx) =>
+            tx.tenantFile.create({
+              data: { tenantId, reference: await this.nextReference(tx) },
+              include: { documents: true, guarantors: true },
+            }),
+          // Sans `Serializable`, deux dossiers ouverts en même temps
+          // réserveraient la même référence.
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+      } catch (error) {
+        const retryable =
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          (error.code === 'P2002' || error.code === 'P2034');
+
+        // La borne existe pour ne pas boucler indéfiniment si la cause n'était
+        // pas la concurrence : au-delà, l'erreur remonte telle quelle.
+        if (!retryable || attempt >= 3) throw error;
+      }
+    }
+  }
+
+  /**
+   * Dossier et identifiant technique en une seule lecture.
+   *
+   * Une candidature a besoin des deux : la synthèse à montrer au locataire, et
+   * l'identifiant pour rattacher `Application.tenantFileId`. Les obtenir par
+   * deux appels séparés ouvrirait deux fois le dossier d'un compte qui n'en a
+   * pas encore. Cet identifiant technique ne sort pas de `TenantFileView` : le
+   * reste de l'application ne connaît le dossier que par sa référence lisible.
+   */
+  async getFileWithId(tenantId: string): Promise<{ view: TenantFileView; id: string }> {
+    const file = await this.fileOf(tenantId);
+    return { view: await this.toView(tenantId, file), id: file.id };
   }
 
   /**

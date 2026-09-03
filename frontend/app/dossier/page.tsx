@@ -38,8 +38,17 @@ const STEPS = [
  * deux URL obligerait à choisir laquelle mettre dans la navigation, et l'une
  * des deux serait toujours la mauvaise.
  */
-export default async function TenantFilePage() {
-  const user = await getCurrentUser();
+export default async function TenantFilePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ candidature?: string }>;
+}) {
+  const [user, params] = await Promise.all([getCurrentUser(), searchParams]);
+  // Bien qu'on voulait candidater avant d'avoir de compte : on y renvoie une
+  // fois le dossier ouvert, plutôt que de perdre l'intention en route.
+  const returnTo = params.candidature
+    ? `/biens/${encodeURIComponent(params.candidature)}/candidater`
+    : null;
 
   // Un propriétaire n'a pas de dossier locataire : l'API le lui refuserait
   // (403), autant le renvoyer chez lui plutôt que de lui montrer une erreur.
@@ -47,6 +56,7 @@ export default async function TenantFilePage() {
   if (user?.role === 'AGENT') redirect('/');
 
   if (user) {
+    if (returnTo) redirect(returnTo);
     const file = await getTenantFile();
     return <TenantFileScreen user={user} initial={file} />;
   }
@@ -67,11 +77,12 @@ export default async function TenantFilePage() {
             Toutes vos candidatures.
           </h1>
           <p className="p mt-16">
-            Vos pièces une seule fois, vérifiées par Bail. Ensuite, chaque
-            candidature part en un clic.
+            {returnTo
+              ? 'Créez votre dossier ou connectez-vous pour reprendre votre candidature.'
+              : 'Vos pièces une seule fois, vérifiées par Bail. Ensuite, chaque candidature part en un clic.'}
           </p>
 
-          <TenantAuthForm />
+          <TenantAuthForm redirectTo={returnTo ?? undefined} />
 
           <p className="field__hint mt-16">
             Documents hébergés en France, jamais transmis aux propriétaires.

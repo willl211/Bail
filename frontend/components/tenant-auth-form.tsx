@@ -16,7 +16,7 @@ type Mode = 'signup' | 'login';
  * accessible) est visible tout de suite. Les mettre dans un formulaire de
  * création de compte allongerait l'étape la plus fragile du parcours.
  */
-export function TenantAuthForm() {
+export function TenantAuthForm({ redirectTo }: { redirectTo?: string }) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>('signup');
   const [pending, setPending] = useState(false);
@@ -51,9 +51,18 @@ export function TenantAuthForm() {
       } else {
         await login(form.email, form.password);
       }
-      // `refresh` seul ne suffirait pas : la page publique et le dossier vivent
-      // à la même adresse, et c'est le rendu serveur qui tranche.
-      router.refresh();
+      if (redirectTo) {
+        // Navigation complète, pas `router.replace` : l'écran de destination
+        // partage sa mise en page (en-tête, navigation) avec celui-ci, et le
+        // cache du routeur Next les garderait tels qu'ils étaient avant la
+        // connexion — visiteur anonyme dans l'en-tête d'une page où on est
+        // déjà connecté.
+        window.location.assign(redirectTo);
+      } else {
+        // `refresh` seul ne suffirait pas : la page publique et le dossier
+        // vivent à la même adresse, et c'est le rendu serveur qui tranche.
+        router.refresh();
+      }
     } catch (failure) {
       setError(failure as AuthFailure);
       setPending(false);

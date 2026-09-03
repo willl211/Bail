@@ -12,6 +12,7 @@ import { StorageModule } from './modules/storage/storage.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { VerificationModule } from './modules/verification/verification.module';
 import { TenantModule } from './modules/tenant/tenant.module';
+import { ApplicationsModule } from './modules/applications/applications.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { TenantModule } from './modules/tenant/tenant.module';
     PaymentsModule,
     VerificationModule,
     TenantModule,
+    ApplicationsModule,
   ],
 })
 export class AppModule {}
