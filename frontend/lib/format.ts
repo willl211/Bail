@@ -151,3 +151,28 @@ export function relativeAge(iso: string, now = new Date()): string {
 export function percent(ratio: number): string {
   return `${Math.round(ratio * 100)} %`;
 }
+
+/** En-tête de colonne du calendrier de visites : « LUN 08.09 ». */
+export function dayHeading(iso: string): string {
+  const date = new Date(iso);
+  const day = date.toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', '');
+  return `${day} ${String(date.getDate()).padStart(2, '0')}.${String(
+    date.getMonth() + 1,
+  ).padStart(2, '0')}`;
+}
+
+/** Heure seule d'un créneau : « 18:30 ». */
+export function timeOfDay(iso: string): string {
+  const date = new Date(iso);
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+/** Rendez-vous en toutes lettres : « mercredi 10 septembre · 18:30 ». */
+export function appointment(iso: string): string {
+  const date = new Date(iso);
+  return `${date.toLocaleDateString('fr-FR', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  })} · ${timeOfDay(iso)}`;
+}

@@ -22,6 +22,7 @@ import {
   EmploymentContractType,
   EnergyRating,
   GuarantorKind,
+  PreauthorizationStatus,
   GuarantorRequirement,
   LeaseType,
   PrismaClient,
@@ -29,6 +30,8 @@ import {
   RentalZone,
   TenantFileStatus,
   UserRole,
+  VisitStatus,
+  VisitType,
 } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -520,7 +523,7 @@ async function main() {
     emailVerifiedAt: new Date(),
     passwordHash,
   };
-  await prisma.user.upsert({
+  const agent = await prisma.user.upsert({
     where: { email: 'agent.demo@bail.local' },
     update: agentValues,
     create: { email: 'agent.demo@bail.local', ...agentValues },
@@ -596,6 +599,18 @@ async function main() {
       value: 15,
       description:
         'Durée de conservation des enregistrements de visite, en jours (docs/integrations.md).',
+    },
+    {
+      key: 'visits.preauthorizationAmountCents',
+      value: 100,
+      description:
+        "Empreinte bancaire prise avant une visite, en centimes (1 € dans la maquette). C'est une vérification de moyen de paiement, pas une caution : elle est libérée après le rendez-vous. Paramétrable parce qu'elle est susceptible de bouger.",
+    },
+    {
+      key: 'visits.cancellationDeadlineHours',
+      value: 4,
+      description:
+        "Délai minimal d'annulation d'une visite, en heures. Au-delà, le locataire doit passer par Bail — un agent s'est déplacé ou va le faire.",
     },
     {
       key: 'visits.cameraRequired',
@@ -854,15 +869,83 @@ async function main() {
       readAt: seed.readHoursAfter === null ? null : hoursAgo(seed.submittedHoursAgo - seed.readHoursAfter),
     };
 
-    await prisma.application.upsert({
+    const application = await prisma.application.upsert({
       where: {
         propertyId_tenantId: { propertyId: property.id, tenantId: tenant.id },
       },
       update: applicationValues,
       create: { propertyId: property.id, ...applicationValues },
     });
+
+    // Une candidature marquée « visite planifiée » sans rendez-vous en base
+    // serait un mensonge : l'écran du locataire annoncerait une visite
+    // introuvable. Le créneau et la visite sont créés avec elle.
+    if (seed.status === ApplicationStatus.VISIT_SCHEDULED) {
+      const startsAt = new Date(now.getTime() + 4 * 24 * 3600 * 1000);
+      startsAt.setHours(18, 30, 0, 0);
+
+      await prisma.visit.deleteMany({ where: { applicationId: application.id } });
+      const visit = await prisma.visit.create({
+        data: {
+          propertyId: property.id,
+          tenantId: tenant.id,
+          applicationId: application.id,
+          agentId: agent.id,
+          type: VisitType.ACCOMPANIED,
+          status: VisitStatus.CONFIRMED,
+          scheduledAt: startsAt,
+          durationMinutes: 30,
+          // Aucun prestataire de paiement branché : pas d'empreinte à prendre,
+          // et surtout pas d'empreinte « autorisée » qui n'existe pas.
+          preauthorizationStatus: PreauthorizationStatus.NOT_REQUIRED,
+          preauthorizationAmountCents: 100,
+        },
+      });
+
+      await prisma.visitSlot.upsert({
+        where: { propertyId_startsAt: { propertyId: property.id, startsAt } },
+        update: { visitId: visit.id, closedAt: null },
+        create: {
+          propertyId: property.id,
+          openedById: owner.id,
+          startsAt,
+          durationMinutes: 30,
+          allowedTypes: [VisitType.ACCOMPANIED, VisitType.VIDEO],
+          visitId: visit.id,
+        },
+      });
+    }
   }
-  console.log(`  ${TENANTS.length} locataires de démonstration et leurs candidatures`);
+
+  // Quelques créneaux libres sur les biens qui ont des candidats retenus, pour
+  // que l'écran de prise de rendez-vous ait de quoi s'afficher.
+  for (const reference of ['MZ-0155', 'MZ-0173', 'MZ-0186']) {
+    const property = await prisma.property.findUnique({
+      where: { reference },
+      select: { id: true },
+    });
+    if (!property) continue;
+
+    for (let day = 2; day <= 6; day += 1) {
+      for (const hour of [17, 18]) {
+        const startsAt = new Date(now.getTime() + day * 24 * 3600 * 1000);
+        startsAt.setHours(hour, 0, 0, 0);
+
+        await prisma.visitSlot.upsert({
+          where: { propertyId_startsAt: { propertyId: property.id, startsAt } },
+          update: {},
+          create: {
+            propertyId: property.id,
+            openedById: owner.id,
+            startsAt,
+            durationMinutes: 30,
+            allowedTypes: [VisitType.ACCOMPANIED, VisitType.VIDEO],
+          },
+        });
+      }
+    }
+  }
+  console.log(`  ${TENANTS.length} locataires de démonstration, candidatures et créneaux`);
 
   console.log('Seed — terminé');
 }

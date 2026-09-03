@@ -196,16 +196,36 @@ export function CandidacyScreen({
 
             <div className="pad wash" style={{ borderTop: '1px solid var(--line-softer)' }}>
               {preview.alreadyApplied ? (
-                <div className="flex jc-b ai-c gap-16 wrap">
-                  <p className="p-sm">
-                    Candidature envoyée. Le propriétaire a été notifié.
-                  </p>
-                  {preview.applicationStatus ? (
-                    <span className={STATUS_BADGE[preview.applicationStatus].tone}>
-                      {STATUS_BADGE[preview.applicationStatus].label}
-                    </span>
+                <>
+                  <div className="flex jc-b ai-c gap-16 wrap">
+                    <p className="p-sm">
+                      {preview.applicationStatus === 'SHORTLISTED'
+                        ? 'Votre dossier a été retenu. Choisissez un créneau de visite.'
+                        : preview.applicationStatus === 'VISIT_SCHEDULED'
+                          ? 'Votre visite est planifiée.'
+                          : 'Candidature envoyée. Le propriétaire a été notifié.'}
+                    </p>
+                    {preview.applicationStatus ? (
+                      <span className={STATUS_BADGE[preview.applicationStatus].tone}>
+                        {STATUS_BADGE[preview.applicationStatus].label}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {/* Le rendez-vous n'est proposé qu'une fois le candidat
+                      retenu : l'écran de visite le refuserait autrement. */}
+                  {preview.applicationStatus === 'SHORTLISTED' ||
+                  preview.applicationStatus === 'VISIT_SCHEDULED' ? (
+                    <Link
+                      href={`/biens/${property.reference}/visite`}
+                      className="btn btn-block mt-12"
+                    >
+                      {preview.applicationStatus === 'SHORTLISTED'
+                        ? 'Choisir un créneau de visite'
+                        : 'Voir mon rendez-vous'}
+                    </Link>
                   ) : null}
-                </div>
+                </>
               ) : (
                 <>
                   {/* Mention d'information, pas de case à cocher : transmettre

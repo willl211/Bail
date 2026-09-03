@@ -70,7 +70,7 @@ choisit par variable d'environnement, et `/health` affiche celui qui tourne.
 | KYC / vérification des pièces | **non choisi** | `mock` (seule valeur acceptée) |
 | Signature électronique du bail | DocuSign | `mock` en dev, sandbox en staging |
 | Paiement (abonnements, honoraires) | Stripe | `mock` en dev, clés de test ensuite |
-| Visio des visites à distance | non tranché (reco : Daily.co) | `mock` |
+| Visio des visites à distance | **non choisi** (reco : Daily.co) | `mock` (seule valeur acceptée) |
 
 ## Points de conception à ne pas casser
 
@@ -120,14 +120,15 @@ un écran doit être fonctionnel avant de passer au suivant.
 | 2 | Compte + espace propriétaire | **fait** — authentification, dépôt d'annonce, photos, diagnostics, abonnement, candidatures reçues (lecture seule) |
 | 3 | Compte + dossier locataire | **fait** — compte, situation, dépôt des pièces, garant, transmission au contrôle |
 | 4 | Candidature à un bien | **fait** — aperçu, blocages/avis selon les critères du bien, envoi, suivi |
-| 5 | Prise de RDV de visite | à faire |
+| 5 | Prise de RDV de visite | **fait** — créneaux ouverts par le propriétaire, décision sur les candidatures, réservation et annulation |
 | 6 | Génération de bail + signature | à faire |
 | 7 | Paiement des honoraires | à faire |
 
-Le schéma de base couvre déjà les sept étapes. Les étapes 1 à 4 sont complètes.
-L'écran « Candidatures reçues » de l'étape 2 reste en lecture seule : accepter
-ou écarter un candidat relève de l'étape 5 (prise de RDV de visite), pas de
-l'étape 4 — celle-ci ne fait qu'envoyer la candidature.
+Le schéma de base couvre déjà les sept étapes. Les étapes 1 à 5 sont complètes.
+L'écran « Candidatures reçues » de l'étape 2 n'est plus en lecture seule : le
+propriétaire y retient un candidat — ce qui lui ouvre la prise de rendez-vous —
+ou l'écarte, avec un motif transmis. L'acceptation définitive, qui déclenche la
+génération du bail et fige les autres candidatures, relève de l'étape 6.
 
 ### Comptes de démonstration
 
@@ -171,6 +172,19 @@ Ces comptes n'existent que dans le seed de développement.
 - Le contrôle manuel des pièces (justificatif de domicile, refus motivé) attend
   le back-office : aucun écran ne permet encore à un agent de statuer, donc une
   pièce en revue humaine y reste.
+- Aucun prestataire de visio n'est retenu : `VIDEO_DRIVER=mock` est la seule
+  valeur acceptée, et le driver refuse de démarrer sur un nom inconnu plutôt que
+  de retomber sur le simulateur — en production, ça donnerait des rendez-vous en
+  visio impossibles à rejoindre. Les salles portent une URL en `.invalid`, que
+  personne ne prendra pour un vrai lien.
+- La **purge des enregistrements de visite à 15 jours** n'a pas d'exécutant :
+  `Visit.recordingExpiresAt` est posée à l'ouverture de la salle, mais aucune
+  tâche planifiée ne balaie encore les enregistrements arrivés à échéance. À
+  brancher avant toute visio réelle (docs/integrations.md).
+- L'**empreinte bancaire avant visite** n'est pas demandée tant qu'aucun
+  prestataire de paiement n'est branché : la visite est alors confirmée d'emblée
+  et l'écran l'annonce. Elle redeviendra bloquante dès que `PAYMENT_DRIVER`
+  passera à `stripe`.
 - Le driver de stockage `s3` n'est pas implémenté : seul `local` fonctionne.
   Le service échoue explicitement si un autre driver est configuré, plutôt que
   d'écrire sur le disque du serveur applicatif en croyant écrire sur l'objet.

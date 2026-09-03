@@ -79,15 +79,28 @@ export default async function EditPropertyPage({ params }: Params) {
               </span>
             </div>
 
-            <div className="stats">
-              <div>
-                <span className="label">Photos</span>
-                <div className="stat__value">{property.photoCount}</div>
+            <div className="flex gap-16 wrap ai-c">
+              <div className="stats">
+                <div>
+                  <span className="label">Photos</span>
+                  <div className="stat__value">{property.photoCount}</div>
+                </div>
+                <div>
+                  <span className="label">Candidatures</span>
+                  <div className="stat__value">{property.applicationCount}</div>
+                </div>
               </div>
-              <div>
-                <span className="label">Candidatures</span>
-                <div className="stat__value">{property.applicationCount}</div>
-              </div>
+
+              {/* Un bien encore en brouillon ne reçoit pas de visite : le lien
+                  n'apparaît qu'une fois l'annonce partie au contrôle. */}
+              {property.status === 'DRAFT' ? null : (
+                <Link
+                  href={`/proprietaires/biens/${property.reference}/visites`}
+                  className="btn btn--ghost btn-sm"
+                >
+                  Créneaux de visite
+                </Link>
+              )}
             </div>
           </div>
 

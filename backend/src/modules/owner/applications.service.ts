@@ -1,9 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import {
   ApplicationStatus,
   DocumentStatus,
   DocumentType,
+  PreauthorizationStatus,
   PropertyStatus,
+  VisitStatus,
   type EmploymentContractType,
   type GuarantorKind,
   type TenantFileStatus,
@@ -78,6 +80,19 @@ export interface OwnerApplicationsView {
 
 /** Candidatures que le propriétaire n'a pas encore ouvertes. */
 const NEW: ApplicationStatus[] = [ApplicationStatus.SUBMITTED];
+
+/**
+ * Candidatures déjà tranchées : elles ne se re-décident pas depuis cet écran.
+ *
+ * `ACCEPTED` en fait partie — revenir dessus après avoir lancé la génération du
+ * bail est une opération d'une autre nature, qui relèvera du back-office.
+ */
+const DECIDED: ApplicationStatus[] = [
+  ApplicationStatus.ACCEPTED,
+  ApplicationStatus.REJECTED,
+  ApplicationStatus.WITHDRAWN,
+  ApplicationStatus.EXPIRED,
+];
 
 /** Candidatures en cours d'examen : lues, sans décision. */
 const UNDER_REVIEW: ApplicationStatus[] = [
@@ -214,6 +229,107 @@ export class OwnerApplicationsService {
         };
       }),
     };
+  }
+
+  /**
+   * Candidature du portefeuille du propriétaire connecté.
+   *
+   * 404 et non 403 sur celle d'un autre : « interdit » confirmerait qu'elle
+   * existe.
+   */
+  private async ownedOrFail(ownerId: string, applicationId: string) {
+    const application = await this.prisma.application.findFirst({
+      where: { id: applicationId, property: { ownerId } },
+      select: { id: true, status: true, readAt: true },
+    });
+    if (!application) throw new NotFoundException('Candidature introuvable.');
+    return application;
+  }
+
+  /**
+   * Retient un candidat et lui ouvre la prise de rendez-vous.
+   *
+   * Ne fige rien : plusieurs candidats peuvent être retenus en même temps, et
+   * plusieurs peuvent visiter. C'est l'acceptation finale — écran 6, avec la
+   * génération du bail — qui écartera les autres.
+   */
+  async shortlist(ownerId: string, applicationId: string): Promise<OwnerApplicationsView> {
+    const application = await this.ownedOrFail(ownerId, applicationId);
+
+    if (DECIDED.includes(application.status)) {
+      throw new ConflictException('Cette candidature est déjà tranchée.');
+    }
+    // Une visite déjà planifiée l'est : repasser « retenue » effacerait le
+    // rendez-vous de l'écran du locataire sans l'annuler pour autant.
+    if (application.status === ApplicationStatus.VISIT_SCHEDULED) {
+      throw new ConflictException('Une visite est déjà planifiée pour ce candidat.');
+    }
+
+    await this.prisma.application.update({
+      where: { id: application.id },
+      data: {
+        status: ApplicationStatus.SHORTLISTED,
+        // Retenir un dossier, c'est l'avoir lu : sans ça le délai de réponse
+        // resterait vide alors que le propriétaire a bel et bien répondu.
+        readAt: application.readAt ?? new Date(),
+      },
+    });
+
+    return this.list(ownerId);
+  }
+
+  /** Écarte un candidat. Le motif lui sera visible : il a droit à une raison. */
+  async reject(
+    ownerId: string,
+    applicationId: string,
+    reason?: string,
+  ): Promise<OwnerApplicationsView> {
+    const application = await this.ownedOrFail(ownerId, applicationId);
+
+    if (DECIDED.includes(application.status)) {
+      throw new ConflictException('Cette candidature est déjà tranchée.');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.application.update({
+        where: { id: application.id },
+        data: {
+          status: ApplicationStatus.REJECTED,
+          rejectionReason: reason ?? null,
+          readAt: application.readAt ?? new Date(),
+          decidedAt: new Date(),
+        },
+      });
+
+      // Un rendez-vous à venir sur une candidature écartée n'a plus d'objet :
+      // il est annulé et son créneau rendu au propriétaire.
+      const visits = await tx.visit.findMany({
+        where: {
+          applicationId: application.id,
+          status: { in: [VisitStatus.REQUESTED, VisitStatus.PENDING_CHECKS, VisitStatus.CONFIRMED] },
+        },
+        select: { id: true },
+      });
+
+      if (visits.length > 0) {
+        const ids = visits.map((visit) => visit.id);
+        await tx.visit.updateMany({
+          where: { id: { in: ids } },
+          data: {
+            status: VisitStatus.CANCELLED,
+            cancelledAt: new Date(),
+            cancellationReason: 'Candidature écartée par le propriétaire',
+            preauthorizationStatus: PreauthorizationStatus.RELEASED,
+          },
+        });
+        await tx.visitSlot.updateMany({
+          where: { visitId: { in: ids } },
+          data: { visitId: null },
+        });
+      }
+    });
+
+    return this.list(ownerId);
   }
 }
 

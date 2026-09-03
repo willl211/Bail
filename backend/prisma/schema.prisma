@@ -72,8 +72,9 @@ model User {
   leasesAsTenant Lease[]       @relation("LeaseTenant")
 
   // Agent interne
-  visitsAsAgent   Visit[]   @relation("VisitAgent")
-  mandatesAsAgent Mandate[] @relation("MandateAgent")
+  visitsAsAgent    Visit[]     @relation("VisitAgent")
+  visitSlotsOpened VisitSlot[] @relation("VisitSlotOpener")
+  mandatesAsAgent  Mandate[]   @relation("MandateAgent")
 
   kycChecks KycCheck[]
   payments  Payment[]  @relation("PaymentPayer")
@@ -111,8 +112,8 @@ model Session {
   userAgent String?
   ipAddress String?
 
-  createdAt      DateTime @default(now())
-  lastSeenAt     DateTime @default(now())
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
 
   @@index([userId, revokedAt])
   @@index([expiresAt])
@@ -214,6 +215,7 @@ model Property {
   documents    PropertyDocument[]
   applications Application[]
   visits       Visit[]
+  visitSlots   VisitSlot[]
   leases       Lease[]
   payments     Payment[]
   mandate      Mandate?
@@ -421,7 +423,7 @@ model Guarantor {
   tenantFileId String
   tenantFile   TenantFile @relation(fields: [tenantFileId], references: [id], onDelete: Cascade)
 
-  kind                  GuarantorKind @default(INDIVIDUAL)
+  kind                  GuarantorKind           @default(INDIVIDUAL)
   firstName             String?
   lastName              String?
   organisationName      String?
@@ -580,8 +582,55 @@ enum PreauthorizationStatus {
   CAPTURED
 }
 
+/// Créneau de visite ouvert sur un bien.
+///
+/// Rattaché au **bien**, pas à un agent : la maquette annonce des créneaux
+/// « ouverts par le propriétaire et l'agent du secteur », versés au même pot.
+/// `openedById` garde qui l'a ouvert, pour l'audit et pour que le back-office
+/// puisse en ajouter sans changer le modèle.
+///
+/// La réservation est portée par `visitId` plutôt que par un drapeau : un
+/// créneau pris l'est forcément par une visite, et l'unicité de la relation
+/// interdit d'en placer deux sur le même horaire.
+model VisitSlot {
+  id String @id @default(uuid())
+
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  openedById String
+  openedBy   User   @relation("VisitSlotOpener", fields: [openedById], references: [id])
+
+  startsAt        DateTime
+  durationMinutes Int      @default(30)
+
+  /// Types de visite proposés sur ce créneau. Un propriétaire peut n'ouvrir la
+  /// visio que sur certains horaires.
+  allowedTypes VisitType[] @default([ACCOMPANIED, VIDEO])
+
+  /// Visite qui occupe le créneau. `null` = libre.
+  visitId String? @unique
+  visit   Visit?  @relation(fields: [visitId], references: [id], onDelete: SetNull)
+
+  /// Retiré par celui qui l'a ouvert. Conservé plutôt que supprimé : un
+  /// créneau qui a été proposé puis retiré doit rester traçable.
+  closedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Un même bien ne peut pas ouvrir deux créneaux au même instant.
+  @@unique([propertyId, startsAt])
+  @@index([propertyId, startsAt, closedAt])
+  @@map("visit_slots")
+}
+
 model Visit {
   id String @id @default(uuid())
+
+  /// Créneau occupé. Facultatif : une visite peut être calée hors créneau
+  /// publié (arrangement direct enregistré par un agent).
+  slot VisitSlot?
 
   propertyId String
   property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
@@ -708,8 +757,8 @@ model Lease {
   applicationId String?      @unique
   application   Application? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
 
-  templateId String
-  template   LeaseTemplate @relation(fields: [templateId], references: [id])
+  templateId       String
+  template         LeaseTemplate @relation(fields: [templateId], references: [id])
   /// Copie du checksum du modèle au moment de la génération : prouve sur quel
   /// texte exact la signature porte.
   templateChecksum String
@@ -978,9 +1027,9 @@ enum MandateStatus {
 }
 
 model Mandate {
-  id String @id @default(uuid())
+  id             String @id @default(uuid())
   /// Numéro d'ordre continu du registre des mandats.
-  registryNumber Int @unique
+  registryNumber Int    @unique
 
   propertyId String   @unique
   property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)

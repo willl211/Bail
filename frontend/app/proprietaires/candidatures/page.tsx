@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { ApplicationDecision } from '@/components/application-decision';
 import { OwnerAside } from '@/components/owner-aside';
 import { getCurrentUser, getOwnerApplications, getOwnerSummary } from '@/lib/api';
 import type {
@@ -414,29 +415,10 @@ export default async function OwnerApplicationsPage({
                       className="pad wash"
                       style={{ borderTop: '1px solid var(--line-softer)' }}
                     >
-                      <div className="flex gap-10 wrap">
-                        <button
-                          className="btn btn-sm"
-                          type="button"
-                          style={{ flex: '1 1 auto' }}
-                          disabled
-                        >
-                          Proposer une visite
-                        </button>
-                        <button
-                          className="btn btn--ghost btn-sm"
-                          type="button"
-                          style={{ flex: '1 1 auto' }}
-                          disabled
-                        >
-                          Écarter
-                        </button>
-                      </div>
-                      <p className="field__hint mt-10">
-                        Décider d’une candidature arrive avec la prise de rendez-vous de
-                        visite, en cours de construction. Cet écran est pour l’instant en
-                        lecture seule.
-                      </p>
+                      <ApplicationDecision
+                        applicationId={selected.id}
+                        status={selected.status}
+                      />
                     </div>
                   </div>
                 ) : null}

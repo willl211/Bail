@@ -3175,6 +3175,100 @@ a.tile[aria-current='true'] {
 }
 
 /* -----------------------------------------------------------------------------
+   Visite — choix du type et des créneaux
+   -------------------------------------------------------------------------- */
+
+/* Choix entre visite accompagnée et visio. Deux cartes, pas un menu : le choix
+   engage la forme du rendez-vous, il mérite d'être lu. */
+.opts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(238px, 1fr));
+  gap: 16px;
+}
+
+.opt {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 18px;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  transition:
+    border-color 0.18s,
+    background 0.18s,
+    transform 0.24s var(--ease-out);
+}
+
+.opt:hover:not(:disabled) {
+  border-color: var(--accent-border);
+  transform: translateY(-2px);
+}
+
+.opt[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+}
+
+.opt:disabled {
+  cursor: not-allowed;
+  color: var(--ink-4);
+}
+
+.opt__t {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 10px 0 6px;
+  letter-spacing: -0.012em;
+}
+
+/* Calendrier des créneaux : une colonne par jour, comme un planning mural. */
+.days {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(122px, 1fr));
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+}
+
+.day {
+  border-right: 1px solid var(--line-softer);
+  border-bottom: 1px solid var(--line-softer);
+  padding: 12px;
+  background: var(--surface);
+}
+
+.day__h {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  margin-bottom: 9px;
+}
+
+.day .slot {
+  padding: 7px 9px;
+  font-size: 11px;
+  justify-content: center;
+}
+
+/* Créneau retenu : l'accent porte la sélection, comme partout ailleurs. */
+.slot[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+
+.slot:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.slot:disabled:hover {
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+/* -----------------------------------------------------------------------------
    Utilitaires
    -------------------------------------------------------------------------- */
 

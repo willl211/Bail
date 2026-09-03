@@ -7,7 +7,7 @@ Ces prestataires peuvent être branchés en mode test/sandbox pendant tout le d�
 | KYC / vérification des pièces (dossier locataire, avant visite) | Non choisi | **Interface en place, driver `mock` seul accepté** (voir ci-dessous) |
 | Signature électronique du bail | DocuSign | Confirmé — utiliser leur environnement sandbox pendant le dev |
 | Paiement (abonnements propriétaires, honoraires) | Stripe | Confirmé — **code complet, aucun compte branché** (voir ci-dessous) |
-| Visio pour les visites à distance | Non choisi formellement | Recommandation : Daily.co (le plus simple à intégrer et le moins cher pour démarrer, comparé à Twilio) |
+| Visio pour les visites à distance | Non choisi formellement | **Interface en place, driver `mock` seul accepté.** Recommandation : Daily.co (le plus simple à intégrer et le moins cher pour démarrer, comparé à Twilio) |
 
 ## Stripe — précision du 2 septembre 2026
 
@@ -90,3 +90,23 @@ l'ajouter après coup obligerait à retoucher le code métier.
 - Enregistrement vidéo conservé **15 jours**, purgé automatiquement ensuite
 
 Type de visite proposé au locataire : accompagnée physique **ou** visio en direct, au choix.
+
+### État au 3 septembre 2026
+
+Le protocole est appliqué, avec deux tempéraments explicites tant qu'aucun
+prestataire n'est branché :
+
+| Contrôle | État |
+|---|---|
+| Identité du visiteur | **Bloquant.** Repose sur la pièce d'identité vérifiée du dossier locataire : pas de contrôle séparé à refaire. Sans elle, aucun créneau n'est réservable. |
+| Pré-autorisation carte | **Non demandée** tant que `PAYMENT_DRIVER=mock`. La visite est alors confirmée d'emblée, et l'écran dit pourquoi. Exiger une empreinte qu'on ne peut pas prendre bloquerait tout rendez-vous ; en inscrire une « autorisée » sans carte serait un mensonge. Redevient bloquante avec un vrai prestataire. |
+| Caméra obligatoire | Portée par `Visit.cameraRequired`, non désactivable. |
+| Rétention 15 jours | `Visit.recordingExpiresAt` est calculée **à l'ouverture de la salle**, pas espérée d'un ménage ultérieur. **Aucune tâche ne la balaie encore** — à brancher avant toute visio réelle. |
+
+Le montant de l'empreinte (1 €), le délai d'annulation (4 h) et la rétention
+(15 jours) vivent dans `platform_settings` : aucun n'est codé en dur.
+
+Les créneaux sont ouverts par le **propriétaire** sur son bien. La maquette les
+annonce « ouverts par le propriétaire et l'agent du secteur » : le modèle
+(`VisitSlot.openedById`) est prêt pour l'agent, mais le back-office qui le lui
+permettrait n'existe pas encore.

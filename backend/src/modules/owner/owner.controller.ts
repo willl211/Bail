@@ -24,6 +24,7 @@ import type { PublicUser } from '../auth/auth.service';
 import { OwnerApplicationsService } from './applications.service';
 import { OwnerService } from './owner.service';
 import { UpsertPropertyDto } from './dto/upsert-property.dto';
+import { RejectApplicationDto } from './dto/reject-application.dto';
 
 /**
  * Espace propriétaire — écran 2 du build-order.
@@ -62,6 +63,32 @@ export class OwnerController {
   @Get('applications')
   applicationsReceived(@CurrentUser() user: PublicUser) {
     return this.applications.list(user.id);
+  }
+
+  /**
+   * Retient un candidat : il peut alors prendre rendez-vous pour une visite.
+   *
+   * Ne fige pas les autres candidatures — plusieurs candidats peuvent être
+   * retenus et visiter. C'est l'acceptation finale qui tranchera.
+   */
+  @Post('applications/:applicationId/shortlist')
+  @HttpCode(200)
+  shortlistApplication(
+    @CurrentUser() user: PublicUser,
+    @Param('applicationId') applicationId: string,
+  ) {
+    return this.applications.shortlist(user.id, applicationId);
+  }
+
+  /** Écarte un candidat, et annule le rendez-vous éventuellement pris. */
+  @Post('applications/:applicationId/reject')
+  @HttpCode(200)
+  rejectApplication(
+    @CurrentUser() user: PublicUser,
+    @Param('applicationId') applicationId: string,
+    @Body() dto: RejectApplicationDto,
+  ) {
+    return this.applications.reject(user.id, applicationId, dto.reason);
   }
 
   /** Un bien du portefeuille, tel que le formulaire de dépôt doit le repeupler. */

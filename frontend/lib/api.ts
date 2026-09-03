@@ -610,3 +610,103 @@ export function getCandidacyPreview(reference: string) {
 export function getTenantApplications() {
   return apiFetchAuthed<TenantApplicationSummary[]>('/tenant/applications');
 }
+
+// --- Visites -----------------------------------------------------------------
+
+export type VisitType = 'ACCOMPANIED' | 'VIDEO';
+
+export type VisitStatus =
+  | 'REQUESTED'
+  | 'PENDING_CHECKS'
+  | 'CONFIRMED'
+  | 'IN_PROGRESS'
+  | 'COMPLETED'
+  | 'CANCELLED'
+  | 'NO_SHOW';
+
+export type PreauthorizationStatus =
+  | 'NOT_REQUIRED'
+  | 'PENDING'
+  | 'AUTHORIZED'
+  | 'FAILED'
+  | 'RELEASED'
+  | 'CAPTURED';
+
+export interface BookableSlot {
+  id: string;
+  startsAt: string;
+  durationMinutes: number;
+  allowedTypes: VisitType[];
+}
+
+export interface VisitView {
+  id: string;
+  propertyReference: string;
+  propertyTitle: string;
+  addressLine: string;
+  district: string;
+  type: VisitType;
+  status: VisitStatus;
+  scheduledAt: string;
+  durationMinutes: number;
+  agentName: string | null;
+  videoRoomUrl: string | null;
+  preauthorizationStatus: PreauthorizationStatus;
+  preauthorizationAmountCents: number | null;
+  cancellable: boolean;
+}
+
+export interface VisitPrerequisite {
+  key: 'identity' | 'preauthorization' | 'camera';
+  label: string;
+  detail: string;
+  state: 'ok' | 'pending' | 'info';
+  blocking: boolean;
+}
+
+export interface VisitBookingView {
+  property: {
+    reference: string;
+    title: string;
+    addressLine: string;
+    district: string;
+  };
+  applicationStatus: ApplicationStatus | null;
+  blockers: string[];
+  prerequisites: VisitPrerequisite[];
+  slots: BookableSlot[];
+  visit: VisitView | null;
+  durations: Record<VisitType, number>;
+  cancellationDeadlineHours: number;
+  recordingRetentionDays: number;
+  /** `mock` tant qu'aucun prestataire n'est branché. */
+  drivers: { video: string; payment: string };
+}
+
+/** Créneau tel que son propriétaire le voit. */
+export interface OwnerSlotView {
+  id: string;
+  startsAt: string;
+  durationMinutes: number;
+  allowedTypes: VisitType[];
+  booked: boolean;
+  bookedBy: string | null;
+  visitStatus: VisitStatus | null;
+  past: boolean;
+}
+
+export function getVisitBookingView(reference: string) {
+  return apiFetchAuthed<VisitBookingView>(
+    `/tenant/visits/property/${encodeURIComponent(reference)}`,
+  );
+}
+
+export function getTenantVisits() {
+  return apiFetchAuthed<VisitView[]>('/tenant/visits');
+}
+
+export function getOwnerSlots(reference: string) {
+  return apiFetchAuthed<OwnerSlotView[]>(
+    `/owner/properties/${encodeURIComponent(reference)}/slots`,
+  );
+}
