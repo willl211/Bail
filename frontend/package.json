@@ -2,7 +2,7 @@
   "name": "frontend",
   "version": "0.1.0",
   "private": true,
-  "description": "Seuil — application web Next.js (web responsive uniquement, pas de natif au MVP)",
+  "description": "Bail — application web Next.js (web responsive uniquement, pas de natif au MVP)",
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",

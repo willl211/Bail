@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { StorageService } from '../storage/storage.service';
 import { VISIBLE_STATUSES, visiblePropertyWhere } from './property-visibility';
 import {
   FurnishedFilter,
@@ -24,7 +25,10 @@ export interface PropertySearchResult {
 
 @Injectable()
 export class PropertiesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: StorageService,
+  ) {}
 
   private buildWhere(query: SearchPropertiesDto): Prisma.PropertyWhereInput {
     const where: Prisma.PropertyWhereInput = visiblePropertyWhere();
@@ -123,15 +127,30 @@ export class PropertiesService {
   }
 
   async findByReference(reference: string): Promise<PropertyDetail> {
-    const property = await this.prisma.property.findFirst({
-      where: { reference, status: { in: VISIBLE_STATUSES } },
-      include: propertyPublicInclude,
-    });
+    // Le barème est lu en même temps que le bien : les honoraires locataire
+    // sont annoncés sur la fiche, avant toute candidature, et dépendent de la
+    // surface habitable. Ils ne sont jamais codés en dur.
+    const [property, feeSchedule] = await Promise.all([
+      this.prisma.property.findFirst({
+        where: { reference, status: { in: VISIBLE_STATUSES } },
+        include: propertyPublicInclude,
+      }),
+      this.prisma.feeSchedule.findFirst({
+        where: { isActive: true },
+        orderBy: { effectiveFrom: 'desc' },
+        select: {
+          code: true,
+          tenantVisitFeeCentsPerSqm: true,
+          tenantInventoryFeeCentsPerSqm: true,
+          isLegallyApproved: true,
+        },
+      }),
+    ]);
 
     if (!property) {
       throw new NotFoundException(`Aucune annonce en ligne pour la référence ${reference}`);
     }
 
-    return toDetail(property);
+    return toDetail(property, feeSchedule, (key) => this.storage.publicUrl('public', key));
   }
 }

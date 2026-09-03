@@ -3,15 +3,20 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { visiblePropertyWhere } from '../properties/property-visibility';
 
 /**
- * Indicateurs du bandeau « BIENS VÉRIFIÉS · MOSELLE » de la page d'accueil.
+ * Registre « BIENS VÉRIFIÉS · MOSELLE » de la page d'accueil.
+ *
+ * Les quatre indicateurs correspondent à ceux de la maquette de référence
+ * (`maquette_interface/bail/bail.html`) : délai moyen de réponse, loyer médian
+ * du centre-ville, candidats par bien, dossiers vérifiés ce mois.
  *
  * Deux natures d'indicateurs cohabitent :
  *  - `computed` : calculé sur les annonces réellement en base ;
  *  - `setting`  : lu dans `platform_settings`, donc modifiable sans
- *    redéploiement. Le délai moyen de réponse et le taux de dossiers vérifiés
- *    sans échange n'ont aucune donnée d'usage pour être calculés avant le
- *    lancement pilote — ils sont paramétrés, et l'API le dit explicitement
- *    plutôt que de faire passer une valeur saisie pour une mesure.
+ *    redéploiement. Trois des quatre n'ont aucune donnée d'usage pour être
+ *    calculés avant le lancement pilote (ni candidature, ni dossier, ni
+ *    historique de réponse) — ils sont paramétrés, et l'API le dit
+ *    explicitement plutôt que de faire passer une valeur saisie pour une
+ *    mesure.
  */
 export interface MarketMetric {
   key: string;
@@ -43,44 +48,32 @@ export class MarketService {
   }
 
   async getSnapshot(): Promise<MarketSnapshot> {
-    const [verifiedPropertyCount, twoRooms, allVisible] = await Promise.all([
+    const [verifiedPropertyCount, centreVille] = await Promise.all([
       this.prisma.property.count({ where: visiblePropertyWhere() }),
       this.prisma.property.findMany({
-        where: { ...visiblePropertyWhere(), rooms: 2 },
-        select: { rentCents: true, chargesCents: true },
-      }),
-      this.prisma.property.findMany({
-        where: visiblePropertyWhere(),
-        select: { surfaceM2: true },
+        where: { ...visiblePropertyWhere(), district: { slug: 'centre-ville' } },
+        select: { rentCents: true, chargesCents: true, surfaceM2: true },
       }),
     ]);
 
-    const medianTwoRoomRent = median(twoRooms.map((p) => p.rentCents + p.chargesCents));
-    const medianSurface = median(allVisible.map((p) => p.surfaceM2));
+    // Loyer médian au m², charges comprises : la médiane porte sur les ratios
+    // par bien, pas sur un ratio de médianes — un studio à fort loyer au m² ne
+    // doit pas être écrasé par la médiane des surfaces.
+    const medianRentPerSqm = median(
+      centreVille
+        .filter((p) => p.surfaceM2 > 0)
+        .map((p) => (p.rentCents + p.chargesCents) / p.surfaceM2),
+    );
 
-    const euro = (cents: number | null) =>
-      cents === null ? '—' : `${Math.round(cents / 100).toLocaleString('fr-FR')} €`;
-
-    const [responseDelay, verifiedWithoutExchange] = await Promise.all([
+    const [responseDelay, applicantsPerProperty, filesVerified] = await Promise.all([
       this.readSetting('market.metz.averageResponseDelay', '—'),
-      this.readSetting('market.metz.filesVerifiedWithoutExchange', '—'),
+      this.readSetting('market.metz.applicantsPerProperty', '—'),
+      this.readSetting('market.metz.filesVerifiedThisMonth', '—'),
     ]);
 
     return {
       verifiedPropertyCount,
       metrics: [
-        {
-          key: 'medianRentTwoRooms',
-          label: 'Loyer médian · 2 pièces',
-          value: euro(medianTwoRoomRent),
-          source: 'computed',
-        },
-        {
-          key: 'medianSurface',
-          label: 'Surface médiane',
-          value: medianSurface === null ? '—' : `${Math.round(medianSurface)} m²`,
-          source: 'computed',
-        },
         {
           key: 'averageResponseDelay',
           label: 'Délai moyen de réponse',
@@ -88,9 +81,27 @@ export class MarketService {
           source: 'setting',
         },
         {
-          key: 'filesVerifiedWithoutExchange',
-          label: 'Dossiers vérifiés sans échange',
-          value: verifiedWithoutExchange,
+          key: 'medianRentPerSqmCentreVille',
+          label: 'Loyer médian centre-ville',
+          value:
+            medianRentPerSqm === null
+              ? '—'
+              : `${(medianRentPerSqm / 100).toLocaleString('fr-FR', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })} €/m²`,
+          source: 'computed',
+        },
+        {
+          key: 'applicantsPerProperty',
+          label: 'Candidats par bien',
+          value: applicantsPerProperty,
+          source: 'setting',
+        },
+        {
+          key: 'filesVerifiedThisMonth',
+          label: 'Dossiers vérifiés ce mois',
+          value: filesVerified,
           source: 'setting',
         },
       ],

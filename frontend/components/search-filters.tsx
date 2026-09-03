@@ -1,25 +1,35 @@
 'use client';
 
+import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import type { District } from '@/lib/api';
 
+// Paliers de la maquette : toutes, puis les trois seuils qui séparent
+// réellement le portefeuille de Metz (studio, deux pièces, trois pièces).
 const SURFACE_OPTIONS = [
-  { label: 'TOUTES', value: 0 },
-  { label: '30 M²+', value: 30 },
-  { label: '50 M²+', value: 50 },
-  { label: '80 M²+', value: 80 },
+  { label: 'Toutes', value: 0 },
+  { label: '25 m²+', value: 25 },
+  { label: '45 m²+', value: 45 },
+  { label: '65 m²+', value: 65 },
 ];
 
 const FURNISHED_OPTIONS = [
-  { label: 'TOUS', value: 'all' },
-  { label: 'MEUBLÉ', value: 'furnished' },
-  { label: 'NU', value: 'unfurnished' },
+  { label: 'Tous', value: 'all' },
+  { label: 'Meublé', value: 'furnished' },
+  { label: 'Nu', value: 'unfurnished' },
 ];
 
 export const RENT_MIN = 400;
-export const RENT_MAX = 1600;
-export const RENT_DEFAULT = 1200;
+export const RENT_MAX = 1400;
+/**
+ * Par défaut le curseur est au maximum, donc aucun bien n'est masqué : arriver
+ * sur la recherche sans critère doit montrer tout le portefeuille. La maquette
+ * affichait 900 €, mais c'était un état de démonstration, pas une règle — un
+ * filtre actif par défaut cacherait des annonces sans que le visiteur l'ait
+ * demandé.
+ */
+export const RENT_DEFAULT = RENT_MAX;
 
 const euros = (value: number) => `${value.toLocaleString('fr-FR')} €`;
 
@@ -40,9 +50,7 @@ export function SearchFilters({ districts }: { districts: District[] }) {
   const urlMaxRent = Number(searchParams.get('maxRent') ?? RENT_DEFAULT);
   const minSurface = Number(searchParams.get('minSurface') ?? 0);
   const furnished = searchParams.get('furnished') ?? 'all';
-  const selectedDistricts = (searchParams.get('districts') ?? '')
-    .split(',')
-    .filter(Boolean);
+  const selectedDistricts = (searchParams.get('districts') ?? '').split(',').filter(Boolean);
 
   const [maxRent, setMaxRent] = useState(urlMaxRent);
   const [syncedRent, setSyncedRent] = useState(urlMaxRent);
@@ -108,34 +116,39 @@ export function SearchFilters({ districts }: { districts: District[] }) {
 
   return (
     <aside className="filters">
-      <div className="card">
-        <div className="filters__head">FILTRES</div>
+      <div className="panel panel--strong">
+        <div className="filters__head">
+          <span className="label label--ink">Filtres</span>
+          <button type="button" className="link" onClick={onReset}>
+            Réinitialiser
+          </button>
+        </div>
 
         <div className="filters__block filters__block--first">
-          <div className="filters__range-head">
-            <span className="filters__legend" style={{ marginBottom: 0 }}>
-              Loyer maximum
-            </span>
+          <div className="filters__legend">
+            <span>Loyer maximum</span>
             <span className="filters__range-value">{euros(maxRent)}</span>
           </div>
           <input
             type="range"
             min={RENT_MIN}
             max={RENT_MAX}
-            step={50}
+            step={25}
             value={maxRent}
             aria-label="Loyer maximum charges comprises"
             onChange={(event) => onRentInput(Number(event.target.value))}
-            style={{ width: '100%' }}
           />
           <div className="filters__range-bounds">
             <span>{RENT_MIN}</span>
             <span>{RENT_MAX.toLocaleString('fr-FR')}</span>
           </div>
+          <p className="p-sm mt-6">Charges comprises, hors honoraires.</p>
         </div>
 
         <div className="filters__block">
-          <div className="filters__legend">Surface minimum</div>
+          <div className="filters__legend">
+            <span>Surface minimum</span>
+          </div>
           <div className="filters__chips">
             {SURFACE_OPTIONS.map((option) => (
               <button
@@ -153,7 +166,9 @@ export function SearchFilters({ districts }: { districts: District[] }) {
         </div>
 
         <div className="filters__block">
-          <div className="filters__legend">Quartier</div>
+          <div className="filters__legend">
+            <span>Quartier</span>
+          </div>
           <div className="filters__checks">
             {districts.map((district) => {
               const checked = selectedDistricts.includes(district.slug);
@@ -178,7 +193,9 @@ export function SearchFilters({ districts }: { districts: District[] }) {
         </div>
 
         <div className="filters__block">
-          <div className="filters__legend">Ameublement</div>
+          <div className="filters__legend">
+            <span>Ameublement</span>
+          </div>
           <div className="filters__segmented">
             {FURNISHED_OPTIONS.map((option) => (
               <button
@@ -195,9 +212,16 @@ export function SearchFilters({ districts }: { districts: District[] }) {
           </div>
         </div>
 
-        <button type="button" className="filters__reset" onClick={onReset}>
-          RÉINITIALISER
-        </button>
+        <div className="filters__block filters__block--wash">
+          <span className="label label--accent">Dossier vérifié</span>
+          <p className="p-sm mt-8">
+            Avec un dossier vérifié, les biens compatibles avec vos revenus remontent en
+            tête et vous candidatez sans rien ressaisir.
+          </p>
+          <Link href="/dossier" className="btn btn-sm btn-block mt-12">
+            Créer mon dossier
+          </Link>
+        </div>
       </div>
     </aside>
   );

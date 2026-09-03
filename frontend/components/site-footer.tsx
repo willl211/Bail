@@ -4,7 +4,7 @@ export function SiteFooter() {
   return (
     <footer className="site-footer">
       <span className="site-footer__mark">
-        SEUIL · LOCATION LONGUE DURÉE EN DIRECT · METZ 2026
+        Bail · location longue durée en direct · Metz 2026
       </span>
       <span className="site-footer__links">
         <Link href="/proprietaires">Propriétaires</Link>

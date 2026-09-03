@@ -1,6 +1,7 @@
 import { Controller, Get, Param, ParseIntPipe, Query } from '@nestjs/common';
 import { PropertiesService } from './properties.service';
 import { SearchPropertiesDto } from './dto/search-properties.dto';
+import { Public } from '../auth/session.guard';
 
 /**
  * API publique des annonces.
@@ -10,6 +11,7 @@ import { SearchPropertiesDto } from './dto/search-properties.dto';
  * ne renvoient aucune donnée nominative.
  */
 @Controller('properties')
+@Public()
 export class PropertiesController {
   constructor(private readonly properties: PropertiesService) {}
 

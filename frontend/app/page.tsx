@@ -2,11 +2,14 @@ import Link from 'next/link';
 import { AnimatedCounter } from '@/components/animated-counter';
 import { HeroSearch } from '@/components/hero-search';
 import { PropertyCard } from '@/components/property-card';
+import { PlanWalkthrough } from '@/components/plan-walkthrough';
+import { ActivityTicker, buildTickerItems } from '@/components/activity-ticker';
 import {
   getDistricts,
   getFeaturedProperties,
   getMarketSnapshot,
   getOwnerSubscriptionPricing,
+  searchProperties,
 } from '@/lib/api';
 import * as fmt from '@/lib/format';
 
@@ -16,125 +19,154 @@ const OWNER_STEPS = [
   {
     n: '01',
     title: 'Décrivez le bien',
-    text: 'Diagnostics, photos et critères de sélection. Publication sous 2 h après contrôle.',
+    text: 'Photos, diagnostics, critères. En ligne après contrôle.',
   },
   {
     n: '02',
     title: 'Recevez des dossiers vérifiés',
-    text: 'Identité, revenus et cohérence contrôlés automatiquement avant transmission.',
+    text: "Le taux d'effort, jamais les pièces brutes.",
   },
   {
     n: '03',
     title: 'Signez le bail en ligne',
-    text: 'Bail conforme, état des lieux photo, quittances mensuelles automatiques.',
+    text: 'Modèle légal verrouillé, signature électronique, quittances.',
   },
 ];
 
 export default async function HomePage() {
-  const [featured, districts, market, subscription] = await Promise.all([
+  const [featured, districts, market, subscription, all] = await Promise.all([
     getFeaturedProperties(3),
     getDistricts(),
     getMarketSnapshot(),
     getOwnerSubscriptionPricing(),
+    searchProperties(new URLSearchParams({ pageSize: '8' })),
   ]);
 
   return (
-    <main className="page">
-      <div className="hero">
-        <div className="hero__main anim-fade-up">
-          <div className="hero__eyebrow">PREMIER MARCHÉ — METZ MÉTROPOLE</div>
-          <h1 className="hero__title">
-            Louer sans agence.
-            <br />
-            Candidater sans dossier papier.
-          </h1>
-          <p className="hero__lead">
-            Les propriétaires publient leur bien avec un abonnement mensuel, sans commission. Les
-            locataires déposent un dossier vérifié une seule fois, puis candidatent en un clic.
-          </p>
-
-          <HeroSearch districts={districts} />
-
-          <div className="hero__reassurance">
-            <span>Dossier vérifié en 24 h</span>
-            <span>Honoraires réduits, annoncés d&apos;avance</span>
-            <span>Bail et état des lieux en ligne</span>
-          </div>
-        </div>
-
-        <div className="hero__aside anim-fade-up" style={{ animationDelay: '0.12s' }}>
-          <div className="card">
-            <div className="registry__head">
-              <div className="label" style={{ marginBottom: 10 }}>
-                BIENS VÉRIFIÉS · MOSELLE
-              </div>
-              <div className="registry__counter">
-                <AnimatedCounter target={market.verifiedPropertyCount} />
-              </div>
-              <div className="bar" style={{ height: 2, marginTop: 14 }}>
-                <div className="bar-fill" style={{ height: 2 }} />
-              </div>
+    <>
+      <main className="page">
+        <div className="hero">
+          <div>
+            <div className="hero__eyebrow anim-rise">
+              <i /> Marché pilote — Metz Métropole
             </div>
 
-            {market.metrics.map((metric) => (
-              <div key={metric.key} className="registry__row">
-                <span className="registry__key">{metric.label}</span>
-                <span className="registry__value">{metric.value}</span>
+            <h1 className="hero__title anim-rise anim-rise-1">
+              Le dossier une fois.
+              <br />
+              La candidature en un clic.
+            </h1>
+
+            <p className="hero__lead anim-rise anim-rise-2">
+              À Metz, un studio part en 48 heures. Votre dossier est déjà vérifié quand
+              vous postulez.
+            </p>
+
+            <div className="anim-rise anim-rise-3">
+              <HeroSearch districts={districts} />
+            </div>
+
+            <div className="hero__reassurance anim-rise anim-rise-4">
+              <span>Dossier vérifié sous 24 h</span>
+              <span>Aucune commission propriétaire</span>
+              <span>Honoraires annoncés avant de candidater</span>
+            </div>
+          </div>
+
+          <aside className="hero__aside anim-rise anim-rise-2">
+            <div className="panel panel--strong tick">
+              <div className="registry__head">
+                <span className="label">Biens vérifiés · Moselle</span>
+                <div className="registry__counter">
+                  <AnimatedCounter target={market.verifiedPropertyCount} />
+                </div>
+                <div className="bar mt-12">
+                  <span className="bar-fill" />
+                </div>
+              </div>
+
+              {market.metrics.map((metric) => (
+                <div key={metric.key} className="registry__row">
+                  <span className="registry__key">{metric.label}</span>
+                  <span className="registry__value">{metric.value}</span>
+                </div>
+              ))}
+
+              <div className="registry__foot">
+                <span className="badge badge--ok anim-pop">Vérification automatisée active</span>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </main>
+
+      {/* Registre d'activité : ce que la plateforme vient de traiter. */}
+      <ActivityTicker items={buildTickerItems(all.items)} />
+
+      {/* Le parcours produit, station par station — cliquable. */}
+      <PlanWalkthrough />
+
+      <main className="page" style={{ paddingTop: 0 }}>
+        <section className="section reveal">
+          <div className="section__head">
+            <h2 className="section__title">Biens en avant à Metz</h2>
+            <Link href="/recherche" className="link link--accent">
+              Voir les {market.verifiedPropertyCount} biens en ligne →
+            </Link>
+          </div>
+
+          <div className="card-grid">
+            {featured.map((property) => (
+              <PropertyCard key={property.reference} property={property} />
+            ))}
+          </div>
+        </section>
+
+        <section className="owner-pitch reveal">
+          <div>
+            <span className="owner-pitch__eyebrow">Propriétaires</span>
+            <h2 className="owner-pitch__title">
+              Un abonnement,
+              <br />
+              pas une commission.
+            </h2>
+            <p className="p">
+              Vous gardez la main sur la sélection. Nous vérifions identité, revenus et
+              cohérence avant que le dossier arrive chez vous.
+            </p>
+
+            {subscription.monthlyAmountCents !== null ? (
+              <div className="owner-pitch__price">
+                <span className="owner-pitch__amount">
+                  {fmt.euros(subscription.monthlyAmountCents)}
+                </span>
+                <span className="label">/ mois / bien · sans engagement</span>
+              </div>
+            ) : null}
+
+            <div className="flex gap-12 wrap ai-c mt-24">
+              <Link href="/proprietaires" className="btn">
+                Publier un bien
+              </Link>
+              <Link href="/proprietaires" className="link">
+                Détail de l’abonnement →
+              </Link>
+            </div>
+          </div>
+
+          <div className="panel panel--strong">
+            {OWNER_STEPS.map((step) => (
+              <div key={step.n} className="owner-step">
+                <span className="owner-step__n">{step.n}</span>
+                <div>
+                  <div className="h-sm">{step.title}</div>
+                  <p className="p-sm mt-6">{step.text}</p>
+                </div>
               </div>
             ))}
-
-            <div className="registry__foot">
-              <span className="registry__dot" />
-              <span className="registry__status">VÉRIFICATION AUTOMATISÉE ACTIVE</span>
-            </div>
           </div>
-        </div>
-      </div>
-
-      <section className="section reveal">
-        <div className="section__head">
-          <h2 className="section__title">Biens en avant à Metz</h2>
-          <Link href="/recherche" className="btn-quiet">
-            VOIR LES {market.verifiedPropertyCount} BIENS →
-          </Link>
-        </div>
-        <div className="card-grid">
-          {featured.map((property) => (
-            <PropertyCard key={property.reference} property={property} />
-          ))}
-        </div>
-      </section>
-
-      <section className="owner-pitch reveal">
-        <div className="owner-pitch__text">
-          <div className="owner-pitch__eyebrow">PROPRIÉTAIRES</div>
-          <h2 className="owner-pitch__title">Un abonnement, pas une commission.</h2>
-          <p className="owner-pitch__lead">
-            Vous gardez la main sur la sélection. Nous vérifions l&apos;identité, les revenus et la
-            cohérence des dossiers avant qu&apos;ils arrivent chez vous.
-          </p>
-          {subscription.monthlyAmountCents !== null ? (
-            <div className="owner-pitch__price">
-              <span className="owner-pitch__amount">
-                {fmt.euros(subscription.monthlyAmountCents)}
-              </span>
-              <span className="owner-pitch__unit">/ MOIS / BIEN · SANS ENGAGEMENT</span>
-            </div>
-          ) : null}
-        </div>
-
-        <div className="owner-pitch__steps">
-          {OWNER_STEPS.map((step) => (
-            <div key={step.n} className="owner-step">
-              <span className="owner-step__n">{step.n}</span>
-              <div>
-                <div className="owner-step__title">{step.title}</div>
-                <div className="owner-step__text">{step.text}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-    </main>
+        </section>
+      </main>
+    </>
   );
 }

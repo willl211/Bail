@@ -22,14 +22,42 @@ export default () => ({
     url: process.env.DATABASE_URL,
   },
 
+  /**
+   * Authentification par session serveur + cookie `httpOnly`
+   * (docs/tech-stack.md). Pas de JWT : une session doit pouvoir être révoquée
+   * immédiatement, les comptes donnant accès à des pièces d'identité et à des
+   * bulletins de salaire.
+   */
   auth: {
-    jwtSecret: process.env.JWT_SECRET,
-    jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '7d',
+    /** Nom du cookie de session. */
+    cookieName: process.env.SESSION_COOKIE_NAME ?? 'bail_session',
+    /** Durée de vie d'une session, en jours. */
+    sessionTtlDays: parseInt(process.env.SESSION_TTL_DAYS ?? '30', 10),
+    /**
+     * `secure` est désactivable uniquement en développement, où le front est
+     * servi en clair sur localhost. Partout ailleurs le cookie est réservé au
+     * HTTPS.
+     */
+    cookieSecure: (process.env.SESSION_COOKIE_SECURE ?? 'true') !== 'false',
+    /** Domaine du cookie ; vide en local. */
+    cookieDomain: process.env.SESSION_COOKIE_DOMAIN || undefined,
+    /** Coût du hachage bcrypt des mots de passe. */
+    passwordSaltRounds: parseInt(process.env.PASSWORD_SALT_ROUNDS ?? '12', 10),
   },
 
   storage: {
     driver: process.env.STORAGE_DRIVER ?? 'local',
     localPath: process.env.STORAGE_LOCAL_PATH ?? './storage',
+    /**
+     * Base des URL de fichiers publics (photos d'annonces).
+     *
+     * Absolue, parce que le front est servi sur une autre origine que l'API :
+     * une URL relative se résoudrait contre le domaine du front et donnerait un
+     * 404. En production, c'est l'adresse du stockage objet ou du CDN, pas
+     * celle de l'API.
+     */
+    publicBaseUrl:
+      process.env.PUBLIC_ASSET_BASE_URL ?? 'http://localhost:4000/uploads',
     s3: {
       endpoint: process.env.S3_ENDPOINT,
       region: process.env.S3_REGION,
@@ -60,6 +88,13 @@ export default () => ({
       stripe: {
         secretKey: process.env.STRIPE_SECRET_KEY,
         webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
+        /**
+         * Produit Stripe portant l'abonnement propriétaire, créé une fois dans
+         * le tableau de bord. Le *prix*, lui, n'est pas dans le catalogue : il
+         * est construit à chaque souscription à partir du barème en base, qui
+         * doit rester modifiable sans redéploiement.
+         */
+        productId: process.env.STRIPE_PRODUCT_ID,
       },
     },
     video: {

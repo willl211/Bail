@@ -39,70 +39,88 @@ export default async function PropertyPage({ params }: Params) {
   const responseDelay =
     market?.metrics.find((metric) => metric.key === 'averageResponseDelay')?.value ?? null;
 
+  const visiting = property.status === 'VISITS_IN_PROGRESS';
+  const fees = property.tenantFees;
+
   const specs = [
-    { key: 'SURFACE', value: fmt.surfaceLower(property.surfaceM2) },
-    { key: 'PIÈCES', value: String(property.rooms) },
-    { key: 'ÉTAGE', value: property.floor ?? '—' },
-    { key: 'DPE', value: property.energyRating },
-    { key: 'AMEUBLEMENT', value: fmt.furnishedLabel(property.furnished) },
-    { key: 'CHARGES', value: fmt.euros(property.chargesCents) },
+    { key: 'Surface', value: fmt.surfaceLower(property.surfaceM2) },
+    { key: 'Pièces', value: String(property.rooms) },
+    { key: 'Étage', value: property.floor ?? '—' },
+    { key: 'DPE', value: fmt.energyRating(property.energyRating) },
+    { key: 'Ameublement', value: fmt.furnishedLabel(property.furnished) },
+    { key: 'Charges', value: fmt.euros(property.chargesCents) },
     {
-      key: 'DISPONIBLE',
+      key: 'Disponibilité',
       value: fmt.availability(property.availableFrom, property.availableImmediately),
     },
-    { key: 'BAIL', value: fmt.leaseDuration(property.leaseDurationMonths) },
+    { key: 'Dépôt', value: fmt.euros(property.depositCents) },
   ];
 
-  // Les pastilles colorées de la maquette (« VOUS : 3 000 € », « CONFORME »)
-  // confrontent le dossier du visiteur aux critères du propriétaire. Sans
-  // compte, il n'y a rien à confronter : les pastilles restent, en gris, avec
-  // une information factuelle. Elles reprendront leur rôle à l'écran 3.
+  // Les pastilles de la maquette confrontent le dossier du visiteur aux critères
+  // du propriétaire. Sans compte, il n'y a rien à confronter : elles portent une
+  // information factuelle et reprendront leur rôle à l'écran 3.
   const criteria = [
     property.ownerCriteria.minMonthlyIncomeCents !== null
       ? {
-          key: 'Revenus minimum',
-          value: `${fmt.euros(property.ownerCriteria.minMonthlyIncomeCents)} net`,
-          tag: '3× LE LOYER HC',
+          key: 'Revenus nets mensuels minimum',
+          value: fmt.euros(property.ownerCriteria.minMonthlyIncomeCents),
+          tag: '3 × le loyer',
         }
       : null,
     {
       key: 'Garant',
       value: fmt.guarantorRequirement(property.ownerCriteria.guarantorRequirement),
-      tag: property.ownerCriteria.guarantorRequirement === 'REQUIRED' ? 'EXIGÉ' : 'NON REQUIS',
+      tag: 'Physique ou moral',
     },
     {
-      key: 'Type de contrat',
+      key: 'Types de contrat acceptés',
       value: fmt.contractTypes(property.ownerCriteria.acceptedContractTypes),
-      tag: 'CONTRÔLÉ AU DOSSIER',
+      tag: null,
     },
-  ].filter((row): row is { key: string; value: string; tag: string } => row !== null);
+    {
+      key: 'Durée de bail',
+      value: `${fmt.leaseDuration(property.leaseDurationMonths)} — bail ${fmt.furnishedLabel(property.furnished).toLowerCase()}`,
+      tag: null,
+    },
+  ].filter((row): row is { key: string; value: string; tag: string | null } => row !== null);
 
   const paragraphs = property.description.split('\n').filter((line) => line.trim() !== '');
 
   return (
     <main className="listing anim-fade-in">
-      <Link href="/recherche" className="btn-quiet btn-quiet-muted listing__back">
-        ← RETOUR AUX RÉSULTATS
+      <Link href="/recherche" className="link listing__back">
+        ← Retour aux résultats
       </Link>
 
-      <div className="listing__gallery anim-fade-up">
+      <div className="listing__gallery anim-rise">
         {property.photos.map((photo, index) => (
-          <PhotoPlaceholder key={`${photo.storageKey}-${index}`} label={photo.label} />
+          <PhotoPlaceholder
+            key={`${photo.storageKey}-${index}`}
+            label={`${String(index + 1).padStart(2, '0')} · ${photo.label}`}
+            scale={index === 0}
+          />
         ))}
       </div>
 
       <div className="listing__columns">
-        <div className="listing__main">
-          <div className="listing__ref">{property.reference} · MIS EN LIGNE PAR LE PROPRIÉTAIRE</div>
-          <h1 className="listing__title">{property.title}</h1>
-          <div className="listing__address">
-            {property.addressLine} · {property.district.name}, {property.city}
+        <div>
+          <div className="listing__id">
+            <span className="label">{property.reference}</span>
+            <span className={visiting ? 'badge badge--pending' : 'badge badge--ok'}>
+              {visiting ? 'En visite' : 'En ligne'}
+            </span>
+            <span className="label">Publié par le propriétaire</span>
           </div>
+
+          <h1 className="listing__title">{property.title}</h1>
+          <p className="listing__address">
+            {property.addressLine} · {property.district.name}, {property.city}
+          </p>
 
           <div className="spec-grid reveal">
             {specs.map((spec) => (
               <div key={spec.key} className="spec-grid__cell">
-                <div className="spec-grid__key">{spec.key}</div>
+                <span className="label">{spec.key}</span>
                 <div className="spec-grid__value">{spec.value}</div>
               </div>
             ))}
@@ -115,78 +133,106 @@ export default async function PropertyPage({ params }: Params) {
             </p>
           ))}
 
+          <h2 className="listing__subtitle reveal">Critères du propriétaire</h2>
           <div className="criteria reveal">
-            <div className="criteria__head">CRITÈRES DU PROPRIÉTAIRE</div>
             {criteria.map((row) => (
               <div key={row.key} className="criteria__row">
                 <span className="criteria__key">{row.key}</span>
                 <span className="criteria__value">
                   <span>{row.value}</span>
-                  <span className="criteria__tag" style={{ color: 'var(--ink-3)' }}>
-                    {row.tag}
-                  </span>
+                  {row.tag ? (
+                    <span className="badge badge--mute badge--nodot">{row.tag}</span>
+                  ) : null}
                 </span>
               </div>
             ))}
           </div>
+          <p className="p-sm mt-12">
+            Le propriétaire fixe ces critères. Il reçoit une synthèse vérifiée, jamais vos
+            documents.
+          </p>
         </div>
 
         <aside className="listing__aside">
-          <div className="card anim-fade-up" style={{ animationDelay: '0.1s' }}>
+          <div className="panel panel--strong tick anim-rise anim-rise-1">
             <div className="booking__price">
               <div className="booking__amount">
                 <span className="booking__amount-value">
                   {fmt.euros(property.totalRentCents)}
                 </span>
-                <span className="booking__amount-unit">/ MOIS CC</span>
+                <span className="label">/ mois CC</span>
               </div>
-              <div className="booking__breakdown">
-                DONT {fmt.euros(property.chargesCents)} DE CHARGES · DÉPÔT{' '}
+              <span className="label mt-6">
+                Dont {fmt.euros(property.chargesCents)} de charges · dépôt{' '}
                 {fmt.euros(property.depositCents)}
-              </div>
+              </span>
             </div>
 
-            <div className="prospect">
-              <div className="prospect__head">
-                <span className="prospect__mark">→</span>
-                <span className="prospect__title">DOSSIER NUMÉRIQUE</span>
+            {/* Les honoraires sont annoncés ici, avant toute candidature. */}
+            {fees ? (
+              <div className="booking__fees">
+                <span className="label label--accent">Honoraires locataire</span>
+                <div className="flex ai-c gap-10 mt-8">
+                  <span className="booking__fees-amount">{fmt.euros(fees.totalCents)}</span>
+                  <span className="p-sm">
+                    TTC · {fmt.surfaceLower(property.surfaceM2)} ×{' '}
+                    {(fees.centsPerSqm / 100).toLocaleString('fr-FR')} €/m²
+                  </span>
+                </div>
+                <p className="p-sm mt-8">
+                  Une seule fois, à la signature. Dont{' '}
+                  {fmt.euros(fees.inventoryCents)} d’état des lieux.
+                </p>
+                {!fees.isLegallyApproved ? (
+                  <p className="p-sm mt-8">
+                    <span className="badge badge--pending badge--nodot">Barème provisoire</span>{' '}
+                    Montant du pilote, en attente de validation juridique.
+                  </p>
+                ) : null}
               </div>
-              <div className="prospect__text">
-                Déposez vos justificatifs une seule fois. Ils sont vérifiés, puis transmis avec
-                votre candidature — sans pièce à renvoyer à chaque bien.
-              </div>
-            </div>
+            ) : null}
 
-            <div className="booking__actions">
+            <div className="booking__body">
               <Link href="/dossier" className="btn btn-block">
                 Créer mon dossier pour candidater
               </Link>
               {responseDelay ? (
-                <div className="booking__response">RÉPONSE MOYENNE SOUS {responseDelay}</div>
-              ) : (
-                <div style={{ height: 18 }} />
-              )}
+                <p className="booking__response">Réponse moyenne sous {responseDelay}</p>
+              ) : null}
 
-              <div className="booking__section-label">PRENDRE RDV DE VISITE</div>
-              <div className="booking__slots">
+              <hr className="rule mt-20 mb-12" />
+
+              <span className="label label--ink">Prendre rendez-vous de visite</span>
+              <div className="mt-10">
                 <Link href="/dossier" className="slot">
-                  <span>VISITE ACCOMPAGNÉE</span>
-                  <span className="slot__type">SUR PLACE</span>
+                  <span>Visite accompagnée</span>
+                  <span className="slot__type">Sur place</span>
                 </Link>
                 <Link href="/dossier" className="slot">
-                  <span>VISITE EN VISIO</span>
-                  <span className="slot__type">EN DIRECT</span>
+                  <span>Visite en visio</span>
+                  <span className="slot__type">En direct</span>
                 </Link>
               </div>
-              <div className="booking__response" style={{ margin: '10px 0 0', textAlign: 'left' }}>
-                VÉRIFICATION D&apos;IDENTITÉ REQUISE AVANT TOUT RENDEZ-VOUS
-              </div>
+              <p className="p-sm mt-10">
+                Vérification d’identité requise avant le rendez-vous.
+              </p>
             </div>
           </div>
 
-          <div className="booking__note">
-            Louer en direct : des honoraires réduits par rapport à une agence, annoncés avant la
-            candidature.
+          <div className="panel" style={{ borderTop: 0 }}>
+            <div style={{ padding: '14px 17px' }}>
+              <span className="label">Diagnostic de performance</span>
+              <div className="flex ai-c gap-10 mt-8 wrap">
+                <span className="badge badge--ok badge--nodot">
+                  DPE {fmt.energyRating(property.energyRating)}
+                </span>
+                {property.gesRating ? (
+                  <span className="badge badge--mute badge--nodot">
+                    GES {property.gesRating}
+                  </span>
+                ) : null}
+              </div>
+            </div>
           </div>
         </aside>
       </div>

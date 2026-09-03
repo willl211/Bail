@@ -1,9 +1,10 @@
 // =============================================================================
-// Seuil — schéma de base de données (MVP v0, pilote Metz)
+// Bail — schéma de base de données (MVP v0, pilote Metz)
 //
-// Source : docs/data-model.md. Les 7 entités confirmées y sont toutes présentes :
-//   Utilisateur, Bien, Dossier locataire, Candidature, Visite, Bail,
-//   Paiement / honoraire.
+// Référence visuelle et fonctionnelle : maquette_interface/bail/bail.html
+// (CLAUDE.md règle 4). Source du modèle : docs/data-model.md. Les 7 entités
+// confirmées y sont toutes présentes : Utilisateur, Bien, Dossier locataire,
+// Candidature, Visite, Bail, Paiement / honoraire.
 //
 // Extensions ajoutées par nécessité technique (docs/data-model.md autorise
 // l'extension à condition de la signaler) :
@@ -33,11 +34,14 @@ datasource db {
 // UTILISATEUR
 // =============================================================================
 
+/// Un seul rôle interne pour le moment : AGENT couvre à la fois l'agent de
+/// terrain (visites, mandats) et l'administrateur du back-office. Pas de
+/// distinction ADMIN tant que le produit n'en a pas besoin (décision du
+/// 2 septembre 2026) — à réintroduire seulement si un vrai périmètre les sépare.
 enum UserRole {
   OWNER // propriétaire
   TENANT // locataire
-  AGENT // agent interne (back-office agence)
-  ADMIN
+  AGENT // agent interne, y compris back-office
 }
 
 model User {
@@ -73,9 +77,46 @@ model User {
 
   kycChecks KycCheck[]
   payments  Payment[]  @relation("PaymentPayer")
+  sessions  Session[]
 
   @@index([role])
   @@map("users")
+}
+
+/// Session serveur, transportée par un cookie `httpOnly` (docs/tech-stack.md).
+///
+/// Le choix de la session plutôt que du JWT repose entièrement sur ce modèle :
+/// une session se **révoque** en base, immédiatement, ce qu'un JWT ne permet
+/// pas. C'est ce qui compte quand les comptes donnent accès à des pièces
+/// d'identité et à des bulletins de salaire.
+///
+/// Le cookie ne porte jamais l'identifiant en clair : il contient un secret
+/// aléatoire dont seule l'empreinte SHA-256 est stockée ici. Une fuite de la
+/// table `sessions` ne permet donc pas de rejouer une session.
+model Session {
+  id String @id @default(uuid())
+
+  /// Empreinte SHA-256 du secret présent dans le cookie. Jamais le secret lui-même.
+  tokenHash String @unique
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  expiresAt DateTime
+  /// Renseigné à la déconnexion ou à une révocation administrative. Une session
+  /// révoquée est conservée le temps de l'audit, pas supprimée aussitôt.
+  revokedAt DateTime?
+
+  /// Contexte de création, utile pour lister « vos connexions » et pour l'audit.
+  userAgent String?
+  ipAddress String?
+
+  createdAt      DateTime @default(now())
+  lastSeenAt     DateTime @default(now())
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+  @@map("sessions")
 }
 
 // =============================================================================
@@ -140,7 +181,11 @@ model Property {
   floor            String? // « 3/4 », « RDC »
   furnished        Boolean       @default(false)
   leaseType        LeaseType
-  energyRating     EnergyRating
+  /// Nullable à dessein : un brouillon peut exister avant que le DPE soit
+  /// fourni, et « DPE manquant » est un blocage de publication affiché au
+  /// propriétaire. Le DPE est obligatoire pour toute annonce diffusée — c'est
+  /// `OwnerService.blockersFor` qui l'impose, pas la colonne.
+  energyRating     EnergyRating?
   gesRating        EnergyRating?
   constructionYear Int?
 
@@ -166,6 +211,7 @@ model Property {
   updatedAt DateTime @updatedAt
 
   photos       PropertyPhoto[]
+  documents    PropertyDocument[]
   applications Application[]
   visits       Visit[]
   leases       Lease[]
@@ -192,6 +238,52 @@ model District {
   properties Property[]
 
   @@map("districts")
+}
+
+/// Diagnostics techniques obligatoires annexés au bail (docs/legal-context.md).
+enum PropertyDocumentType {
+  DPE // diagnostic de performance énergétique
+  ASBESTOS // amiante
+  LEAD // constat de risque d'exposition au plomb (CREP)
+  ERP // état des risques et pollutions
+  ELECTRICAL // état de l'installation intérieure d'électricité
+  GAS // état de l'installation intérieure de gaz
+  OTHER
+}
+
+/// Pièce technique d'un bien, déposée par le propriétaire.
+///
+/// Stockée dans le régime **privé** : contrairement aux photos d'annonce, un
+/// diagnostic n'a pas vocation à être servi publiquement. Il est annexé au bail
+/// et consulté par le propriétaire, l'agent qui contrôle l'annonce et le
+/// locataire signataire — jamais par un visiteur anonyme. Seule la classe (DPE,
+/// GES), portée par `Property`, est publique.
+model PropertyDocument {
+  id         String   @id @default(uuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  type   PropertyDocumentType
+  status DocumentStatus       @default(PENDING)
+
+  fileName   String?
+  mimeType   String?
+  fileSize   Int?
+  storageKey String
+
+  /// Date de réalisation du diagnostic, et fin de validité quand elle existe :
+  /// un DPE expiré ne vaut pas mieux qu'un DPE absent.
+  issuedAt  DateTime?
+  expiresAt DateTime?
+
+  verificationNote String?
+  rejectionReason  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([propertyId, type])
+  @@map("property_documents")
 }
 
 model PropertyPhoto {

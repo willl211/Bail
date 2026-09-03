@@ -4,10 +4,82 @@ Ces prestataires peuvent être branchés en mode test/sandbox pendant tout le d�
 
 | Besoin | Prestataire | Statut |
 |---|---|---|
-| KYC / vérification d'identité (avant visite et pour le dossier locataire) | Non choisi | À mocker pour l'instant — prévoir une interface qui simule une réponse "vérifié" / "rejeté" |
+| KYC / vérification des pièces (dossier locataire, avant visite) | Non choisi | **Interface en place, driver `mock` seul accepté** (voir ci-dessous) |
 | Signature électronique du bail | DocuSign | Confirmé — utiliser leur environnement sandbox pendant le dev |
-| Paiement (abonnements propriétaires, honoraires) | Stripe | Confirmé — mode test |
+| Paiement (abonnements propriétaires, honoraires) | Stripe | Confirmé — **code complet, aucun compte branché** (voir ci-dessous) |
 | Visio pour les visites à distance | Non choisi formellement | Recommandation : Daily.co (le plus simple à intégrer et le moins cher pour démarrer, comparé à Twilio) |
+
+## Stripe — précision du 2 septembre 2026
+
+Le paiement se construit **comme si Stripe était branché** : service dédié,
+types, montants, création des enregistrements `Payment` et `Subscription`,
+gestion des états et des webhooks. Ce qui n'est **pas** fait pour l'instant :
+créer un compte Stripe et renseigner des clés.
+
+Concrètement, `PAYMENT_DRIVER=mock` reste la valeur par défaut et le driver
+simule les réponses de Stripe. Passer en réel doit se réduire à changer des
+variables d'environnement (`PAYMENT_DRIVER=stripe`, `STRIPE_SECRET_KEY`,
+`STRIPE_WEBHOOK_SECRET`, `STRIPE_PRODUCT_ID`) — jamais à réécrire du code
+métier. Si une décision d'implémentation oblige à toucher au code pour brancher
+Stripe, c'est que l'abstraction est mauvaise.
+
+### État au 3 septembre 2026
+
+Écrit et vérifié en mode simulé :
+
+- souscription, résiliation en fin de période, reprise avant échéance ;
+- assiette de facturation = nombre de biens **diffusés** (un bien au contrôle ou
+  en brouillon n'est pas facturé) ; zéro bien diffusé est un état valide,
+  facturé zéro ;
+- webhook `POST /api/v1/payments/webhook`, **signature obligatoire** côté Stripe
+  (`rawBody: true` au démarrage, sans quoi l'empreinte ne correspondrait pas) :
+  `invoice.created`, `invoice.paid`, `invoice.payment_failed`,
+  `customer.subscription.updated` / `.deleted`. Les rejeux sont idempotents ; un
+  type non traité renvoie 200 sans effet plutôt qu'une erreur qui le ferait
+  rejouer indéfiniment.
+
+Deux points restent ouverts :
+
+- `STRIPE_PRODUCT_ID` désigne un produit à créer **une fois** dans le tableau de
+  bord. Le prix, lui, n'est pas dans le catalogue : il est construit à chaque
+  souscription à partir du barème en base, pour rester modifiable sans
+  redéploiement.
+- `SubscriptionService.syncQuantity()` doit être appelé quand un bien entre ou
+  sort de la diffusion. Le back-office qui déclenche ça n'existe pas encore.
+
+Rappel : aucun montant ne vient du code. Barème d'honoraires et abonnement
+propriétaire sont lus dans `fee_schedules` et `platform_settings`, et tant que
+`isLegallyApproved` est faux, rien ne doit être facturé pour de vrai
+(`legal-context.md`).
+
+## Vérification des pièces — précision du 3 septembre 2026
+
+Le contrat du prestataire est écrit (`VerificationDriver`) et tout le dossier
+locataire passe par lui. Aucun prestataire n'étant retenu, `KYC_DRIVER=mock` est
+la **seule valeur acceptée** : un nom inconnu fait échouer le démarrage plutôt
+que de retomber sur le simulateur — en production, ça reviendrait à valider des
+pièces d'identité sans les contrôler.
+
+Le simulateur ne valide pas tout. Il reproduit la répartition des verdicts d'un
+vrai prestataire :
+
+| Pièce | Verdict simulé |
+|---|---|
+| Identité, bulletins, contrat, avis d'imposition, certificat de scolarité, pièces du garant | vérifiée automatiquement, avec une note de contrôle |
+| Justificatif de domicile, pièce non reconnue | **revue humaine** — document hétérogène dont l'adresse se lit à l'œil |
+
+Un mock qui validerait tout masquerait l'existence même du contrôle manuel, et
+l'écran du dossier afficherait des pastilles vertes sur des pièces que personne
+n'a regardées. L'interface annonce d'ailleurs « prestataire simulé » tant que
+c'est le cas.
+
+Conséquence à assumer : une pièce en revue humaine y reste, faute de
+back-office. Elle n'empêche pas de transmettre son dossier ni de candidater —
+c'est justement pour la faire contrôler qu'on transmet.
+
+Le contrat prévoit aussi un régime **différé** (verdict rendu plus tard par
+webhook) dont le mock ne se sert pas : une intégration réelle en dépendra, et
+l'ajouter après coup obligerait à retoucher le code métier.
 
 ## Protocole de visite (v0)
 

@@ -43,3 +43,7 @@ Thumbs.db
 # Divers
 .turbo/
 .cache/
+
+# Configuration locale de l'outillage Claude Code — chemins et ports propres
+# à ce poste (voir .claude/settings.local.json), à ne jamais committer.
+.claude/settings.local.json

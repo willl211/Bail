@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { PropertyRow } from '@/components/property-row';
 import { SearchFilters } from '@/components/search-filters';
+import { SortSelect } from '@/components/sort-select';
 import { getDistricts, searchProperties } from '@/lib/api';
 
 export const dynamic = 'force-dynamic';
@@ -10,14 +11,6 @@ export const metadata: Metadata = {
   title: 'Biens à louer à Metz',
   description:
     'Studios, deux et trois pièces meublés ou nus à Metz, centre-ville et quartiers proches. Location en direct, sans frais d’agence.',
-};
-
-const SORT_LABELS: Record<string, string> = {
-  compatibility: 'PLUS RÉCENTES',
-  recent: 'PLUS RÉCENTES',
-  rent_asc: 'LOYER CROISSANT',
-  rent_desc: 'LOYER DÉCROISSANT',
-  surface_desc: 'SURFACE',
 };
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -41,7 +34,7 @@ function toApiParams(searchParams: SearchParams): URLSearchParams {
     const value = searchParams[key];
     if (typeof value === 'string' && value !== '') params.set(key, value);
   }
-  if (!params.has('maxRent')) params.set('maxRent', '1200');
+  // Aucun `maxRent` par défaut : sans critère, on montre tout le portefeuille.
   params.set('pageSize', '60');
   return params;
 }
@@ -51,11 +44,11 @@ export default async function SearchPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  const params = toApiParams(await searchParams);
+  const resolved = await searchParams;
+  const params = toApiParams(resolved);
   const [results, districts] = await Promise.all([searchProperties(params), getDistricts()]);
 
-  const sortKey = params.get('sort') ?? 'compatibility';
-  const sortLabel = SORT_LABELS[sortKey] ?? SORT_LABELS.compatibility;
+  const maxRent = params.get('maxRent');
 
   return (
     <main className="results anim-fade-in">
@@ -63,17 +56,28 @@ export default async function SearchPage({
         <SearchFilters districts={districts} />
       </Suspense>
 
-      <section className="results__list">
+      <section>
         <div className="results__head">
-          <h1 className="results__title">Biens à louer · Metz</h1>
-          <span className="results__count">
-            {results.total} {results.total > 1 ? 'RÉSULTATS' : 'RÉSULTAT'} · TRI : {sortLabel}
-          </span>
+          <div>
+            <h1 className="section__title">Biens à louer · Metz</h1>
+            <span className="results__count">
+              {results.total} {results.total > 1 ? 'résultats' : 'résultat'}
+              {maxRent ? ` · loyer max ${Number(maxRent).toLocaleString('fr-FR')} €` : null}
+            </span>
+          </div>
+
+          <div className="results__sort">
+            <span className="label">Tri</span>
+            <Suspense fallback={null}>
+              <SortSelect />
+            </Suspense>
+          </div>
         </div>
 
         {results.items.length === 0 ? (
           <div className="results__empty">
-            Aucun bien ne correspond à ces critères. Élargissez le loyer ou les quartiers.
+            Aucun bien ne correspond à ces critères. Élargissez le loyer ou ajoutez un
+            quartier.
           </div>
         ) : (
           results.items.map((property) => (

@@ -14,6 +14,32 @@ Décisions validées par le porteur de projet — ne pas rouvrir ces choix sans 
 | Gestion de code | GitHub |
 | Outil de suivi de projet | Pas de préférence exprimée — recommandation : Linear |
 | Environnements | Dev / Staging / Production dès le départ |
+| Authentification | **Session serveur + cookie `httpOnly`** (tranché le 2 septembre 2026) |
+
+## Authentification
+
+Décision du 2 septembre 2026, prise au moment d'attaquer l'écran 2 (premier
+écran exigeant un compte) : **session côté serveur, transportée par un cookie
+`httpOnly`**. JWT et fournisseur externe ont été écartés.
+
+Pourquoi :
+
+- Le front est rendu côté serveur. Un cookie part tout seul avec les requêtes
+  SSR de Next, sans jeton à stocker ni à rafraîchir côté client.
+- Une session se **révoque réellement**, contrairement à un JWT qui reste
+  valide jusqu'à expiration sans registre de révocation. C'est déterminant
+  pour des données comme les pièces d'identité et les bulletins de salaire.
+- Un fournisseur externe sortirait les identités du périmètre OVH retenu pour
+  la conformité RGPD (voir la ligne « Hébergement » ci-dessus).
+
+Conséquences à respecter à l'implémentation :
+
+- Cookie `httpOnly`, `secure` hors développement, `sameSite=lax`.
+- Les variables `JWT_SECRET` / `JWT_EXPIRES_IN` déjà présentes dans `env/`
+  et `backend/src/config/configuration.ts` sont à renommer ou à remplacer :
+  elles décrivent un mécanisme qui n'a pas été retenu.
+- Le contrôle d'accès vit **côté API** (guard de rôle NestJS sur chaque route).
+  L'en-tête conditionnel du front n'est qu'un reflet, jamais une protection.
 
 ## Structure de repo recommandée
 

@@ -26,7 +26,12 @@ export interface PropertyListItem {
   floor: string | null;
   furnished: boolean;
   leaseType: string;
-  energyRating: string;
+  /**
+   * `null` seulement sur un brouillon : le DPE est obligatoire pour publier,
+   * donc une annonce visible en porte toujours un. Le type reste honnête plutôt
+   * que d'affirmer une garantie que la colonne ne donne pas.
+   */
+  energyRating: string | null;
   rentCents: number;
   chargesCents: number;
   /** Loyer charges comprises — la valeur affichée en gros sur la fiche. */
@@ -40,12 +45,31 @@ export interface PropertyListItem {
   publishedAt: string | null;
 }
 
+/**
+ * Honoraires à la charge du locataire pour ce bien précis.
+ *
+ * Calculés à partir du barème actif et de la surface habitable, jamais codés en
+ * dur (docs/legal-context.md). `isLegallyApproved` est remonté tel quel : tant
+ * qu'il est faux, l'interface doit présenter le montant comme provisoire plutôt
+ * que comme un engagement.
+ */
+export interface TenantFees {
+  totalCents: number;
+  visitAndFileCents: number;
+  inventoryCents: number;
+  centsPerSqm: number;
+  feeScheduleCode: string | null;
+  isLegallyApproved: boolean;
+}
+
 export interface PropertyDetail extends PropertyListItem {
   description: string;
   bedrooms: number | null;
   gesRating: string | null;
   constructionYear: number | null;
-  photos: { label: string; storageKey: string }[];
+  photos: { label: string; storageKey: string; url: string | null }[];
+  /** `null` si aucun barème actif n'est publié — l'écran n'annonce alors rien. */
+  tenantFees: TenantFees | null;
   /**
    * Critères de sélection du propriétaire, tels qu'affichés dans le bloc
    * « CRITÈRES DU PROPRIÉTAIRE » de la fiche annonce.
@@ -88,7 +112,45 @@ export function toListItem(property: PropertyWithRelations): PropertyListItem {
   };
 }
 
-export function toDetail(property: PropertyWithRelations): PropertyDetail {
+/** Barème actif, tel que lu en base. `null` si aucun n'est publié. */
+export interface ActiveFeeSchedule {
+  code: string;
+  tenantVisitFeeCentsPerSqm: number;
+  tenantInventoryFeeCentsPerSqm: number;
+  isLegallyApproved: boolean;
+}
+
+function computeTenantFees(
+  property: PropertyWithRelations,
+  schedule: ActiveFeeSchedule | null,
+): TenantFees | null {
+  if (!schedule) return null;
+
+  const visitAndFileCents = Math.round(property.surfaceM2 * schedule.tenantVisitFeeCentsPerSqm);
+  const inventoryCents = Math.round(
+    property.surfaceM2 * schedule.tenantInventoryFeeCentsPerSqm,
+  );
+
+  return {
+    totalCents: visitAndFileCents + inventoryCents,
+    visitAndFileCents,
+    inventoryCents,
+    centsPerSqm:
+      schedule.tenantVisitFeeCentsPerSqm + schedule.tenantInventoryFeeCentsPerSqm,
+    feeScheduleCode: schedule.code,
+    isLegallyApproved: schedule.isLegallyApproved,
+  };
+}
+
+/** Résout l'URL publique d'une clé de stockage. Injecté plutôt que reconstruit
+ *  ici : la règle appartient au service de stockage, pas au mapper. */
+export type PublicUrlResolver = (storageKey: string) => string | null;
+
+export function toDetail(
+  property: PropertyWithRelations,
+  feeSchedule: ActiveFeeSchedule | null = null,
+  publicUrl: PublicUrlResolver = () => null,
+): PropertyDetail {
   return {
     ...toListItem(property),
     description: property.description,
@@ -98,7 +160,9 @@ export function toDetail(property: PropertyWithRelations): PropertyDetail {
     photos: property.photos.map((photo) => ({
       label: photo.caption ?? 'photo',
       storageKey: photo.storageKey,
+      url: publicUrl(photo.storageKey),
     })),
+    tenantFees: computeTenantFees(property, feeSchedule),
     ownerCriteria: {
       minMonthlyIncomeCents: property.minMonthlyIncomeCents,
       guarantorRequirement: property.guarantorRequirement,

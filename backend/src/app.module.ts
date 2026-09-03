@@ -6,15 +6,29 @@ import { HealthModule } from './modules/health/health.module';
 import { PropertiesModule } from './modules/properties/properties.module';
 import { DistrictsModule } from './modules/districts/districts.module';
 import { MarketModule } from './modules/market/market.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { OwnerModule } from './modules/owner/owner.module';
+import { StorageModule } from './modules/storage/storage.module';
+import { PaymentsModule } from './modules/payments/payments.module';
+import { VerificationModule } from './modules/verification/verification.module';
+import { TenantModule } from './modules/tenant/tenant.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, load: [configuration] }),
     PrismaModule,
+    // AuthModule enregistre le guard global : toute route est privée par défaut
+    // et doit être marquée `@Public()` pour ne pas l'être.
+    AuthModule,
+    StorageModule,
     HealthModule,
     PropertiesModule,
     DistrictsModule,
     MarketModule,
+    OwnerModule,
+    PaymentsModule,
+    VerificationModule,
+    TenantModule,
   ],
 })
 export class AppModule {}

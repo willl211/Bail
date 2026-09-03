@@ -1,8 +1,11 @@
 import { Controller, Get } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
+import { Public } from '../auth/session.guard';
 
+/** Sonde de supervision : doit répondre sans session. */
 @Controller('health')
+@Public()
 export class HealthController {
   constructor(
     private readonly prisma: PrismaService,

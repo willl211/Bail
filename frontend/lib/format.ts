@@ -31,6 +31,17 @@ export function furnished(isFurnished: boolean): string {
   return isFurnished ? 'MEUBLÉ' : 'NU';
 }
 
+/**
+ * Classe DPE, ou tiret cadratin si elle manque.
+ *
+ * Une annonce publiée en porte toujours une — le DPE est obligatoire pour
+ * diffuser — mais le champ est nullable pour permettre les brouillons. Afficher
+ * « DPE » suivi d'un vide serait pire qu'un tiret assumé.
+ */
+export function energyRating(value: string | null): string {
+  return value ?? '—';
+}
+
 export function furnishedLabel(isFurnished: boolean): string {
   return isFurnished ? 'Meublé' : 'Nu';
 }
@@ -83,4 +94,60 @@ export function contractTypes(values: string[]): string {
   if (labels.length === 1) return labels[0];
   const last = labels[labels.length - 1];
   return `${labels.slice(0, -1).join(', ')} ou ${last}`;
+}
+
+/**
+ * 3900 -> « 39,00 € ». Format des lignes de facturation, où les centimes
+ * comptent — contrairement aux loyers, arrondis à l'euro par `euros()`.
+ */
+export function eurosPrecise(cents: number): string {
+  return `${(cents / 100).toLocaleString('fr-FR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })} €`;
+}
+
+/** Date longue : « 1er octobre 2026 ». */
+export function longDate(iso: string): string {
+  const date = new Date(iso);
+  const day = date.getDate();
+  return `${day === 1 ? '1er' : day} ${date.toLocaleDateString('fr-FR', {
+    month: 'long',
+    year: 'numeric',
+  })}`;
+}
+
+/** Horodatage court du journal : « 02.09 · 09:14 ». */
+export function logStamp(iso: string): string {
+  const date = new Date(iso);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${pad(date.getDate())}.${pad(date.getMonth() + 1)} · ${pad(date.getHours())}:${pad(
+    date.getMinutes(),
+  )}`;
+}
+
+/**
+ * Ancienneté d'une candidature : « 3 h », « hier », « 4 jours », « 12.08 ».
+ *
+ * Forme télégraphique, comme le reste des colonnes chiffrées de la maquette
+ * (« 47 M² », « 31 h ») : l'en-tête de colonne porte déjà le sens, et une
+ * tournure complète (« il y a 4 jours ») élargirait la table au point de la
+ * faire défiler sur un écran courant.
+ */
+export function relativeAge(iso: string, now = new Date()): string {
+  const hours = Math.floor((now.getTime() - new Date(iso).getTime()) / 3_600_000);
+  if (hours < 1) return 'à l’instant';
+  if (hours < 24) return `${hours} h`;
+  if (hours < 48) return 'hier';
+  const days = Math.floor(hours / 24);
+  if (days < 8) return `${days} jours`;
+  const date = new Date(iso);
+  return `${String(date.getDate()).padStart(2, '0')}.${String(
+    date.getMonth() + 1,
+  ).padStart(2, '0')}`;
+}
+
+/** Taux d'effort : 0.324 -> « 32 % ». */
+export function percent(ratio: number): string {
+  return `${Math.round(ratio * 100)} %`;
 }

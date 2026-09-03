@@ -1,9 +1,9 @@
 /**
  * Jeu de données de démonstration.
  *
- * Les 8 biens repris ici sont exactement ceux de la maquette Claude Design
- * (`maquette_interface/project/Seuil Metz.dc.html`), pour que l'écran construit
- * soit comparable au pixel près avec la maquette.
+ * Les 8 biens repris ici sont exactement ceux de la maquette de référence
+ * (`maquette_interface/bail/bail.html`, tableau `LISTINGS`), pour que l'écran
+ * construit soit comparable au pixel près avec la maquette (CLAUDE.md règle 4).
  *
  * Ce que ce seed NE fait PAS, volontairement :
  *  - il ne fige aucun montant d'honoraires ni d'abonnement dans le code : tout
@@ -13,14 +13,21 @@
  *    de champs, inactif, à remplacer par le texte fourni par l'avocat
  *    (CLAUDE.md règle 2).
  */
+import { hash } from 'bcrypt';
 import { createHash } from 'node:crypto';
 import {
+  ApplicationStatus,
+  DocumentStatus,
+  DocumentType,
+  EmploymentContractType,
   EnergyRating,
+  GuarantorKind,
   GuarantorRequirement,
   LeaseType,
   PrismaClient,
   PropertyStatus,
   RentalZone,
+  TenantFileStatus,
   UserRole,
 } from '@prisma/client';
 
@@ -37,6 +44,14 @@ const DISTRICTS = [
 
 interface SeedProperty {
   reference: string;
+  /**
+   * Ordre de publication tel qu'affiché dans le tri « plus récents » de la
+   * maquette (1 = le plus récent). Sert à calculer `publishedAt` : la
+   * maquette n'a pas de notion de bien « mis en avant » distincte de la
+   * récence, donc `findFeatured` (les plus récents) en découle directement,
+   * sans champ « featured » séparé dans le schéma.
+   */
+  pub: number;
   title: string;
   districtSlug: string;
   addressLine: string;
@@ -58,26 +73,28 @@ interface SeedProperty {
 const PROPERTIES: SeedProperty[] = [
   {
     reference: 'MZ-0142',
-    title: '2 pièces, Centre-ville',
+    pub: 3, // ordre de publication de la maquette (1 = le plus récent)
+    title: 'Studio meublé, Centre-ville',
     districtSlug: 'centre-ville',
-    addressLine: '8 rue Dupont des Loges',
-    rent: 690,
-    charges: 60,
-    surfaceM2: 47,
-    rooms: 2,
-    bedrooms: 1,
-    floor: '3/4',
-    furnished: false,
+    addressLine: '2 place Saint-Louis',
+    rent: 520,
+    charges: 45,
+    surfaceM2: 26,
+    rooms: 1,
+    bedrooms: null,
+    floor: '4/5',
+    furnished: true,
     energyRating: EnergyRating.C,
-    gesRating: EnergyRating.C,
-    constructionYear: 1928,
-    availableFrom: '2026-10-01',
+    gesRating: EnergyRating.B,
+    constructionYear: 1900,
+    availableFrom: null,
     description:
-      "Deux pièces clair au troisième étage d'un immeuble bourgeois, parquet point de Hongrie et moulures conservées. Cuisine séparée équipée, salle d'eau refaite. Chauffage individuel au gaz. À deux pas de la place Saint-Jacques et des commerces du centre.",
-    photos: ['photo · séjour', 'photo · cuisine', 'photo · chambre', 'photo · immeuble'],
+      "Studio entièrement meublé au quatrième étage avec ascenseur, deux fenêtres sur la place Saint-Louis. Coin cuisine équipé, salle d'eau refaite en 2025, rangements intégrés sous les combles.\n\nSous les arcades, à trois minutes à pied de la place Saint-Jacques et de l'arrêt Mettis République. Les facultés du centre sont accessibles à pied.",
+    photos: ['pièce principale', 'coin cuisine', "salle d'eau", 'façade', 'immeuble'],
   },
   {
     reference: 'MZ-0155',
+    pub: 6, // ordre de publication de la maquette (1 = le plus récent)
     title: '3 pièces, Sablon',
     districtSlug: 'sablon',
     addressLine: '14 rue de Verdun',
@@ -88,133 +105,298 @@ const PROPERTIES: SeedProperty[] = [
     bedrooms: 2,
     floor: '1/3',
     furnished: false,
-    energyRating: EnergyRating.D,
-    gesRating: EnergyRating.D,
+    energyRating: EnergyRating.C,
+    gesRating: EnergyRating.B,
     constructionYear: 1930,
     availableFrom: '2026-09-15',
     description:
-      "Appartement traversant dans un immeuble de 1930, parquet d'origine et hauteur sous plafond de 2,90 m. Cuisine équipée séparée, salle de bain refaite en 2024, chauffage collectif au gaz. Cave privative en sous-sol.\n\nÀ cinq minutes à pied de la gare de Metz et des lignes Mettis A et B. Commerces de proximité au pied de l'immeuble.",
-    photos: ['photo · séjour', 'photo · cuisine', 'photo · chambre', 'photo · immeuble'],
+      "Appartement traversant dans un immeuble de 1930, parquet d'origine et hauteur sous plafond de 2,90 m. Cuisine séparée équipée, salle de bain refaite en 2024, chauffage collectif au gaz. Cave privative en sous-sol.\n\nÀ cinq minutes à pied de la gare de Metz et des lignes Mettis A et B. Commerces de proximité au pied de l'immeuble, marché du Sablon le samedi matin.",
+    photos: ['séjour', 'cuisine', 'chambre', 'façade', 'salle de bain'],
   },
   {
     reference: 'MZ-0161',
-    title: 'Studio meublé, Nouvelle Ville',
+    pub: 9, // ordre de publication de la maquette (1 = le plus récent)
+    title: '2 pièces, Nouvelle Ville',
     districtSlug: 'nouvelle-ville',
     addressLine: '22 avenue Foch',
-    rent: 540,
-    charges: 45,
-    surfaceM2: 26,
+    rent: 690,
+    charges: 60,
+    surfaceM2: 47,
+    rooms: 2,
+    bedrooms: 1,
+    floor: '3/4',
+    furnished: false,
+    energyRating: EnergyRating.D,
+    gesRating: EnergyRating.C,
+    constructionYear: 1905,
+    availableFrom: '2026-10-01',
+    description:
+      "Deux pièces dans un immeuble haussmannien de l'avenue Foch, moulures et cheminée décorative conservées. Cuisine séparée, salle de bain avec baignoire, double exposition est-ouest.\n\nFace au plan d'eau et aux jardins de l'Esplanade. Gare à sept minutes à pied, arrêt Mettis à cent mètres.",
+    photos: ['séjour', 'cheminée', 'chambre', 'immeuble', 'cuisine'],
+  },
+  {
+    reference: 'MZ-0168',
+    pub: 12, // ordre de publication de la maquette (1 = le plus récent)
+    title: 'Studio, Outre-Seille',
+    districtSlug: 'outre-seille',
+    addressLine: '11 rue Mazelle',
+    rent: 465,
+    charges: 38,
+    surfaceM2: 21,
+    rooms: 1,
+    bedrooms: null,
+    floor: '2/3',
+    furnished: false,
+    energyRating: EnergyRating.E,
+    gesRating: EnergyRating.D,
+    constructionYear: 1900,
+    availableFrom: null,
+    description:
+      "Studio non meublé au deuxième étage sans ascenseur, dans une maison de ville rénovée en 2019. Coin cuisine, salle d'eau indépendante, poutres apparentes.\n\nQuartier Outre-Seille, entre la place Saint-Louis et le marché couvert. Le loyer le plus bas du portefeuille ; DPE E, prévoir un chauffage d'appoint l'hiver.",
+    photos: ['pièce', 'coin cuisine', 'poutres', 'rue', "salle d'eau"],
+  },
+  {
+    reference: 'MZ-0173',
+    pub: 4, // ordre de publication de la maquette (1 = le plus récent)
+    title: '2 pièces meublé, Centre-ville',
+    districtSlug: 'centre-ville',
+    addressLine: '8 rue Dupont des Loges',
+    rent: 760,
+    charges: 70,
+    surfaceM2: 44,
+    rooms: 2,
+    bedrooms: 1,
+    floor: '2/4',
+    furnished: true,
+    energyRating: EnergyRating.C,
+    gesRating: EnergyRating.B,
+    constructionYear: 1910,
+    availableFrom: '2026-10-01',
+    description:
+      "Deux pièces meublé avec soin, chambre séparée et séjour sur rue calme. Cuisine équipée avec lave-vaisselle, machine à laver, literie et vaisselle fournies.\n\nRue Dupont des Loges, au cœur du secteur piéton. Adapté à une mutation ou une première installation : le logement est habitable dès la remise des clés.",
+    photos: ['séjour', 'chambre', 'cuisine', 'entrée', "salle d'eau"],
+  },
+  {
+    reference: 'MZ-0180',
+    pub: 8, // ordre de publication de la maquette (1 = le plus récent)
+    title: '3 pièces, Queuleu',
+    districtSlug: 'queuleu',
+    addressLine: '3 rue des Alliés',
+    rent: 845,
+    charges: 75,
+    surfaceM2: 71,
+    rooms: 3,
+    bedrooms: 2,
+    floor: 'RDC',
+    furnished: false,
+    energyRating: EnergyRating.B,
+    gesRating: EnergyRating.A,
+    constructionYear: 2016,
+    availableFrom: '2026-09-20',
+    description:
+      "Trois pièces en rez-de-jardin dans une résidence de 2016, terrasse de 14 m² exposée sud et place de parking privative. Chauffage par pompe à chaleur, isolation récente.\n\nQuartier Queuleu, résidentiel et calme, à dix minutes en bus du centre. Écoles et commerces à moins de cinq cents mètres.",
+    photos: ['séjour', 'terrasse', 'cuisine', 'résidence', 'chambre'],
+  },
+  {
+    reference: 'MZ-0186',
+    pub: 10, // ordre de publication de la maquette (1 = le plus récent)
+    title: 'T1 bis meublé, Nouvelle Ville',
+    districtSlug: 'nouvelle-ville',
+    addressLine: '5 rue Charlemagne',
+    rent: 590,
+    charges: 50,
+    surfaceM2: 32,
     rooms: 1,
     bedrooms: null,
     floor: '5/5',
     furnished: true,
     energyRating: EnergyRating.C,
-    gesRating: EnergyRating.C,
-    constructionYear: 1908,
-    availableFrom: null,
-    description:
-      "Studio meublé sous combles, entièrement rénové en 2025. Coin cuisine équipé, salle d'eau avec douche à l'italienne, rangements sur mesure. Immeuble avec ascenseur, local à vélos. Idéal étudiant ou jeune actif : arrêt Mettis à 200 m et campus Saulcy à dix minutes.",
-    photos: ['photo · pièce', 'photo · cuisine', 'photo · salle d\'eau', 'photo · immeuble'],
-  },
-  {
-    reference: 'MZ-0168',
-    title: '4 pièces, Queuleu',
-    districtSlug: 'queuleu',
-    addressLine: '3 rue des Alliés',
-    rent: 1150,
-    charges: 110,
-    surfaceM2: 92,
-    rooms: 4,
-    bedrooms: 3,
-    floor: 'RDC',
-    furnished: false,
-    energyRating: EnergyRating.B,
     gesRating: EnergyRating.B,
-    constructionYear: 2016,
+    constructionYear: 1970,
     availableFrom: '2026-11-01',
     description:
-      "Quatre pièces en rez-de-jardin dans une petite copropriété récente. Séjour de 32 m² prolongé par une terrasse plein sud et un jardin privatif clos de 60 m². Cuisine ouverte équipée, trois chambres, deux salles d'eau. Place de parking en sous-sol et local à vélos.",
-    photos: ['photo · jardin', 'photo · séjour', 'photo · cuisine', 'photo · terrasse'],
-  },
-  {
-    reference: 'MZ-0173',
-    title: '2 pièces meublé, Outre-Seille',
-    districtSlug: 'outre-seille',
-    addressLine: '11 rue Mazelle',
-    rent: 720,
-    charges: 70,
-    surfaceM2: 44,
-    rooms: 2,
-    bedrooms: 1,
-    floor: '2/3',
-    furnished: true,
-    energyRating: EnergyRating.D,
-    gesRating: EnergyRating.D,
-    constructionYear: 1890,
-    availableFrom: '2026-10-01',
-    description:
-      "Deux pièces meublé dans le quartier ancien d'Outre-Seille, poutres apparentes et pierre de Jaumont en façade. Séjour avec coin cuisine entièrement équipé, chambre sur cour au calme. Mobilier récent, literie neuve. Marché couvert et quais de la Seille à proximité immédiate.",
-    photos: ['photo · cuisine', 'photo · séjour', 'photo · chambre', 'photo · rue'],
-  },
-  {
-    reference: 'MZ-0180',
-    title: '3 pièces, Devant-les-Ponts',
-    districtSlug: 'devant-les-ponts',
-    addressLine: '27 rue de Paris',
-    rent: 820,
-    charges: 75,
-    surfaceM2: 71,
-    rooms: 3,
-    bedrooms: 2,
-    floor: '2/4',
-    furnished: false,
-    energyRating: EnergyRating.C,
-    gesRating: EnergyRating.C,
-    constructionYear: 1972,
-    availableFrom: '2026-09-20',
-    description:
-      'Trois pièces traversant avec balcon, dans une résidence entretenue avec espaces verts. Séjour double exposition, deux chambres avec placards, cuisine indépendante. Double vitrage posé en 2023, chauffage collectif. Cave et place de stationnement extérieure incluses.',
-    photos: ['photo · séjour', 'photo · balcon', 'photo · chambre', 'photo · résidence'],
-  },
-  {
-    reference: 'MZ-0186',
-    title: 'Loft, Nouvelle Ville',
-    districtSlug: 'nouvelle-ville',
-    addressLine: '5 rue Charlemagne',
-    rent: 1320,
-    charges: 120,
-    surfaceM2: 104,
-    rooms: 3,
-    bedrooms: 2,
-    floor: '4/4',
-    furnished: false,
-    energyRating: EnergyRating.B,
-    gesRating: EnergyRating.B,
-    constructionYear: 1911,
-    availableFrom: '2026-12-01',
-    description:
-      "Ancien atelier réhabilité en loft au dernier étage, 3,60 m sous plafond et verrière plein est. Vaste pièce de vie de 55 m², cuisine ouverte sur mesure, deux chambres cloisonnées, salle de bain avec baignoire. Isolation et menuiseries refaites lors de la réhabilitation.",
-    photos: ['photo · volume', 'photo · verrière', 'photo · cuisine', 'photo · chambre'],
+      "T1 bis meublé au dernier étage avec ascenseur, alcôve nuit séparée du séjour. Cuisine équipée, salle d'eau récente, vue dégagée sur les toits.\n\nRue Charlemagne, à cinq minutes du campus du Saulcy et de la gare. Le bien le plus demandé du portefeuille : onze candidatures en dix jours.",
+    photos: ['séjour', 'alcôve nuit', 'cuisine', 'vue toits', "salle d'eau"],
   },
   {
     reference: 'MZ-0191',
-    title: 'Studio, Centre-ville',
-    districtSlug: 'centre-ville',
-    addressLine: '2 place Saint-Louis',
-    rent: 480,
-    charges: 40,
-    surfaceM2: 21,
-    rooms: 1,
-    bedrooms: null,
-    floor: '1/3',
-    furnished: true,
-    energyRating: EnergyRating.E,
-    gesRating: EnergyRating.E,
-    constructionYear: 1850,
+    pub: 1, // ordre de publication de la maquette (1 = le plus récent)
+    title: '2 pièces, Devant-les-Ponts',
+    districtSlug: 'devant-les-ponts',
+    addressLine: '27 rue de Paris',
+    rent: 640,
+    charges: 55,
+    surfaceM2: 52,
+    rooms: 2,
+    bedrooms: 1,
+    floor: '1/4',
+    furnished: false,
+    energyRating: EnergyRating.D,
+    gesRating: EnergyRating.C,
+    constructionYear: 1955,
     availableFrom: null,
     description:
-      "Studio meublé donnant sur les arcades de la place Saint-Louis. Pièce unique avec coin nuit séparé par une cloison ajourée, kitchenette équipée, salle d'eau. Immeuble classé, escalier en pierre. Emplacement rare, tout le centre historique à pied.",
-    photos: ['photo · pièce', 'photo · kitchenette', 'photo · place', 'photo · immeuble'],
+      "Deux pièces au premier étage d'un petit immeuble de six lots, séjour sur cour et chambre calme. Cuisine séparée, salle de bain avec baignoire, cave.\n\nDevant-les-Ponts, à quinze minutes du centre en bus, à proximité immédiate du parc de la Seille et des berges de la Moselle.",
+    photos: ['séjour', 'chambre', 'cuisine', 'cour', 'salle de bain'],
+  },
+];
+
+/**
+ * Pièces attendues d'un dossier salarié, dans l'ordre où l'espace locataire les
+ * demandera. Le compteur « 4 / 5 » de l'écran propriétaire se lit sur ces
+ * lignes, pas sur une constante d'affichage.
+ */
+const EXPECTED_TENANT_DOCUMENTS: DocumentType[] = [
+  DocumentType.ID_CARD,
+  DocumentType.PAYSLIP,
+  DocumentType.EMPLOYMENT_CONTRACT,
+  DocumentType.TAX_NOTICE,
+  DocumentType.PROOF_OF_ADDRESS,
+];
+
+interface SeedTenant {
+  firstName: string;
+  lastName: string;
+  email: string;
+  fileReference: string;
+  score: number;
+  netMonthlyIncome: number; // euros nets par mois
+  contractType: EmploymentContractType;
+  employer: string;
+  /** Combien des 5 pièces attendues sont déjà vérifiées. */
+  verifiedDocuments: number;
+  /**
+   * Pièces du garant déjà déposées et vérifiées. Un organisme de cautionnement
+   * n'a pas de pièce d'identité : seule son attestation compte.
+   */
+  guarantorDocuments: DocumentType[];
+  /**
+   * État du dossier, posé explicitement plutôt que déduit du nombre de pièces :
+   * un dossier n'est « vérifié » que si **tout** l'est, garant compris, et
+   * cette condition croise trop de champs pour être recalculée ici sans
+   * risquer de diverger du service.
+   */
+  fileStatus: TenantFileStatus;
+  guarantor: {
+    kind: GuarantorKind;
+    firstName?: string;
+    lastName?: string;
+    organisationName?: string;
+    relationship?: string;
+    /** `null` pour un organisme de cautionnement : il n'a pas de revenus. */
+    netMonthlyIncome: number | null;
+  } | null;
+  propertyReference: string;
+  status: ApplicationStatus;
+  /** Ancienneté de la candidature, en heures. */
+  submittedHoursAgo: number;
+  /** Délai avant première lecture par le propriétaire ; `null` = pas encore lue. */
+  readHoursAfter: number | null;
+  message: string;
+}
+
+/**
+ * Candidats de démonstration, repris de la maquette.
+ *
+ * Les taux d'effort couvrent volontairement toute la plage : un dossier
+ * confortable, un dossier juste, un dossier étudiant qui ne tient que par son
+ * garant. Un jeu d'essai où tout passe ne prouverait rien.
+ */
+const TENANTS: SeedTenant[] = [
+  {
+    firstName: 'Camille',
+    lastName: 'Ferry',
+    email: 'camille.ferry@bail.local',
+    fileReference: 'LOC-2026-0871',
+    score: 92,
+    netMonthlyIncome: 2980,
+    contractType: EmploymentContractType.CDI,
+    employer: 'CHR Metz-Thionville',
+    verifiedDocuments: 5,
+    guarantorDocuments: [DocumentType.GUARANTOR_ID, DocumentType.GUARANTOR_INCOME],
+    fileStatus: TenantFileStatus.VERIFIED,
+    guarantor: {
+      kind: GuarantorKind.INDIVIDUAL,
+      firstName: 'Martine',
+      lastName: 'Ferry',
+      relationship: 'Mère',
+      netMonthlyIncome: 4100,
+    },
+    propertyReference: 'MZ-0155',
+    status: ApplicationStatus.SHORTLISTED,
+    submittedHoursAgo: 26,
+    readHoursAfter: 3,
+    message:
+      "Je cherche un logement proche de l'hôpital Legouest, où je travaille. Disponible pour une visite en soirée ou le samedi.",
+  },
+  {
+    firstName: 'Noah',
+    lastName: 'Bertrand',
+    email: 'noah.bertrand@bail.local',
+    fileReference: 'LOC-2026-0884',
+    score: 78,
+    netMonthlyIncome: 2240,
+    contractType: EmploymentContractType.CDI,
+    employer: 'Groupe Bouygues Énergies',
+    verifiedDocuments: 4,
+    guarantorDocuments: [],
+    fileStatus: TenantFileStatus.SUBMITTED,
+    guarantor: null,
+    propertyReference: 'MZ-0155',
+    status: ApplicationStatus.SUBMITTED,
+    submittedHoursAgo: 15,
+    readHoursAfter: null,
+    message: 'Mutation professionnelle à Metz au 1er octobre. Dossier complet.',
+  },
+  {
+    firstName: 'Inès',
+    lastName: 'Lemoine',
+    email: 'ines.lemoine@bail.local',
+    fileReference: 'LOC-2026-0890',
+    score: 85,
+    netMonthlyIncome: 2610,
+    contractType: EmploymentContractType.PUBLIC_SECTOR,
+    employer: 'Rectorat de l’académie de Nancy-Metz',
+    verifiedDocuments: 5,
+    // Le garant d'Inès n'a fourni que sa pièce d'identité : le dossier reste
+    // incomplet, et l'écran doit le montrer.
+    guarantorDocuments: [DocumentType.GUARANTOR_ID],
+    fileStatus: TenantFileStatus.SUBMITTED,
+    guarantor: {
+      kind: GuarantorKind.INDIVIDUAL,
+      firstName: 'Paul',
+      lastName: 'Lemoine',
+      relationship: 'Père',
+      netMonthlyIncome: 3200,
+    },
+    propertyReference: 'MZ-0173',
+    status: ApplicationStatus.VISIT_SCHEDULED,
+    submittedHoursAgo: 52,
+    readHoursAfter: 2,
+    message: 'Affectation à la rentrée, je souhaite emménager avant le 25 septembre.',
+  },
+  {
+    firstName: 'Théo',
+    lastName: 'Marchand',
+    email: 'theo.marchand@bail.local',
+    fileReference: 'LOC-2026-0902',
+    score: 64,
+    netMonthlyIncome: 780,
+    contractType: EmploymentContractType.STUDENT,
+    employer: 'Université de Lorraine — apprentissage',
+    verifiedDocuments: 3,
+    guarantorDocuments: [DocumentType.GUARANTOR_INCOME],
+    fileStatus: TenantFileStatus.SUBMITTED,
+    guarantor: {
+      kind: GuarantorKind.ORGANISATION,
+      organisationName: 'Visale — Action Logement',
+      netMonthlyIncome: null,
+    },
+    propertyReference: 'MZ-0186',
+    status: ApplicationStatus.READ,
+    submittedHoursAgo: 9,
+    readHoursAfter: 1,
+    message: 'Étudiant en apprentissage, garantie Visale déjà obtenue.',
   },
 ];
 
@@ -303,68 +485,111 @@ async function main() {
   console.log(`  ${DISTRICTS.length} quartiers`);
 
   // --- Utilisateurs de démonstration -----------------------------------------
+  // Noms repris de la maquette (Sylvie Kremer, Yanis C.) pour que les données
+  // de démonstration soient reconnaissables d'un écran à l'autre.
+  //
+  // Ces comptes ont un mot de passe : sans lui, personne ne peut ouvrir
+  // l'espace propriétaire de démonstration, et les 8 biens seedés seraient
+  // inatteignables. Il est identique pour les deux et volontairement affiché
+  // en clair par le seed — c'est une fixture de développement, ce script n'a
+  // rien à faire ailleurs (le README l'indique).
+  const demoPassword = 'Demo1234!';
+  const passwordHash = await hash(demoPassword, 12);
+
+  const ownerValues = {
+    role: UserRole.OWNER,
+    firstName: 'Sylvie',
+    lastName: 'Kremer',
+    phone: '+33 6 12 44 08 71',
+    emailVerifiedAt: new Date(),
+    passwordHash,
+  };
   const owner = await prisma.user.upsert({
-    where: { email: 'proprietaire.demo@seuil.local' },
-    update: {},
-    create: {
-      email: 'proprietaire.demo@seuil.local',
-      role: UserRole.OWNER,
-      firstName: 'Hélène',
-      lastName: 'Marchal',
-      phone: '+33 3 87 00 00 01',
-      emailVerifiedAt: new Date(),
-    },
+    where: { email: 'proprietaire.demo@bail.local' },
+    // `update` reprend les mêmes valeurs que `create` : avec un `{}` vide,
+    // modifier le seed puis le rejouer n'aurait aucun effet sur une base
+    // existante, et le fichier divergerait silencieusement de la base.
+    update: ownerValues,
+    create: { email: 'proprietaire.demo@bail.local', ...ownerValues },
   });
 
+  const agentValues = {
+    role: UserRole.AGENT,
+    firstName: 'Yanis',
+    lastName: 'Chevalier',
+    emailVerifiedAt: new Date(),
+    passwordHash,
+  };
   await prisma.user.upsert({
-    where: { email: 'agent.demo@seuil.local' },
-    update: {},
-    create: {
-      email: 'agent.demo@seuil.local',
-      role: UserRole.AGENT,
-      firstName: 'Yanis',
-      lastName: 'Bertrand',
-      emailVerifiedAt: new Date(),
-    },
+    where: { email: 'agent.demo@bail.local' },
+    update: agentValues,
+    create: { email: 'agent.demo@bail.local', ...agentValues },
   });
-  console.log('  2 utilisateurs de démonstration (propriétaire, agent)');
+  console.log(
+    `  2 utilisateurs de démonstration (propriétaire, agent interne) — mot de passe ${demoPassword}`,
+  );
 
   // --- Barème d'honoraires ---------------------------------------------------
-  // Placeholders alignés sur les plafonds légaux au m². À FIGER avec l'avocat :
-  // tant que `isLegallyApproved` est faux, aucun montant ne doit être facturé.
+  // Valeurs du pilote affichées dans la maquette de référence (bail.html) :
+  // 8 €/m² au total côté locataire, 39 €/mois/bien d'abonnement.
+  // `ownerFeeCentsPerSqm` est à 0 : la promesse du produit est « un abonnement,
+  // pas une commission » (accueil, écran abonnement) — le propriétaire ne paie
+  // aucun frais à la transaction. Provisoire malgré tout : à FIGER avec
+  // l'avocat, tant que `isLegallyApproved` est faux, aucun montant ne doit être
+  // facturé pour de vrai (docs/legal-context.md).
+  //
+  // Les tarifs sont dans `update` autant que dans `create` : rejouer le seed
+  // après avoir changé une valeur ici doit la répercuter, sinon la base et le
+  // fichier divergent en silence.
+  const feeScheduleValues = {
+    label: 'Barème provisoire — pilote Metz',
+    zone: RentalZone.ZONE_NON_TENDUE,
+    // La maquette annonce 8 €/m² TTC au total pour un 68 m² : 544 €, ventilés
+    // en 340 € (visite + dossier), 136 € (rédaction du bail) et 68 € (état
+    // des lieux) — soit 7 €/m² + 1 €/m². Les deux postes sont séparés parce
+    // que la loi les plafonne séparément.
+    tenantVisitFeeCentsPerSqm: 700, // 7,00 € / m² — visite, dossier, rédaction du bail
+    tenantInventoryFeeCentsPerSqm: 100, // 1,00 € / m² — état des lieux
+    ownerFeeCentsPerSqm: 0, // aucune commission propriétaire, seulement l'abonnement
+    ownerSubscriptionMonthlyCents: 3900, // 39 € / mois / bien
+    effectiveFrom: new Date('2026-01-01'),
+    isActive: true,
+    isLegallyApproved: false,
+    notes:
+      "Valeurs du pilote reprises de la maquette de référence. Le barème définitif et la zone de tension applicable à Metz doivent être confirmés par l'avocat en droit immobilier avant toute facturation réelle (docs/legal-context.md).",
+  };
+
   const feeSchedule = await prisma.feeSchedule.upsert({
     where: { code: 'METZ-2026-PROVISOIRE' },
-    update: {},
-    create: {
-      code: 'METZ-2026-PROVISOIRE',
-      label: 'Barème provisoire — pilote Metz',
-      zone: RentalZone.ZONE_NON_TENDUE,
-      tenantVisitFeeCentsPerSqm: 1000, // 10,00 € / m²
-      tenantInventoryFeeCentsPerSqm: 300, // 3,00 € / m²
-      ownerFeeCentsPerSqm: 1000,
-      ownerSubscriptionMonthlyCents: 3900, // 39 € / mois / bien
-      effectiveFrom: new Date('2026-01-01'),
-      isActive: true,
-      isLegallyApproved: false,
-      notes:
-        "Valeurs provisoires. Le barème définitif et la zone de tension applicable à Metz doivent être confirmés par l'avocat en droit immobilier avant toute facturation réelle (docs/legal-context.md).",
-    },
+    update: feeScheduleValues,
+    create: { code: 'METZ-2026-PROVISOIRE', ...feeScheduleValues },
   });
   console.log(`  barème ${feeSchedule.code} (non validé juridiquement)`);
 
   // --- Réglages modifiables sans redéploiement -------------------------------
+  // Les trois indicateurs « saisis » ci-dessous sont ceux du registre d'accueil
+  // de la maquette. Aucun n'est calculable avant le lancement pilote : il n'y a
+  // ni candidature, ni dossier, ni historique de réponse en base. Ils sont
+  // donc paramétrés et l'API l'annonce (`source: 'setting'`) plutôt que de
+  // faire passer une valeur saisie pour une mesure.
   const settings = [
     {
       key: 'market.metz.averageResponseDelay',
-      value: '32 h',
+      value: '31 h',
       description:
-        "Délai moyen de réponse affiché sur la page d'accueil. Non calculable avant le lancement pilote : valeur saisie, à remplacer par une mesure réelle.",
+        "Délai moyen de réponse d'un propriétaire, affiché sur l'accueil. Valeur saisie, à remplacer par une mesure dès que les candidatures existent.",
     },
     {
-      key: 'market.metz.filesVerifiedWithoutExchange',
-      value: '96 %',
+      key: 'market.metz.applicantsPerProperty',
+      value: '6,8',
       description:
-        'Part des dossiers vérifiés sans échange supplémentaire. Valeur saisie tant que la donnée d\'usage n\'existe pas.',
+        "Nombre moyen de candidats par bien à Metz. Valeur saisie : aucune candidature en base avant le lancement pilote.",
+    },
+    {
+      key: 'market.metz.filesVerifiedThisMonth',
+      value: '412',
+      description:
+        "Dossiers locataires vérifiés sur le mois en cours. Valeur saisie tant qu'aucun dossier réel n'est traité.",
     },
     {
       key: 'visits.recordingRetentionDays',
@@ -377,6 +602,18 @@ async function main() {
       value: true,
       description:
         'Caméra obligatoire pendant la visite. Décision confirmée : ce réglage est exposé pour audit, pas pour être désactivé.',
+    },
+    {
+      key: 'owner.benchmark.agencyLettingFeeMonths',
+      value: 1,
+      description:
+        "Honoraires de mise en location d'une agence classique, exprimés en mois de loyer charges comprises. Sert au comparatif de l'écran Abonnement — ordre de grandeur du marché messin, à corriger dès qu'on a des relevés.",
+    },
+    {
+      key: 'owner.benchmark.mandateRate',
+      value: 0.07,
+      description:
+        "Taux d'un mandat de gestion locative, en part du loyer annuel encaissé. Sert au comparatif de l'écran Abonnement. Ni un tarif Bail, ni un engagement.",
     },
     {
       key: 'lease.generationEnabled',
@@ -424,55 +661,61 @@ async function main() {
     (await prisma.district.findMany()).map((district) => [district.slug, district.id]),
   );
 
-  // Publication échelonnée : le tri par défaut est « les plus récentes », donc
-  // les trois premières de la liste sont celles mises en avant sur l'accueil,
-  // exactement comme dans la maquette.
+  // Publication échelonnée à partir de `seed.pub` (1 = le plus récent dans la
+  // maquette), pas de l'ordre du tableau : « biens en avant » sur l'accueil et
+  // tri « plus récents » dans les résultats reposent sur la même récence.
   const publishedBase = new Date('2026-08-28T09:00:00.000Z');
 
-  for (const [index, seed] of PROPERTIES.entries()) {
+  for (const seed of PROPERTIES) {
     const districtId = districtsBySlug.get(seed.districtSlug);
     if (!districtId) throw new Error(`Quartier inconnu : ${seed.districtSlug}`);
 
     const leaseType = seed.furnished ? LeaseType.MEUBLE : LeaseType.NU;
     const rentCents = seed.rent * 100;
-    const publishedAt = new Date(publishedBase.getTime() - index * 36 * 3600 * 1000);
+    const publishedAt = new Date(publishedBase.getTime() - (seed.pub - 1) * 36 * 3600 * 1000);
+
+    const chargesCents = seed.charges * 100;
+
+    // Mêmes valeurs en création et en mise à jour : rejouer le seed après avoir
+    // corrigé une donnée ici doit la répercuter en base.
+    const values = {
+      ownerId: owner.id,
+      title: seed.title,
+      description: seed.description,
+      addressLine: seed.addressLine,
+      districtId,
+      city: 'Metz',
+      postalCode: '57000',
+      surfaceM2: seed.surfaceM2,
+      rooms: seed.rooms,
+      bedrooms: seed.bedrooms,
+      floor: seed.floor,
+      furnished: seed.furnished,
+      leaseType,
+      energyRating: seed.energyRating,
+      gesRating: seed.gesRating,
+      constructionYear: seed.constructionYear,
+      rentCents,
+      chargesCents,
+      // Dépôt de garantie : 1 mois de loyer hors charges en location nue,
+      // 2 mois en meublé (loi du 6 juillet 1989).
+      depositCents: seed.furnished ? rentCents * 2 : rentCents,
+      availableFrom: seed.availableFrom ? new Date(seed.availableFrom) : null,
+      availableImmediately: seed.availableFrom === null,
+      // Critères repris de la maquette : 3 × le loyer CHARGES COMPRISES (c'est
+      // sur cette base que la fiche annonce « 3 × le loyer »), garant exigé,
+      // CDI, fonction publique ou étudiant avec garant.
+      minMonthlyIncomeCents: (rentCents + chargesCents) * 3,
+      guarantorRequirement: GuarantorRequirement.REQUIRED,
+      acceptedContractTypes: ['CDI', 'PUBLIC_SECTOR', 'STUDENT'],
+      status: PropertyStatus.ONLINE,
+      publishedAt,
+    };
 
     const property = await prisma.property.upsert({
       where: { reference: seed.reference },
-      update: {},
-      create: {
-        reference: seed.reference,
-        ownerId: owner.id,
-        title: seed.title,
-        description: seed.description,
-        addressLine: seed.addressLine,
-        districtId,
-        city: 'Metz',
-        postalCode: '57000',
-        surfaceM2: seed.surfaceM2,
-        rooms: seed.rooms,
-        bedrooms: seed.bedrooms,
-        floor: seed.floor,
-        furnished: seed.furnished,
-        leaseType,
-        energyRating: seed.energyRating,
-        gesRating: seed.gesRating,
-        constructionYear: seed.constructionYear,
-        rentCents,
-        chargesCents: seed.charges * 100,
-        // Dépôt de garantie : 1 mois de loyer hors charges en location nue,
-        // 2 mois en meublé (loi du 6 juillet 1989).
-        depositCents: seed.furnished ? rentCents * 2 : rentCents,
-        availableFrom: seed.availableFrom ? new Date(seed.availableFrom) : null,
-        availableImmediately: seed.availableFrom === null,
-        // Critères repris de la maquette : 3× le loyer hors charges,
-        // garant facultatif, CDI ou fonction publique.
-        minMonthlyIncomeCents: rentCents * 3,
-        guarantorRequirement: GuarantorRequirement.OPTIONAL,
-        acceptedContractTypes: ['CDI', 'PUBLIC_SECTOR'],
-        status: PropertyStatus.ONLINE,
-        publishedAt,
-      },
+      update: values,
+      create: { reference: seed.reference, ...values },
     });
 
     const existingPhotos = await prisma.propertyPhoto.count({ where: { propertyId: property.id } });
@@ -488,6 +731,138 @@ async function main() {
     }
   }
   console.log(`  ${PROPERTIES.length} biens en ligne`);
+
+  // --- Locataires de démonstration et candidatures ---------------------------
+  //
+  // Sans eux, l'écran « Candidatures reçues » n'a que son état vide à montrer et
+  // rien n'est vérifiable. Les noms sont ceux de la maquette, pour qu'on
+  // reconnaisse les mêmes personnes d'un écran à l'autre.
+  //
+  // Ces dossiers portent des montants et des statuts, mais **aucun fichier** :
+  // les pièces réelles (identité, bulletins de salaire) n'ont rien à faire dans
+  // un jeu de démonstration versionné.
+  const now = new Date('2026-09-02T09:00:00.000Z');
+  const hoursAgo = (hours: number) => new Date(now.getTime() - hours * 3600 * 1000);
+
+  for (const seed of TENANTS) {
+    const tenantValues = {
+      role: UserRole.TENANT,
+      firstName: seed.firstName,
+      lastName: seed.lastName,
+      emailVerifiedAt: hoursAgo(seed.submittedHoursAgo + 48),
+      passwordHash,
+    };
+    const tenant = await prisma.user.upsert({
+      where: { email: seed.email },
+      update: tenantValues,
+      create: { email: seed.email, ...tenantValues },
+    });
+
+    const fileValues = {
+      tenantId: tenant.id,
+      status: seed.fileStatus,
+      score: seed.score,
+      netMonthlyIncomeCents: seed.netMonthlyIncome * 100,
+      contractType: seed.contractType,
+      employerName: seed.employer,
+      inProbationPeriod: false,
+      submittedAt: hoursAgo(seed.submittedHoursAgo + 24),
+      verifiedAt:
+        seed.fileStatus === TenantFileStatus.VERIFIED
+          ? hoursAgo(seed.submittedHoursAgo + 12)
+          : null,
+    };
+    const file = await prisma.tenantFile.upsert({
+      where: { reference: seed.fileReference },
+      update: fileValues,
+      create: { reference: seed.fileReference, ...fileValues },
+    });
+
+    // Cinq pièces attendues d'un dossier salarié, toutes vérifiées sauf
+    // indication contraire : l'écran affiche « 4 / 5 » et il faut que ce
+    // dénominateur vienne de vraies lignes, pas d'une constante.
+    //
+    // Pièces et garants sont remis à plat à chaque exécution plutôt que créés
+    // « si absents » : sans ça, corriger une valeur ici puis rejouer le seed
+    // n'aurait aucun effet sur une base déjà peuplée, et le fichier
+    // divergerait silencieusement de la base.
+    await prisma.tenantDocument.deleteMany({ where: { tenantFileId: file.id } });
+    await prisma.tenantDocument.createMany({
+      data: EXPECTED_TENANT_DOCUMENTS.map((type, index) => ({
+        tenantFileId: file.id,
+        type,
+        status:
+          index < seed.verifiedDocuments ? DocumentStatus.VERIFIED : DocumentStatus.PENDING,
+        verifiedAt: index < seed.verifiedDocuments ? hoursAgo(seed.submittedHoursAgo + 12) : null,
+      })),
+    });
+
+    if (seed.guarantorDocuments.length > 0) {
+      await prisma.tenantDocument.createMany({
+        data: seed.guarantorDocuments.map((type) => ({
+          tenantFileId: file.id,
+          type,
+          status: DocumentStatus.VERIFIED,
+          verifiedAt: hoursAgo(seed.submittedHoursAgo + 12),
+        })),
+      });
+    }
+
+    await prisma.guarantor.deleteMany({ where: { tenantFileId: file.id } });
+    if (seed.guarantor) {
+      await prisma.guarantor.create({
+        data: {
+          tenantFileId: file.id,
+          kind: seed.guarantor.kind,
+          firstName: seed.guarantor.firstName,
+          lastName: seed.guarantor.lastName,
+          organisationName: seed.guarantor.organisationName,
+          relationship: seed.guarantor.relationship,
+          netMonthlyIncomeCents:
+            seed.guarantor.netMonthlyIncome === null
+              ? null
+              : seed.guarantor.netMonthlyIncome * 100,
+          contractType:
+            seed.guarantor.kind === GuarantorKind.INDIVIDUAL
+              ? EmploymentContractType.CDI
+              : null,
+          status: DocumentStatus.VERIFIED,
+        },
+      });
+    }
+
+    const property = await prisma.property.findUniqueOrThrow({
+      where: { reference: seed.propertyReference },
+      select: { id: true, rentCents: true, chargesCents: true },
+    });
+
+    const submittedAt = hoursAgo(seed.submittedHoursAgo);
+    const applicationValues = {
+      tenantId: tenant.id,
+      tenantFileId: file.id,
+      status: seed.status,
+      // Taux d'effort : loyer charges comprises sur revenus nets vérifiés.
+      // C'est le seul chiffre du tableau qui compare deux montants, il doit
+      // être calculé, jamais saisi.
+      incomeRatio:
+        (property.rentCents + property.chargesCents) / (seed.netMonthlyIncome * 100),
+      compatibilityScore: seed.score,
+      message: seed.message,
+      submittedAt,
+      // Lue seulement si le propriétaire est passé dessus : c'est ce qui rend
+      // le « délai de réponse » mesurable au lieu d'être paramétré.
+      readAt: seed.readHoursAfter === null ? null : hoursAgo(seed.submittedHoursAgo - seed.readHoursAfter),
+    };
+
+    await prisma.application.upsert({
+      where: {
+        propertyId_tenantId: { propertyId: property.id, tenantId: tenant.id },
+      },
+      update: applicationValues,
+      create: { propertyId: property.id, ...applicationValues },
+    });
+  }
+  console.log(`  ${TENANTS.length} locataires de démonstration et leurs candidatures`);
 
   console.log('Seed — terminé');
 }

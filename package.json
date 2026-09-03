@@ -1,8 +1,8 @@
 {
-  "name": "seuil",
+  "name": "bail",
   "version": "0.1.0",
   "private": true,
-  "description": "Seuil — plateforme de location longue durée (MVP v0, pilote Metz)",
+  "description": "Bail — plateforme de location longue durée (MVP v0, pilote Metz)",
   "workspaces": [
     "frontend",
     "backend"
