@@ -846,3 +846,118 @@ export function getLeaseFees(reference: string) {
     `/tenant/leases/${encodeURIComponent(reference)}/fees`,
   );
 }
+
+// --- Back-office -------------------------------------------------------------
+
+export interface BackofficeSummary {
+  filesToReview: number;
+  propertiesToReview: number;
+  activeLeases: number;
+  pendingPayoutCents: number;
+  onlinePropertyCount: number;
+  activeFileCount: number;
+  verifiedFileCount: number;
+  /** Mesuré sur les contrôles réels. `null` sans historique. */
+  averageReviewHours: number | null;
+}
+
+export interface AdminFileRow {
+  reference: string;
+  holderName: string;
+  initials: string;
+  status: TenantFileStatus;
+  verifiedCount: number;
+  requiredCount: number;
+  pendingDocuments: {
+    id: string;
+    type: DocumentType;
+    label: string;
+    note: string | null;
+    uploadedAt: string;
+  }[];
+  /** Pièces requises pas encore vérifiées : ce qui bloque la validation. */
+  missingLabels: string[];
+  identityVerified: boolean;
+  incomeFlag: string | null;
+  submittedAt: string | null;
+}
+
+export interface AdminPropertyRow {
+  reference: string;
+  title: string;
+  ownerName: string;
+  district: string;
+  status: PropertyStatus;
+  totalRentCents: number;
+  surfaceM2: number;
+  blockers: string[];
+  warnings: string[];
+  submittedAt: string | null;
+}
+
+export interface AdminLeaseRow {
+  reference: string;
+  propertyReference: string;
+  tenantName: string;
+  status: LeaseStatus;
+  signedCount: number;
+  feeStatus: PaymentStatus | null;
+  feeAmountCents: number | null;
+  fundsStatus: string | null;
+  rentCents: number;
+}
+
+export interface AdminVisitRow {
+  id: string;
+  propertyReference: string;
+  tenantName: string;
+  type: VisitType;
+  status: VisitStatus;
+  scheduledAt: string;
+  agentName: string | null;
+}
+
+export interface JournalEntry {
+  at: string;
+  tone: 'ok' | 'pending' | 'reject' | 'neutral';
+  title: string;
+  note: string;
+}
+
+export interface ProviderRow {
+  key: string;
+  label: string;
+  driver: string;
+  live: boolean;
+}
+
+export interface AdminAgent {
+  id: string;
+  firstName: string;
+  lastName: string;
+}
+
+export function getAdminSummary() {
+  return apiFetchAuthed<BackofficeSummary>('/admin/summary');
+}
+export function getAdminProviders() {
+  return apiFetchAuthed<ProviderRow[]>('/admin/providers');
+}
+export function getAdminFiles() {
+  return apiFetchAuthed<AdminFileRow[]>('/admin/tenant-files');
+}
+export function getAdminProperties() {
+  return apiFetchAuthed<AdminPropertyRow[]>('/admin/properties');
+}
+export function getAdminLeases() {
+  return apiFetchAuthed<AdminLeaseRow[]>('/admin/leases');
+}
+export function getAdminVisits() {
+  return apiFetchAuthed<AdminVisitRow[]>('/admin/visits');
+}
+export function getAdminAgents() {
+  return apiFetchAuthed<AdminAgent[]>('/admin/agents');
+}
+export function getAdminJournal() {
+  return apiFetchAuthed<JournalEntry[]>('/admin/journal');
+}

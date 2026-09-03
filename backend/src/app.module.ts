@@ -17,6 +17,7 @@ import { VideoModule } from './modules/video/video.module';
 import { VisitsModule } from './modules/visits/visits.module';
 import { SignatureModule } from './modules/signature/signature.module';
 import { LeaseModule } from './modules/lease/lease.module';
+import { BackofficeModule } from './modules/backoffice/backoffice.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { LeaseModule } from './modules/lease/lease.module';
     VisitsModule,
     SignatureModule,
     LeaseModule,
+    BackofficeModule,
   ],
 })
 export class AppModule {}

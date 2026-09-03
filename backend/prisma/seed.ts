@@ -15,6 +15,8 @@
  */
 import { hash } from 'bcrypt';
 import { createHash } from 'node:crypto';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import {
   ApplicationStatus,
   DocumentStatus,
@@ -26,6 +28,7 @@ import {
   GuarantorRequirement,
   LeaseType,
   PrismaClient,
+  PropertyDocumentType,
   PropertyStatus,
   RentalZone,
   TenantFileStatus,
@@ -35,6 +38,57 @@ import {
 } from '@prisma/client';
 
 const prisma = new PrismaClient();
+
+const STORAGE_ROOT = process.env.STORAGE_LOCAL_PATH ?? './storage';
+
+/**
+ * PDF minimal mais valide, ouvrable dans n'importe quel lecteur.
+ *
+ * Le seed dépose un vrai fichier plutôt qu'une clé pointant dans le vide : un
+ * diagnostic listé dans le registre mais introuvable au téléchargement
+ * donnerait une image fausse de l'état des données. Texte volontairement en
+ * ASCII — la police de base d'un PDF n'encode pas les accents sans table
+ * supplémentaire, et un « é » y deviendrait un caractère parasite.
+ */
+function placeholderPdf(lines: string[]): Buffer {
+  const nl = String.fromCharCode(10);
+  const escaped = lines.map((line) =>
+    line.replace(/[\\()]/g, (char) => `\\${char}`).replace(/[^\x20-\x7e]/g, '?'),
+  );
+  const content = [
+    'BT /F1 11 Tf 15 TL 56 780 Td',
+    ...escaped.map((line) => `(${line}) Tj T*`),
+    'ET',
+  ].join(nl);
+
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] ' +
+      '/Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    [`<< /Length ${Buffer.byteLength(content, 'latin1')} >>`, 'stream', content, 'endstream'].join(
+      nl,
+    ),
+  ];
+
+  // Les décalages de la table `xref` se comptent en octets depuis le début du
+  // fichier : ils doivent être relevés au fur et à mesure de l'écriture.
+  let pdf = `%PDF-1.4${nl}`;
+  const offsets: number[] = [];
+  objects.forEach((body, index) => {
+    offsets.push(Buffer.byteLength(pdf, 'latin1'));
+    pdf += `${index + 1} 0 obj${nl}${body}${nl}endobj${nl}`;
+  });
+
+  const startxref = Buffer.byteLength(pdf, 'latin1');
+  const entries = offsets.map((offset) => `${String(offset).padStart(10, '0')} 00000 n ${nl}`);
+  pdf += `xref${nl}0 ${objects.length + 1}${nl}0000000000 65535 f ${nl}${entries.join('')}`;
+  pdf += `trailer${nl}<< /Size ${objects.length + 1} /Root 1 0 R >>${nl}`;
+  pdf += `startxref${nl}${startxref}${nl}%%EOF${nl}`;
+
+  return Buffer.from(pdf, 'latin1');
+}
 
 const DISTRICTS = [
   { slug: 'centre-ville', name: 'Centre-ville' },
@@ -750,6 +804,51 @@ async function main() {
         })),
       });
     }
+
+    // Diagnostic de performance énergétique.
+    //
+    // Sans lui, ces huit annonces seraient diffusées alors que la règle de
+    // publication de la plateforme les refuserait : le back-office afficherait
+    // « DPE manquant » sur chacune, et le contrôle de cohérence du bail
+    // n'aurait aucune surface à recouper. Le fichier déposé est un substitut
+    // assumé, pas un diagnostic — il le dit lui-même en première ligne.
+    const dpeKey = `properties/${seed.reference.toLowerCase()}/diagnostics/dpe-demonstration.pdf`;
+    const dpePath = join(STORAGE_ROOT, 'private', dpeKey);
+    const dpeFile = placeholderPdf([
+      'DOCUMENT DE DEMONSTRATION - CECI N EST PAS UN DIAGNOSTIC',
+      '',
+      `Bien : ${seed.reference} - ${seed.title}`,
+      `Classe energetique annoncee : ${seed.energyRating}`,
+      `Surface habitable : ${seed.surfaceM2} m2`,
+      '',
+      'Fichier genere par le jeu de donnees de demonstration de Bail.',
+      'Aucune valeur legale. A remplacer par le DPE etabli par un',
+      'diagnostiqueur certifie avant toute diffusion reelle.',
+    ]);
+    await mkdir(dirname(dpePath), { recursive: true });
+    await writeFile(dpePath, dpeFile);
+
+    const dpeValues = {
+      type: PropertyDocumentType.DPE,
+      status: DocumentStatus.VERIFIED,
+      fileName: 'dpe-demonstration.pdf',
+      mimeType: 'application/pdf',
+      fileSize: dpeFile.byteLength,
+      storageKey: dpeKey,
+      issuedAt: new Date('2024-06-12T00:00:00.000Z'),
+      // Dix ans de validité, comme le veut la réglementation.
+      expiresAt: new Date('2034-06-12T00:00:00.000Z'),
+      verificationNote: 'Pièce de démonstration, contrôlée automatiquement par le seed.',
+    };
+    const existingDpe = await prisma.propertyDocument.findFirst({
+      where: { propertyId: property.id, type: PropertyDocumentType.DPE },
+      select: { id: true },
+    });
+    if (existingDpe) {
+      await prisma.propertyDocument.update({ where: { id: existingDpe.id }, data: dpeValues });
+    } else {
+      await prisma.propertyDocument.create({ data: { propertyId: property.id, ...dpeValues } });
+    }
   }
   console.log(`  ${PROPERTIES.length} biens en ligne`);
 
@@ -814,6 +913,10 @@ async function main() {
         type,
         status:
           index < seed.verifiedDocuments ? DocumentStatus.VERIFIED : DocumentStatus.PENDING,
+        // Déposée avant d'être vérifiée : sans cette date explicite, `createdAt`
+        // vaudrait `now()` et le délai de contrôle mesuré par le back-office
+        // sortirait négatif.
+        createdAt: hoursAgo(seed.submittedHoursAgo + 24),
         verifiedAt: index < seed.verifiedDocuments ? hoursAgo(seed.submittedHoursAgo + 12) : null,
       })),
     });
@@ -824,6 +927,7 @@ async function main() {
           tenantFileId: file.id,
           type,
           status: DocumentStatus.VERIFIED,
+          createdAt: hoursAgo(seed.submittedHoursAgo + 24),
           verifiedAt: hoursAgo(seed.submittedHoursAgo + 12),
         })),
       });

@@ -108,6 +108,18 @@ Ces contraintes sont dans le schéma et dans le code, pas seulement dans la doc.
 9. **Un seul rôle interne.** `AGENT` couvre l'agent de terrain et
    l'administrateur du back-office ; il n'y a pas de rôle `ADMIN` distinct tant
    que le produit n'en a pas besoin.
+10. **Une seule règle de publication.** `propertyChecks()`
+    ([`backend/src/modules/owner/property.checks.ts`](backend/src/modules/owner/property.checks.ts))
+    est une fonction pure, appelée aux trois endroits qui en dépendent : ce que
+    le propriétaire voit avant de soumettre, ce que l'API vérifie à la
+    soumission, ce que le back-office rejoue avant de mettre en ligne. La
+    dupliquer serait le plus sûr moyen de publier un jour un bien sans DPE.
+11. **Le journal du back-office ne raconte que du vrai.** Il est reconstitué à
+    partir d'horodatages réels — publications, candidatures, pièces contrôlées,
+    visites, baux. Rien n'y est ajouté pour remplir la page : un journal qui
+    mentirait sur ce qui s'est passé n'aurait aucune valeur d'audit. De même,
+    le délai moyen de vérification affiché est mesuré sur les contrôles
+    effectués, jamais paramétré.
 
 ## Avancement
 
@@ -123,8 +135,10 @@ un écran doit être fonctionnel avant de passer au suivant.
 | 5 | Prise de RDV de visite | **fait** — créneaux ouverts par le propriétaire, décision sur les candidatures, réservation et annulation |
 | 6 | Génération de bail + signature | **fait** — attribution, injection des champs, contrôle de cohérence, envoi en signature (bloqué : voir ci-dessous) |
 | 7 | Paiement des honoraires | **fait** — détail par poste avec plafonds légaux, comparatif, ouverture du règlement (bloqué : voir ci-dessous) |
+| — | Back-office de l'agence | **fait** — registre à quatre onglets : dossiers, biens, baux & paiements, journal |
 
-Le schéma de base couvre déjà les sept étapes. **Les sept sont complètes.**
+Le schéma de base couvre déjà les sept étapes. **Les sept sont complètes**, et
+le back-office qui les débloque aussi.
 L'écran « Candidatures reçues » de l'étape 2 n'est plus en lecture seule : le
 propriétaire y retient un candidat — ce qui lui ouvre la prise de rendez-vous —
 ou l'écarte, avec un motif transmis. L'acceptation définitive, qui déclenche la
@@ -138,10 +152,18 @@ candidats, tous avec le mot de passe **`Demo1234!`** :
 | Compte | Rôle |
 |---|---|
 | `proprietaire.demo@bail.local` | propriétaire des 8 biens, avec candidatures reçues |
-| `agent.demo@bail.local` | agent interne (back-office à construire) |
+| `agent.demo@bail.local` | agent interne (back-office) |
 | `camille.ferry@bail.local`, `noah.bertrand@bail.local`, `ines.lemoine@bail.local`, `theo.marchand@bail.local` | locataires candidats |
 
 Ces comptes n'existent que dans le seed de développement.
+
+Le seed dépose aussi, pour chacun des 8 biens, un **DPE de démonstration** —
+un PDF d'une page qui annonce en première ligne qu'il n'est pas un diagnostic.
+Sans lui, ces annonces seraient diffusées alors que la règle de publication de
+la plateforme les refuserait : le back-office afficherait « DPE manquant » sur
+chacune, et le contrôle de cohérence du bail n'aurait aucune surface à
+recouper. Les fichiers sont écrits sous `backend/storage/private/properties/`,
+hors dépôt.
 
 ## Dette connue
 
@@ -154,11 +176,6 @@ Ces comptes n'existent que dans le seed de développement.
   `PAYMENT_DRIVER=mock` reste la valeur par défaut ; passer en réel se réduit à
   `PAYMENT_DRIVER=stripe`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` et
   `STRIPE_PRODUCT_ID` ([`docs/integrations.md`](docs/integrations.md)).
-- `SubscriptionService.syncQuantity()` n'a pas encore d'appelant : l'assiette
-  facturée doit être resynchronisée quand un bien entre ou sort de la diffusion,
-  c'est-à-dire depuis le back-office, qui n'est pas construit. Le montant
-  *affiché* est toujours exact — il est recalculé à chaque lecture — seule la
-  quantité côté prestataire pourrait diverger une fois un compte branché.
 - Le comparatif « ce que vous auriez payé ailleurs » compare douze mois
   d'abonnement à un honoraire de mise en location unique. C'est cohérent mais
   peu flatteur pour un bien qui reste diffusé toute l'année ; l'hypothèse
@@ -169,9 +186,6 @@ Ces comptes n'existent que dans le seed de développement.
   plutôt que de retomber silencieusement sur le simulateur — en production, ça
   reviendrait à valider des pièces d'identité sans les contrôler. L'écran du
   dossier locataire affiche « prestataire simulé » tant que c'est le cas.
-- Le contrôle manuel des pièces (justificatif de domicile, refus motivé) attend
-  le back-office : aucun écran ne permet encore à un agent de statuer, donc une
-  pièce en revue humaine y reste.
 - Aucun prestataire de visio n'est retenu : `VIDEO_DRIVER=mock` est la seule
   valeur acceptée, et le driver refuse de démarrer sur un nom inconnu plutôt que
   de retomber sur le simulateur — en production, ça donnerait des rendez-vous en

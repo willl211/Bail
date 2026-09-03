@@ -73,9 +73,12 @@ l'écran du dossier afficherait des pastilles vertes sur des pièces que personn
 n'a regardées. L'interface annonce d'ailleurs « prestataire simulé » tant que
 c'est le cas.
 
-Conséquence à assumer : une pièce en revue humaine y reste, faute de
-back-office. Elle n'empêche pas de transmettre son dossier ni de candidater —
-c'est justement pour la faire contrôler qu'on transmet.
+La revue humaine a désormais son écran : l'onglet « Dossiers » du back-office
+liste, dossier par dossier, les pièces en attente de décision et permet à
+l'agent de les vérifier ou de les refuser — un refus toujours motivé, le motif
+étant transmis au locataire. En attendant cette décision, la pièce n'empêche ni
+de transmettre son dossier ni de candidater : c'est justement pour la faire
+contrôler qu'on transmet.
 
 Le contrat prévoit aussi un régime **différé** (verdict rendu plus tard par
 webhook) dont le mock ne se sert pas : une intégration réelle en dépendra, et
@@ -129,3 +132,17 @@ Les créneaux sont ouverts par le **propriétaire** sur son bien. La maquette le
 annonce « ouverts par le propriétaire et l'agent du secteur » : le modèle
 (`VisitSlot.openedById`) est prêt pour l'agent, mais le back-office qui le lui
 permettrait n'existe pas encore.
+
+## Back-office — précision du 3 septembre 2026
+
+Le registre de l'agence affiche l'état réel de chaque intégration (`mock` /
+réel) plutôt qu'un voyant vert générique, et le compte « prestataires réels »
+en tête de page est calculé, pas écrit en dur. Un back-office qui laisserait
+croire que les contrôles tournent est plus dangereux qu'une absence d'écran :
+c'est là qu'un agent décide de mettre un bien en ligne ou de valider une
+identité.
+
+La mise en ligne d'un bien depuis le back-office resynchronise l'assiette
+facturée au propriétaire (`SubscriptionService.syncQuantity`). Tant que
+`PAYMENT_DRIVER=mock`, cette synchronisation ne sort pas de la base ; elle
+deviendra un appel réel au prestataire le jour où un compte est branché.

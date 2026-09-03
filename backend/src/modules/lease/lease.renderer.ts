@@ -29,6 +29,15 @@ export interface RenderedBlock {
 const MARKER = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
 
 /**
+ * Commentaire HTML, éventuellement réparti sur plusieurs lignes.
+ *
+ * Le retrait porte sur le corps entier et non sur chaque ligne : un
+ * avertissement interne rédigé sur deux lignes verrait sinon sa seconde ligne
+ * s'afficher dans l'acte, sortie de son contexte.
+ */
+const HTML_COMMENT = /<!--[\s\S]*?-->/g;
+
+/**
  * Découpe une ligne en fragments.
  *
  * Un marqueur sans valeur correspondante n'est **pas** effacé : il reste
@@ -69,11 +78,11 @@ export function renderTemplate(
   body: string,
   values: Record<string, unknown>,
 ): RenderedBlock[] {
+  // Les commentaires HTML du squelette portent des avertissements internes,
+  // pas du texte contractuel : ils n'ont rien à faire dans l'acte affiché.
   return body
+    .replace(HTML_COMMENT, '')
     .split('\n')
-    // Les commentaires HTML du squelette portent des avertissements internes,
-    // pas du texte contractuel : ils n'ont rien à faire dans l'acte affiché.
-    .filter((line) => !line.trim().startsWith('<!--'))
     .map((line) => {
       const heading = /^(#{1,6})\s/.exec(line);
       const content = heading ? line.slice(heading[1].length + 1) : line;

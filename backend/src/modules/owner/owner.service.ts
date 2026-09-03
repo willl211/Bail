@@ -15,6 +15,7 @@ import {
 import { Readable } from 'node:stream';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UpsertPropertyDto } from './dto/upsert-property.dto';
+import { propertyChecks } from './property.checks';
 import {
   DOCUMENT_TYPES,
   IMAGE_TYPES,
@@ -318,54 +319,6 @@ export class OwnerService {
     };
   }
 
-  /**
-   * Contrôles du panneau « Avant publication » de la maquette.
-   *
-   * Deux natures, distinguées comme dans la maquette : ce qui **empêche** de
-   * publier et ce qui la dessert seulement. Le DPE est obligatoire pour diffuser
-   * une annonce de location, donc il bloque. Le nombre de photos est une
-   * recommandation — refuser la publication d'un bien complet parce qu'il n'a
-   * que cinq photos serait absurde.
-   *
-   * Le calcul vit ici et non au front : c'est l'API qui refusera la soumission,
-   * l'écran ne fait qu'annoncer la même règle à l'avance.
-   */
-  private checksFor(property: {
-    energyRating: string | null;
-    photos: unknown[];
-    documents?: { type: PropertyDocumentType }[];
-    description: string;
-    title: string;
-    addressLine: string;
-    surfaceM2: number;
-    rentCents: number;
-  }): { blockers: string[]; warnings: string[] } {
-    const blockers: string[] = [];
-    const warnings: string[] = [];
-
-    // Deux exigences distinctes : le **fichier** du DPE, obligatoire pour
-    // diffuser une annonce, et la **classe** affichée sur la fiche. Fournir
-    // l'une sans l'autre ne suffit pas.
-    if (!property.energyRating) blockers.push('Classe DPE manquante');
-    if (property.documents && !property.documents.some((d) => d.type === 'DPE')) {
-      blockers.push('DPE manquant');
-    }
-    if (!property.addressLine.trim()) blockers.push('Adresse manquante');
-    if (!property.title.trim() || property.title === 'Nouveau bien') {
-      blockers.push('Titre de l’annonce manquant');
-    }
-    if (property.surfaceM2 <= 0) blockers.push('Surface manquante');
-    if (property.rentCents <= 0) blockers.push('Loyer manquant');
-
-    if (property.photos.length < 6) {
-      warnings.push(`Photos (${property.photos.length} / 6)`);
-    }
-    if (property.description.trim().length < 80) {
-      warnings.push('Description courte');
-    }
-
-    return { blockers, warnings };
-  }
 
   async listProperties(ownerId: string): Promise<OwnerPropertyItem[]> {
     const properties = await this.prisma.property.findMany({
@@ -395,7 +348,7 @@ export class OwnerService {
       photoCount: property.photos.length,
       applicationCount: property._count.applications,
       publishedAt: property.publishedAt?.toISOString() ?? null,
-      ...this.checksFor(property),
+      ...propertyChecks(property),
     }));
   }
 
@@ -456,7 +409,7 @@ export class OwnerService {
       photoCount: property.photos.length,
       applicationCount: property._count.applications,
       publishedAt: property.publishedAt?.toISOString() ?? null,
-      ...this.checksFor(property),
+      ...propertyChecks(property),
     };
   }
 
@@ -645,7 +598,7 @@ export class OwnerService {
       },
     });
 
-    const { blockers } = this.checksFor(withFiles);
+    const { blockers } = propertyChecks(withFiles);
     if (blockers.length > 0) {
       // `statusCode` est repris explicitement : les autres exceptions Nest le
       // portent, et le front discrimine dessus.

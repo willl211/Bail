@@ -2937,15 +2937,24 @@ textarea.field__box {
   background: var(--accent-tint);
 }
 
-.tbl a.tbl__pick {
+/* Sélecteur de ligne : un lien dans l'espace propriétaire, un bouton dans le
+   back-office (la sélection n'y change pas d'URL). Même apparence, sans quoi
+   le bouton hériterait du chrome natif du navigateur. */
+.tbl .tbl__pick {
   color: inherit;
   text-decoration: none;
   display: flex;
   align-items: center;
   gap: 11px;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
-.tbl a.tbl__pick:hover .tbl__name {
+.tbl .tbl__pick:hover .tbl__name {
   color: var(--accent);
 }
 
@@ -3447,6 +3456,57 @@ a.tile[aria-current='true'] {
   color: var(--ink-4);
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+/* -----------------------------------------------------------------------------
+   Back-office — registre à onglets
+   -------------------------------------------------------------------------- */
+
+/* Onglets du registre. Un filet d'accent sous l'onglet actif, rien de plus :
+   des pastilles pleines alourdiraient une page déjà dense en données. */
+.admin__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 22px;
+}
+
+.admin__tab {
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 10px 16px 9px;
+  margin-bottom: -1px;
+  cursor: pointer;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  white-space: nowrap;
+  transition:
+    color 0.16s var(--ease-out),
+    border-color 0.16s var(--ease-out);
+}
+
+.admin__tab:hover {
+  color: var(--accent);
+}
+
+.admin__tab[aria-current='true'] {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+}
+
+/* En-tête de contexte du back-office : il ne doit pas ressembler à l'espace
+   d'un client. */
+.admin__count {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--ink-4);
+  margin-left: 7px;
+  letter-spacing: 0.06em;
 }
 
 /* -----------------------------------------------------------------------------
