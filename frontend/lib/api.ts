@@ -201,6 +201,8 @@ export interface CurrentUser {
   firstName: string;
   lastName: string;
   phone: string | null;
+  /** Adresse confirmée. Le contrôle qui compte reste côté API. */
+  emailVerified: boolean;
   createdAt: string;
 }
 

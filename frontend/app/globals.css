@@ -435,6 +435,46 @@ p {
   padding: 0 var(--page-pad) 88px;
 }
 
+/* Écrans à contenu unique — confirmation d'adresse, mot de passe. Une colonne
+   étroite et centrée : rien d'autre ne se lit sur ces pages, et laisser le
+   texte s'étaler sur 1320 px le rendrait pénible à parcourir. */
+.page--narrow {
+  max-width: 620px;
+  padding-top: 56px;
+}
+
+.pad-lg {
+  padding: 34px 34px 38px;
+}
+
+/* Bandeau d'information en tête d'espace personnel. Teinté accent, pas rouge :
+   une adresse à confirmer n'est pas une erreur, c'est une étape en attente.
+   Nommé `reminder` et non `notice` : ce dernier existe déjà plus bas, pour les
+   écrans en attente et les messages d'erreur, avec une largeur et des marges
+   qui l'emporteraient dans la cascade. */
+.reminder {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+  padding: 15px 19px;
+  margin-bottom: 22px;
+  border: 1px solid var(--accent-border-soft);
+  background: var(--accent-tint);
+}
+
+.reminder > div {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .pad-lg {
+    padding: 24px 20px 28px;
+  }
+}
+
 .card,
 .panel {
   border: 1px solid var(--line);

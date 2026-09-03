@@ -25,6 +25,7 @@ Prérequis : Node ≥ 20 (`.nvmrc` : 22) et Docker Desktop.
 npm install                  # installe les deux workspaces
 npm run env:use development  # crée backend/.env et frontend/.env.local
 npm run db:up                # PostgreSQL sur le port 5433
+npm run mail:up              # Mailpit : boîte aux lettres locale
 npm run db:migrate           # applique les migrations
 npm run db:seed              # 6 quartiers, 8 biens, barème, modèles de bail
 npm run dev                  # backend :4000 et frontend :3000 en parallèle
@@ -33,9 +34,16 @@ npm run dev                  # backend :4000 et frontend :3000 en parallèle
 - Front : http://localhost:3000
 - API : http://localhost:4000/api/v1
 - État de l'API et des intégrations : http://localhost:4000/api/v1/health
+- **E-mails envoyés : http://localhost:8025** (Mailpit)
 
 Le port PostgreSQL est **5433**, pas 5432, pour ne pas entrer en conflit avec un
 Postgres déjà installé sur le poste.
+
+Les e-mails partent réellement, en SMTP, mais vers Mailpit : **rien ne quitte la
+machine**, et on voit le rendu exact — liens compris — dans son interface. C'est
+ce qui permet de vérifier le canal de bout en bout sans compte chez un
+prestataire. Sans Mailpit démarré, l'API le signale au lancement et les envois
+échouent proprement, sans faire échouer l'action qui les déclenche.
 
 ### Autres commandes
 
@@ -47,6 +55,8 @@ Postgres déjà installé sur le poste.
 | `npm run db:studio` | Prisma Studio |
 | `npm run db:reset` | remet la base à zéro et rejoue le seed |
 | `npm run db:down` | arrête PostgreSQL |
+| `npm run mail:up` | démarre Mailpit (SMTP :1025, interface :8025) |
+| `npm run mail:down` | arrête Mailpit |
 
 ## Environnements
 
@@ -114,7 +124,18 @@ Ces contraintes sont dans le schéma et dans le code, pas seulement dans la doc.
     le propriétaire voit avant de soumettre, ce que l'API vérifie à la
     soumission, ce que le back-office rejoue avant de mettre en ligne. La
     dupliquer serait le plus sûr moyen de publier un jour un bien sans DPE.
-11. **Le journal du back-office ne raconte que du vrai.** Il est reconstitué à
+11. **Aucun e-mail ne transporte de donnée de dossier.** Ni revenu, ni pièce
+    jointe, ni lien vers un fichier privé : le message dit qu'il s'est passé
+    quelque chose et renvoie sur le site, où la session contrôle qui voit quoi.
+    La promesse faite au locataire (point 6) ne s'arrête pas au bord du
+    navigateur — une boîte aux lettres se transfère, se pirate et s'indexe.
+12. **Le journal des envois ne garde pas le contenu des messages.**
+    `email_messages` consigne le destinataire, le gabarit et le statut, jamais
+    le corps rendu ni les variables. Un lien de réinitialisation en base
+    vaudrait une prise de contrôle de compte pour qui sait lire une ligne SQL —
+    c'est aussi pourquoi ces e-mails partent en direct plutôt que par une file
+    d'attente, qui devrait les stocker.
+13. **Le journal du back-office ne raconte que du vrai.** Il est reconstitué à
     partir d'horodatages réels — publications, candidatures, pièces contrôlées,
     visites, baux. Rien n'y est ajouté pour remplir la page : un journal qui
     mentirait sur ce qui s'est passé n'aurait aucune valeur d'audit. De même,
@@ -136,6 +157,7 @@ un écran doit être fonctionnel avant de passer au suivant.
 | 6 | Génération de bail + signature | **fait** — attribution, injection des champs, contrôle de cohérence, envoi en signature (bloqué : voir ci-dessous) |
 | 7 | Paiement des honoraires | **fait** — détail par poste avec plafonds légaux, comparatif, ouverture du règlement (bloqué : voir ci-dessous) |
 | — | Back-office de l'agence | **fait** — registre à quatre onglets : dossiers, biens, baux & paiements, journal |
+| — | E-mails transactionnels | **socle fait** — driver SMTP vérifié, journal d'envoi, confirmation d'adresse, mot de passe oublié et changé. Les notifications d'événements restent à brancher |
 
 Le schéma de base couvre déjà les sept étapes. **Les sept sont complètes**, et
 le back-office qui les débloque aussi.
@@ -226,6 +248,22 @@ hors dépôt.
   c'est le prestataire qui les collecte, dans son propre cadre, ce qui nous tient
   hors du périmètre PCI-DSS. Reproduire le formulaire de la maquette aurait été
   une faute.
+- **Les notifications d'événements ne sont pas branchées.** Le socle e-mail est
+  posé et vérifié, mais seuls les trois messages liés au compte partent
+  aujourd'hui : confirmation d'adresse, mot de passe oublié, mot de passe
+  modifié. Le propriétaire n'est pas encore prévenu d'une candidature reçue, ni
+  le locataire d'une pièce refusée ou d'une visite confirmée — ces événements
+  existent tous en base, il reste à les relier au module `mail`. Ils ne portent
+  aucun secret : ils pourront, eux, passer par une file d'attente.
+- **La confirmation d'adresse ne bloque encore rien.** `emailVerifiedAt` est
+  désormais renseignée et exposée, un rappel s'affiche en tête des espaces
+  personnels, mais aucune action n'exige une adresse confirmée. À trancher :
+  candidater et publier une annonce devraient probablement l'exiger — un dossier
+  ou une annonce accrochés à une adresse jamais confirmée ne valent rien.
+- **Aucun prestataire d'envoi n'est retenu.** `MAIL_DRIVER=smtp` pointe sur
+  Mailpit en local ; passer en réel ne demande que les variables `SMTP_*` d'un
+  hébergeur de messagerie. Viser un prestataire européen (Brevo, Mailjet) pour
+  rester cohérent avec le choix OVH fait pour la conformité RGPD.
 - Le driver de stockage `s3` n'est pas implémenté : seul `local` fonctionne.
   Le service échoue explicitement si un autre driver est configuré, plutôt que
   d'écrire sur le disque du serveur applicatif en croyant écrire sur l'objet.

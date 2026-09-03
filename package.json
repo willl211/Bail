@@ -24,6 +24,8 @@
     "db:seed": "npm run prisma:seed --workspace backend",
     "db:studio": "npm run prisma:studio --workspace backend",
     "db:reset": "npm run prisma:reset --workspace backend",
+    "mail:up": "docker compose up -d mailpit",
+    "mail:down": "docker compose stop mailpit",
     "env:use": "node scripts/use-env.mjs"
   },
   "devDependencies": {

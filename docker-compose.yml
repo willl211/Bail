@@ -20,5 +20,21 @@ services:
       timeout: 5s
       retries: 10
 
+  # Boîte aux lettres locale : capte tout ce que l'API envoie en SMTP et l'affiche
+  # sur http://localhost:8025. C'est ce qui permet de vérifier réellement les
+  # e-mails — rendu, liens, en-têtes — sans compte chez un prestataire et sans
+  # risquer d'écrire à une vraie adresse depuis un poste de développement.
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: bail-mailpit
+    restart: unless-stopped
+    ports:
+      - '1025:1025' # SMTP
+      - '8025:8025' # interface web
+    environment:
+      MP_MAX_MESSAGES: 500
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+
 volumes:
   bail-pgdata:

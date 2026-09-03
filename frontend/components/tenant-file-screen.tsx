@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import type { CurrentUser, DocumentStatus, TenantFileView } from '@/lib/api';
 import * as fmt from '@/lib/format';
+import { VerifyEmailNotice } from '@/components/verify-email-notice';
 import { submitFile, type TenantFailure } from '@/lib/tenant-client';
 import { LogoutButton } from './logout-button';
 import { TenantDocuments } from './tenant-documents';
@@ -101,6 +102,8 @@ export function TenantFileScreen({
 
   return (
     <div className="page" style={{ paddingBottom: 0 }}>
+      {user.emailVerified ? null : <VerifyEmailNotice email={user.email} />}
+
       <div className="app">
         <aside className="aside">
           <div className="aside__who">

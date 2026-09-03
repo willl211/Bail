@@ -82,3 +82,38 @@ export function login(email: string, password: string) {
 export function logout() {
   return post<void>('/auth/logout');
 }
+
+// ------------------------------------------------- Confirmation d'adresse
+
+/** Renvoie le lien de confirmation au compte connecté. */
+export function resendVerification() {
+  return post<void>('/auth/email/verification');
+}
+
+/**
+ * Confirme l'adresse. Publique côté API : le lien s'ouvre souvent depuis un
+ * autre appareil que celui où la session a été ouverte.
+ */
+export function confirmEmail(token: string) {
+  return post<{ email: string }>('/auth/email/verification/confirm', { token });
+}
+
+// --------------------------------------------------- Mot de passe oublié
+
+/**
+ * Demande un lien de réinitialisation.
+ *
+ * Réussit toujours, y compris pour une adresse inconnue : l'API répond 204 dans
+ * tous les cas, faute de quoi ce formulaire public dirait qui a un compte.
+ */
+export function forgotPassword(email: string) {
+  return post<void>('/auth/password/forgot', { email });
+}
+
+export function resetPassword(token: string, password: string) {
+  return post<void>('/auth/password/reset', { token, password });
+}
+
+export function changePassword(currentPassword: string, password: string) {
+  return post<void>('/auth/password/change', { currentPassword, password });
+}

@@ -45,6 +45,40 @@ export default () => ({
     passwordSaltRounds: parseInt(process.env.PASSWORD_SALT_ROUNDS ?? '12', 10),
   },
 
+  /**
+   * Adresse publique du front.
+   *
+   * Sert à fabriquer les liens des e-mails (confirmation d'adresse,
+   * réinitialisation). L'API ne peut pas la déduire de la requête : un lien
+   * construit à partir d'un en-tête `Host` se laisse détourner vers le domaine
+   * d'un attaquant, et le lien porte justement un secret.
+   */
+  siteUrl: (process.env.PUBLIC_SITE_URL ?? 'http://localhost:3000').replace(/\/+$/, ''),
+
+  /**
+   * E-mails transactionnels.
+   *
+   * `mock` écrit les messages sur disque au lieu de les envoyer ; `smtp` parle
+   * à un vrai serveur — Mailpit en local, le prestataire ailleurs. Aucun
+   * prestataire n'est retenu, mais SMTP étant un protocole et non une API
+   * propriétaire, le driver est vérifiable de bout en bout sans compte.
+   */
+  mail: {
+    driver: process.env.MAIL_DRIVER ?? 'mock',
+    /** Expéditeur affiché. Une adresse sans boîte de réception. */
+    from: process.env.MAIL_FROM ?? 'Bail <ne-pas-repondre@bail.local>',
+    /** Adresse de réponse, quand elle diffère de l'expéditeur. */
+    replyTo: process.env.MAIL_REPLY_TO || undefined,
+    smtp: {
+      host: process.env.SMTP_HOST ?? 'localhost',
+      port: parseInt(process.env.SMTP_PORT ?? '1025', 10),
+      /** TLS implicite (port 465). Ailleurs, STARTTLS est négocié. */
+      secure: process.env.SMTP_SECURE === 'true',
+      user: process.env.SMTP_USER || undefined,
+      password: process.env.SMTP_PASSWORD || undefined,
+    },
+  },
+
   storage: {
     driver: process.env.STORAGE_DRIVER ?? 'local',
     localPath: process.env.STORAGE_LOCAL_PATH ?? './storage',

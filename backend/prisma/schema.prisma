@@ -80,6 +80,9 @@ model User {
   payments  Payment[]  @relation("PaymentPayer")
   sessions  Session[]
 
+  authTokens    AuthToken[]
+  emailMessages EmailMessage[]
+
   @@index([role])
   @@map("users")
 }
@@ -118,6 +121,88 @@ model Session {
   @@index([userId, revokedAt])
   @@index([expiresAt])
   @@map("sessions")
+}
+
+enum AuthTokenPurpose {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+/// Jeton à usage unique envoyé par e-mail (confirmation d'adresse, réinitialisation
+/// de mot de passe).
+///
+/// Même règle que `Session`, et pour la même raison : le lien porte un secret
+/// aléatoire dont seule l'empreinte SHA-256 est stockée. Une fuite de cette
+/// table ne permet donc de rejouer aucun lien — or un lien de réinitialisation
+/// vaut exactement un mot de passe.
+model AuthToken {
+  id String @id @default(uuid())
+
+  /// Empreinte SHA-256 du secret présent dans le lien. Jamais le secret lui-même.
+  tokenHash String           @unique
+  purpose   AuthTokenPurpose
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  expiresAt DateTime
+  /// Renseigné à la première utilisation : un jeton ne sert qu'une fois.
+  consumedAt DateTime?
+
+  /// Contexte de la demande, pour l'audit d'une réinitialisation contestée.
+  ipAddress String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, purpose])
+  @@index([expiresAt])
+  @@map("auth_tokens")
+}
+
+enum EmailStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+/// Journal des e-mails transactionnels.
+///
+/// Il enregistre **qu'un** message est parti, jamais **ce qu'il disait** : ni
+/// corps rendu, ni variables. Deux raisons. La première est réglementaire —
+/// stocker le contenu ferait de cette table une copie des données que le reste
+/// du produit s'interdit de recopier. La seconde est plus directe : un lien de
+/// réinitialisation en base vaudrait une prise de contrôle de compte pour qui
+/// sait lire une ligne SQL.
+///
+/// Sert à trois choses : ne pas envoyer deux fois, répondre à « je n'ai rien
+/// reçu », et alimenter le journal du back-office.
+model EmailMessage {
+  id String @id @default(uuid())
+
+  /// Clé du gabarit (`password-reset`, `email-verification`, …).
+  template String
+  /// Adresse au moment de l'envoi : elle peut changer ensuite sur le compte.
+  recipientEmail String
+  subject        String
+
+  recipientId String?
+  recipient   User?   @relation(fields: [recipientId], references: [id], onDelete: SetNull)
+
+  status   EmailStatus @default(PENDING)
+  attempts Int         @default(0)
+  sentAt   DateTime?
+  /// Message d'erreur du prestataire, tronqué. Aucun contenu de l'e-mail.
+  lastError String?
+
+  /// Driver ayant traité l'envoi, pour distinguer un envoi réel d'un simulé.
+  driver String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([recipientId, createdAt])
+  @@index([status])
+  @@map("email_messages")
 }
 
 // =============================================================================

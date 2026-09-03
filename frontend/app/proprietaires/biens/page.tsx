@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { OwnerAside } from '@/components/owner-aside';
 import { getCurrentUser, getOwnerProperties, getOwnerSummary } from '@/lib/api';
+import { VerifyEmailNotice } from '@/components/verify-email-notice';
 import type { OwnerProperty, PropertyStatus } from '@/lib/api';
 import * as fmt from '@/lib/format';
 
@@ -77,6 +78,8 @@ export default async function OwnerPropertiesPage() {
 
   return (
     <div className="page" style={{ paddingBottom: 0 }}>
+      {user.emailVerified ? null : <VerifyEmailNotice email={user.email} />}
+
       <div className="app">
         <OwnerAside user={user} summary={summary} current="properties" />
 

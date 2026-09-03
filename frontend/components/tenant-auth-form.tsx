@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { login, register, type AuthFailure } from '@/lib/auth-client';
@@ -158,7 +159,11 @@ export function TenantAuthForm({ redirectTo }: { redirectTo?: string }) {
           />
           {mode === 'signup' ? (
             <span className="field__hint">12 caractères minimum.</span>
-          ) : null}
+          ) : (
+            <Link href="/mot-de-passe-oublie" className="field__hint link">
+              Mot de passe oublié ?
+            </Link>
+          )}
         </label>
 
         {error ? (

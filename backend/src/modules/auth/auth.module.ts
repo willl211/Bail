@@ -1,5 +1,6 @@
 import { Global, Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
+import { AccountService } from './account.service';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { SessionGuard } from './session.guard';
@@ -18,7 +19,7 @@ import { SessionGuard } from './session.guard';
 @Global()
 @Module({
   controllers: [AuthController],
-  providers: [AuthService, { provide: APP_GUARD, useClass: SessionGuard }],
-  exports: [AuthService],
+  providers: [AuthService, AccountService, { provide: APP_GUARD, useClass: SessionGuard }],
+  exports: [AuthService, AccountService],
 })
 export class AuthModule {}

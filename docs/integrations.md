@@ -146,3 +146,59 @@ La mise en ligne d'un bien depuis le back-office resynchronise l'assiette
 facturée au propriétaire (`SubscriptionService.syncQuantity`). Tant que
 `PAYMENT_DRIVER=mock`, cette synchronisation ne sort pas de la base ; elle
 deviendra un appel réel au prestataire le jour où un compte est branché.
+
+## E-mails — précision du 4 septembre 2026
+
+Le contrat du prestataire est écrit (`MailDriver`) et deux drivers existent :
+
+| Driver | Rôle |
+|---|---|
+| `mock` | écrit chaque message dans `storage/private/mails/` (`.html` + `.txt`). Un e-mail se juge sur son rendu et ses liens, pas sur une ligne de log. |
+| `smtp` | envoi réel, via nodemailer. |
+
+C'est la **seule intégration réelle écrite avant qu'un compte n'existe**, et
+c'est assumé : contrairement à DocuSign, SMTP est un protocole, pas une API
+propriétaire. Le driver se vérifie de bout en bout contre
+[Mailpit](https://github.com/axllent/mailpit) — `npm run mail:up`, interface sur
+http://localhost:8025 — connexion, en-têtes, encodage, rendu compris. La même
+classe parlera ensuite à Brevo, Mailjet ou SES : seules les variables changent.
+
+Un nom de driver inconnu fait échouer le démarrage, comme ailleurs. La
+vérification SMTP au lancement, elle, ne bloque pas : une API qui refuserait de
+démarrer parce qu'un serveur de messagerie est momentanément muet rendrait tout
+le site indisponible pour un canal accessoire. Elle se contente d'un
+avertissement.
+
+### Ce que les e-mails ne contiennent pas
+
+Aucune donnée de dossier — ni revenu, ni pièce jointe, ni lien vers un fichier
+privé. Le message annonce qu'il s'est passé quelque chose et renvoie sur le
+site, où la session contrôle qui voit quoi. Une boîte aux lettres se transfère,
+se pirate et s'indexe : la promesse faite au locataire ne s'arrête pas au bord
+du navigateur.
+
+Pas d'image distante non plus, ni de pixel de suivi. Le HTML est écrit en tables
+et en styles en ligne, avec `bgcolor` doublant chaque `background` : sans quoi
+le bouton d'action s'affiche en blanc sur blanc dans une partie des clients de
+messagerie.
+
+### Journal des envois
+
+`email_messages` consigne le destinataire, le gabarit, le sujet, le statut et le
+driver — **jamais le corps rendu ni les variables**. C'est aussi la raison pour
+laquelle les messages porteurs d'un lien à usage unique partent en direct plutôt
+que par une file d'attente : une file devrait stocker ce lien, et un lien de
+réinitialisation en base vaut un mot de passe en clair.
+
+Un plafond de trois envois par gabarit, par adresse et par heure empêche
+d'utiliser les formulaires publics pour inonder la boîte de quelqu'un d'autre.
+Le dépassement est silencieux côté « mot de passe oublié » : signaler qu'on a
+atteint le plafond reviendrait à confirmer que l'adresse a un compte.
+
+### État au 4 septembre 2026
+
+Trois gabarits en service, tous liés au compte : confirmation d'adresse, lien de
+réinitialisation, notification de mot de passe modifié. Les notifications
+d'événements — candidature reçue, pièce refusée, visite confirmée, bail signé —
+restent à brancher ; elles ne portent aucun secret et pourront passer par une
+file d'attente.

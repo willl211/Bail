@@ -7,6 +7,7 @@ import { PropertiesModule } from './modules/properties/properties.module';
 import { DistrictsModule } from './modules/districts/districts.module';
 import { MarketModule } from './modules/market/market.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { MailModule } from './modules/mail/mail.module';
 import { OwnerModule } from './modules/owner/owner.module';
 import { StorageModule } from './modules/storage/storage.module';
 import { PaymentsModule } from './modules/payments/payments.module';
@@ -23,6 +24,7 @@ import { BackofficeModule } from './modules/backoffice/backoffice.module';
   imports: [
     ConfigModule.forRoot({ isGlobal: true, load: [configuration] }),
     PrismaModule,
+    MailModule,
     // AuthModule enregistre le guard global : toute route est privée par défaut
     // et doit être marquée `@Public()` pour ne pas l'être.
     AuthModule,

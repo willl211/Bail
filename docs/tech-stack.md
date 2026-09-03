@@ -15,6 +15,7 @@ Décisions validées par le porteur de projet — ne pas rouvrir ces choix sans 
 | Outil de suivi de projet | Pas de préférence exprimée — recommandation : Linear |
 | Environnements | Dev / Staging / Production dès le départ |
 | Authentification | **Session serveur + cookie `httpOnly`** (tranché le 2 septembre 2026) |
+| E-mails transactionnels | **SMTP** (nodemailer), prestataire non tranché — viser un hébergeur de messagerie européen, cohérent avec le choix OVH. Mailpit en local. |
 
 ## Authentification
 

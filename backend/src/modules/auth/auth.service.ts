@@ -7,10 +7,11 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { User, UserRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { timingSafeEqual } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { hashSecret, newSecret } from './tokens';
 
 /** Profil renvoyé au client. Ne contient jamais le hachage du mot de passe. */
 export interface PublicUser {
@@ -20,6 +21,11 @@ export interface PublicUser {
   firstName: string;
   lastName: string;
   phone: string | null;
+  /**
+   * Adresse confirmée. Exposé au front pour qu'il puisse rappeler la
+   * confirmation en attente — le contrôle qui compte reste côté API.
+   */
+  emailVerified: boolean;
   createdAt: string;
 }
 
@@ -51,6 +57,7 @@ export function toPublicUser(user: User): PublicUser {
     firstName: user.firstName,
     lastName: user.lastName,
     phone: user.phone,
+    emailVerified: user.emailVerifiedAt !== null,
     createdAt: user.createdAt.toISOString(),
   };
 }
@@ -68,23 +75,15 @@ export class AuthService {
     return this.config.get<number>('auth.sessionTtlDays', 30) * 24 * 60 * 60 * 1000;
   }
 
-  /**
-   * Le cookie porte un secret aléatoire ; la base ne garde que son empreinte.
-   * SHA-256 suffit et convient ici : le secret a 256 bits d'entropie, il n'est
-   * pas devinable par force brute, contrairement à un mot de passe choisi par
-   * un humain — qui, lui, exige bcrypt.
-   */
-  private hashToken(token: string): string {
-    return createHash('sha256').update(token, 'utf8').digest('hex');
-  }
-
   private async createSession(user: User, context: SessionContext): Promise<SessionResult> {
-    const token = randomBytes(32).toString('base64url');
+    // Le cookie porte un secret aléatoire ; la base ne garde que son empreinte
+    // (voir `tokens.ts`).
+    const token = newSecret();
     const expiresAt = new Date(Date.now() + this.ttlMs);
 
     await this.prisma.session.create({
       data: {
-        tokenHash: this.hashToken(token),
+        tokenHash: hashSecret(token),
         userId: user.id,
         expiresAt,
         userAgent: context.userAgent?.slice(0, 500),
@@ -157,7 +156,7 @@ export class AuthService {
     if (!token) return null;
 
     const session = await this.prisma.session.findUnique({
-      where: { tokenHash: this.hashToken(token) },
+      where: { tokenHash: hashSecret(token) },
       include: { user: true },
     });
 
@@ -179,7 +178,7 @@ export class AuthService {
   async logout(token: string | undefined): Promise<void> {
     if (!token) return;
     await this.prisma.session.updateMany({
-      where: { tokenHash: this.hashToken(token), revokedAt: null },
+      where: { tokenHash: hashSecret(token), revokedAt: null },
       data: { revokedAt: new Date() },
     });
   }
