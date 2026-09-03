@@ -68,7 +68,7 @@ choisit par variable d'environnement, et `/health` affiche celui qui tourne.
 | Besoin | Prestataire | Driver par défaut |
 |---|---|---|
 | KYC / vérification des pièces | **non choisi** | `mock` (seule valeur acceptée) |
-| Signature électronique du bail | DocuSign | `mock` en dev, sandbox en staging |
+| Signature électronique du bail | DocuSign | `mock` (driver DocuSign pas encore écrit) |
 | Paiement (abonnements, honoraires) | Stripe | `mock` en dev, clés de test ensuite |
 | Visio des visites à distance | **non choisi** (reco : Daily.co) | `mock` (seule valeur acceptée) |
 
@@ -121,10 +121,10 @@ un écran doit être fonctionnel avant de passer au suivant.
 | 3 | Compte + dossier locataire | **fait** — compte, situation, dépôt des pièces, garant, transmission au contrôle |
 | 4 | Candidature à un bien | **fait** — aperçu, blocages/avis selon les critères du bien, envoi, suivi |
 | 5 | Prise de RDV de visite | **fait** — créneaux ouverts par le propriétaire, décision sur les candidatures, réservation et annulation |
-| 6 | Génération de bail + signature | à faire |
-| 7 | Paiement des honoraires | à faire |
+| 6 | Génération de bail + signature | **fait** — attribution, injection des champs, contrôle de cohérence, envoi en signature (bloqué : voir ci-dessous) |
+| 7 | Paiement des honoraires | **fait** — détail par poste avec plafonds légaux, comparatif, ouverture du règlement (bloqué : voir ci-dessous) |
 
-Le schéma de base couvre déjà les sept étapes. Les étapes 1 à 5 sont complètes.
+Le schéma de base couvre déjà les sept étapes. **Les sept sont complètes.**
 L'écran « Candidatures reçues » de l'étape 2 n'est plus en lecture seule : le
 propriétaire y retient un candidat — ce qui lui ouvre la prise de rendez-vous —
 ou l'écarte, avec un motif transmis. L'acceptation définitive, qui déclenche la
@@ -185,6 +185,33 @@ Ces comptes n'existent que dans le seed de développement.
   prestataire de paiement n'est branché : la visite est alors confirmée d'emblée
   et l'écran l'annonce. Elle redeviendra bloquante dès que `PAYMENT_DRIVER`
   passera à `stripe`.
+- **Aucun bail ne peut être signé**, et c'est voulu : le modèle légal seedé est
+  un squelette de champs sans aucune clause, `isActive = false`, et le réglage
+  `lease.generationEnabled` est à `false`. La chaîne complète est construite et
+  vérifiée — attribution, injection, contrôle de cohérence, envoi, événements de
+  signature — mais elle refuse d'envoyer tant que le texte de l'avocat n'est pas
+  publié. Un acte sans clauses n'engagerait personne (CLAUDE.md règle 2).
+- **À faire : écrire le driver DocuSign.** Décision du 3 septembre 2026 —
+  reporté, pas abandonné. Contrairement à Stripe, dont le SDK typé permet une
+  intégration vérifiable sans compte, une intégration DocuSign écrite à
+  l'aveugle — JWT, gabarits d'enveloppe, onglets de signature — ne serait
+  vérifiable par rien. Elle s'écrit contre le bac à sable, dès que le compte
+  existe. L'interface (`SignatureDriver`) et les variables `DOCUSIGN_*` sont
+  déjà en place : il n'y a qu'une classe à ajouter et un nom de driver à
+  accepter dans `SignatureModule`.
+- L'**adresse du bailleur n'est collectée nulle part**, alors qu'elle est
+  obligatoire au bail (loi n° 89-462, article 3). Le contrôle de cohérence la
+  signale comme champ manquant. À ajouter au compte propriétaire avant le
+  premier bail réel.
+- **Aucun honoraire ne peut être encaissé**, pour trois raisons cumulées, toutes
+  volontaires : le barème est `isLegallyApproved = false`, aucun prestataire de
+  paiement n'est branché, et le règlement suppose un bail signé — qui ne peut pas
+  l'être non plus. L'écran l'annonce point par point.
+- **Aucun formulaire de carte bancaire n'a été construit**, contrairement à la
+  maquette. Les coordonnées bancaires ne doivent jamais transiter par Bail :
+  c'est le prestataire qui les collecte, dans son propre cadre, ce qui nous tient
+  hors du périmètre PCI-DSS. Reproduire le formulaire de la maquette aurait été
+  une faute.
 - Le driver de stockage `s3` n'est pas implémenté : seul `local` fonctionne.
   Le service échoue explicitement si un autre driver est configuré, plutôt que
   d'écrire sur le disque du serveur applicatif en croyant écrire sur l'objet.

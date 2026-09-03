@@ -21,6 +21,7 @@ import type { Response } from 'express';
 import type { IncomingFile } from '../storage/storage.service';
 import { CurrentUser, Roles } from '../auth/session.guard';
 import type { PublicUser } from '../auth/auth.service';
+import { LeaseService } from '../lease/lease.service';
 import { OwnerApplicationsService } from './applications.service';
 import { OwnerService } from './owner.service';
 import { UpsertPropertyDto } from './dto/upsert-property.dto';
@@ -40,6 +41,7 @@ export class OwnerController {
   constructor(
     private readonly owner: OwnerService,
     private readonly applications: OwnerApplicationsService,
+    private readonly leases: LeaseService,
   ) {}
 
   /** Les biens du propriétaire connecté, tous statuts confondus. */
@@ -78,6 +80,21 @@ export class OwnerController {
     @Param('applicationId') applicationId: string,
   ) {
     return this.applications.shortlist(user.id, applicationId);
+  }
+
+  /**
+   * Accepte un candidat : ouvre son bail, fige les autres candidatures du bien
+   * et retire l'annonce de la diffusion.
+   *
+   * Un seul geste parce que c'en est un seul : le logement est attribué.
+   */
+  @Post('applications/:applicationId/accept')
+  @HttpCode(200)
+  acceptApplication(
+    @CurrentUser() user: PublicUser,
+    @Param('applicationId') applicationId: string,
+  ) {
+    return this.leases.acceptAndPrepare(user.id, applicationId);
   }
 
   /** Écarte un candidat, et annule le rendez-vous éventuellement pris. */

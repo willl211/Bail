@@ -38,6 +38,63 @@ suivent pas. C'est l'obligation de transparence, elle est remplie par l'écran.
 À faire valider par l'avocat en même temps que le mandat : la formulation de la
 mention, et la durée de conservation d'une candidature refusée.
 
+## Honoraires locataire (écran 7, 3 septembre 2026)
+
+Deux postes, et deux seulement, parce que la loi les plafonne séparément
+(décret n° 2014-890) : visite + constitution du dossier + rédaction du bail
+d'un côté, état des lieux d'entrée de l'autre. Les montants viennent de
+`fee_schedules` ; les **plafonds légaux** sont en dur (8 €/m² et 3 €/m² en zone
+non tendue) et affichés à côté de chaque ligne — les mettre en base laisserait
+croire qu'on peut les relever. La zone de tension applicable à Metz reste à
+confirmer avec l'avocat : si Metz s'avérait en zone tendue, les plafonds
+changent.
+
+**Rien n'est encaissé aujourd'hui**, pour trois raisons cumulées : le barème
+n'est pas validé juridiquement, aucun prestataire de paiement n'est branché, et
+le bail ne peut pas être signé. L'écran énonce les trois.
+
+**Aucun formulaire de carte n'a été construit**, contrairement à la maquette.
+Les coordonnées bancaires ne transitent jamais par Bail : le prestataire les
+collecte dans son propre cadre, ce qui nous tient hors du périmètre PCI-DSS.
+L'API n'ouvre qu'une intention de paiement et renvoie de quoi la confirmer.
+
+Le comparatif ne montre qu'un repère : le **plafond légal**, seule borne
+vérifiable. Un repère « agence en ligne » a été écarté faute de donnée qui le
+fonde — un chiffre inventé dans un comparatif qui nous met en valeur n'a pas sa
+place.
+
 ## Contrainte fixe à respecter dès maintenant
 
 Le bail généré par l'app doit être **verrouillé sur un modèle légal type** — la génération assistée par IA vérifie la cohérence des champs (noms, adresse, loyer, durée), elle n'invente pas de clauses ni ne rédige librement. C'est une contrainte de conception à respecter dès la construction du module bail, indépendamment de l'avancement du reste du juridique.
+
+### Comment c'est tenu, au 3 septembre 2026
+
+**Le contrôle est déterministe, pas confié à un modèle de langage.** C'est un
+écart assumé à la lettre du brief, au service de son intention : vérifier que
+880 € égale 880 €, qu'un dépôt ne dépasse pas un plafond légal ou qu'un nom
+correspond à une pièce vérifiée sont des comparaisons. Une comparaison ne se
+trompe pas ; un modèle interrogé sur la même question peut se tromper, et
+personne ne saurait dire quand. Sur un acte qui engage deux parties pour trois
+ans, l'incertitude n'apporte rien. Huit contrôles sont menés : intégrité du
+modèle, type de bail, loyer, surface, identités, plafond du dépôt, durée légale,
+complétude des champs.
+
+**Rien n'est rédigé.** Le rendu remplace des marqueurs `{{ champ }}` dans un
+texte verrouillé, et ne fait rien d'autre. L'écran surligne les valeurs
+injectées pour que la promesse se vérifie à l'œil : ce qui est surligné vient
+des dossiers, tout le reste vient du modèle. Un marqueur sans valeur reste
+visible en clair plutôt que d'être effacé en silence — un acte au texte tronqué
+serait plus difficile à repérer.
+
+**Aucun bail ne peut partir en signature aujourd'hui.** Le modèle seedé est un
+squelette sans clauses, `isActive = false`, et `lease.generationEnabled` est à
+`false`. La chaîne refuse l'envoi et dit pourquoi. Elle a été vérifiée en état
+passant sur un modèle temporairement publié, puis remise à l'état bloqué.
+
+**Deux manques à combler avant le premier bail réel** :
+
+- l'**adresse du bailleur** n'est collectée nulle part, alors qu'elle est
+  obligatoire (article 3 de la loi de 1989) ; le contrôle la signale ;
+- le champ verrouillé `clausesLegalesTexteValide` attend le texte de l'avocat.
+  Dans un modèle réellement publié, ces clauses feront partie du corps et le
+  marqueur n'existera plus.

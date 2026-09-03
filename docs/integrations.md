@@ -5,7 +5,7 @@ Ces prestataires peuvent être branchés en mode test/sandbox pendant tout le d�
 | Besoin | Prestataire | Statut |
 |---|---|---|
 | KYC / vérification des pièces (dossier locataire, avant visite) | Non choisi | **Interface en place, driver `mock` seul accepté** (voir ci-dessous) |
-| Signature électronique du bail | DocuSign | Confirmé — utiliser leur environnement sandbox pendant le dev |
+| Signature électronique du bail | DocuSign | Confirmé — **interface en place, driver non écrit** (voir ci-dessous) |
 | Paiement (abonnements propriétaires, honoraires) | Stripe | Confirmé — **code complet, aucun compte branché** (voir ci-dessous) |
 | Visio pour les visites à distance | Non choisi formellement | **Interface en place, driver `mock` seul accepté.** Recommandation : Daily.co (le plus simple à intégrer et le moins cher pour démarrer, comparé à Twilio) |
 
@@ -80,6 +80,25 @@ c'est justement pour la faire contrôler qu'on transmet.
 Le contrat prévoit aussi un régime **différé** (verdict rendu plus tard par
 webhook) dont le mock ne se sert pas : une intégration réelle en dépendra, et
 l'ajouter après coup obligerait à retoucher le code métier.
+
+## Signature — précision du 3 septembre 2026
+
+Le contrat du prestataire est écrit (`SignatureDriver`) et tout le module bail
+passe par lui : création d'enveloppe sur un document figé et son empreinte,
+annulation, notifications signées, récupération du document signé.
+
+**Le driver DocuSign n'est pas écrit**, et c'est délibéré. Le driver Stripe a pu
+l'être sans compte parce que son SDK typé rend l'intégration vérifiable : le
+typage a d'ailleurs attrapé une vraie erreur. Une intégration DocuSign écrite à
+l'aveugle — authentification JWT, gabarits d'enveloppe, positionnement des
+onglets de signature — ne serait vérifiable par rien et donnerait une fausse
+impression d'avancement. Elle s'écrira contre le bac à sable, le jour où le
+compte existe. Les variables `DOCUSIGN_*` sont déjà prévues dans `env/`.
+
+Le simulateur ne signe rien tout seul : les enveloppes restent « envoyées »
+jusqu'à ce qu'un événement arrive, comme chez un vrai prestataire où c'est le
+signataire qui agit. Et `downloadSigned` échoue explicitement plutôt que de
+fabriquer un document qui ressemblerait à une preuve sans en être une.
 
 ## Protocole de visite (v0)
 

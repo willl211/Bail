@@ -15,6 +15,8 @@ import { TenantModule } from './modules/tenant/tenant.module';
 import { ApplicationsModule } from './modules/applications/applications.module';
 import { VideoModule } from './modules/video/video.module';
 import { VisitsModule } from './modules/visits/visits.module';
+import { SignatureModule } from './modules/signature/signature.module';
+import { LeaseModule } from './modules/lease/lease.module';
 
 @Module({
   imports: [
@@ -35,6 +37,8 @@ import { VisitsModule } from './modules/visits/visits.module';
     ApplicationsModule,
     VideoModule,
     VisitsModule,
+    SignatureModule,
+    LeaseModule,
   ],
 })
 export class AppModule {}

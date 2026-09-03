@@ -710,3 +710,139 @@ export function getOwnerSlots(reference: string) {
     `/owner/properties/${encodeURIComponent(reference)}/slots`,
   );
 }
+
+// --- Bail et signature -------------------------------------------------------
+
+export type LeaseStatus =
+  | 'DRAFT'
+  | 'FIELDS_VALIDATED'
+  | 'SENT_FOR_SIGNATURE'
+  | 'PARTIALLY_SIGNED'
+  | 'SIGNED'
+  | 'DECLINED'
+  | 'EXPIRED'
+  | 'CANCELLED';
+
+export interface RenderedSegment {
+  text: string;
+  /** Nom du champ quand le fragment est une valeur injectée. */
+  field: string | null;
+}
+
+export interface RenderedBlock {
+  heading: number;
+  segments: RenderedSegment[];
+}
+
+export interface LeaseCheck {
+  key: string;
+  label: string;
+  detail: string;
+  source: string;
+  status: 'CONFORME' | 'ANOMALIE' | 'NON_VERIFIABLE';
+  message: string | null;
+}
+
+export interface LeaseValidationReport {
+  checks: LeaseCheck[];
+  anomalies: string[];
+  unverifiable: string[];
+  fieldCount: number;
+  missingFields: string[];
+  validatedAt: string;
+}
+
+export interface LeaseView {
+  reference: string;
+  status: LeaseStatus;
+  type: 'NU' | 'MEUBLE';
+  propertyReference: string;
+  propertyTitle: string;
+  addressLine: string;
+  templateLabel: string;
+  templateCode: string;
+  templateVersion: number;
+  templatePublished: boolean;
+  startDate: string;
+  endDate: string;
+  durationMonths: number;
+  rentCents: number;
+  chargesCents: number;
+  depositCents: number;
+  document: RenderedBlock[];
+  validation: LeaseValidationReport | null;
+  signers: { role: 'LANDLORD' | 'TENANT'; fullName: string; signed: boolean; signedAt: string | null }[];
+  annexes: { type: string; label: string; present: boolean; detail: string }[];
+  history: { at: string; tone: 'ok' | 'pending' | 'reject' | 'neutral'; title: string; note: string }[];
+  blockers: string[];
+  signatureDriver: string;
+  sentForSignatureAt: string | null;
+  signedAt: string | null;
+}
+
+export interface LeaseSummary {
+  reference: string;
+  status: LeaseStatus;
+  propertyReference: string;
+  propertyTitle: string;
+  startDate: string;
+  rentCents: number;
+}
+
+export function getLease(reference: string) {
+  return apiFetchAuthed<LeaseView>(`/leases/${encodeURIComponent(reference)}`);
+}
+
+export function getMyLeases() {
+  return apiFetchAuthed<LeaseSummary[]>('/leases');
+}
+
+// --- Honoraires locataire ----------------------------------------------------
+
+export interface FeeLine {
+  key: string;
+  label: string;
+  detail: string;
+  amountCents: number;
+  /** Plafond légal applicable à ce poste, pour le même bien. */
+  legalCapCents: number;
+}
+
+export interface FeeBenchmark {
+  agencyCents: number;
+  platformCents: number;
+  legalCapCents: number;
+}
+
+export interface FeesView {
+  leaseReference: string;
+  leaseStatus: LeaseStatus;
+  propertyReference: string;
+  propertyTitle: string;
+  surfaceM2: number;
+  lines: FeeLine[];
+  totalCents: number;
+  ownerShareCents: number;
+  centsPerSqm: number;
+  feeScheduleCode: string | null;
+  feeScheduleApproved: boolean;
+  benchmark: FeeBenchmark | null;
+  depositCents: number;
+  firstRentCents: number;
+  moveInTotalCents: number;
+  moveInDate: string;
+  payment: {
+    reference: string;
+    status: PaymentStatus;
+    amountCents: number;
+    paidAt: string | null;
+  } | null;
+  blockers: string[];
+  paymentDriver: string;
+}
+
+export function getLeaseFees(reference: string) {
+  return apiFetchAuthed<FeesView>(
+    `/tenant/leases/${encodeURIComponent(reference)}/fees`,
+  );
+}

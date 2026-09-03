@@ -631,6 +631,12 @@ async function main() {
         "Taux d'un mandat de gestion locative, en part du loyer annuel encaissé. Sert au comparatif de l'écran Abonnement. Ni un tarif Bail, ni un engagement.",
     },
     {
+      key: 'tenant.benchmark.agencyFeeCentsPerSqm',
+      value: 1100,
+      description:
+        "Honoraires locataire d'une agence classique, en centimes par m². Calé sur le plafond légal en zone non tendue — 11 €/m² (8 € visite/dossier/rédaction + 3 € état des lieux, décret n° 2014-890) — parce que c'est ce que les agences facturent le plus souvent. Seul repère du comparatif : il est vérifiable, contrairement à une estimation de marché.",
+    },
+    {
       key: 'lease.generationEnabled',
       value: false,
       description:
@@ -867,6 +873,12 @@ async function main() {
       // Lue seulement si le propriétaire est passé dessus : c'est ce qui rend
       // le « délai de réponse » mesurable au lieu d'être paramétré.
       readAt: seed.readHoursAfter === null ? null : hoursAgo(seed.submittedHoursAgo - seed.readHoursAfter),
+      // Remis à zéro explicitement : sans ça, un motif de refus ou une date de
+      // décision laissés par un essai survivraient au rejeu du seed, et l'état
+      // de démonstration divergerait du fichier.
+      rejectionReason: null,
+      decidedAt: null,
+      ownerNote: null,
     };
 
     const application = await prisma.application.upsert({

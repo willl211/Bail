@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import type { ApplicationStatus } from '@/lib/api';
+import { acceptApplication } from '@/lib/lease-client';
 import {
   rejectApplication,
   shortlistApplication,
@@ -30,7 +31,7 @@ export function ApplicationDecision({
   status: ApplicationStatus;
 }) {
   const router = useRouter();
-  const [pending, setPending] = useState<'shortlist' | 'reject' | null>(null);
+  const [pending, setPending] = useState<'shortlist' | 'reject' | 'accept' | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [reason, setReason] = useState('');
   const [error, setError] = useState<VisitFailure | null>(null);
@@ -38,12 +39,18 @@ export function ApplicationDecision({
   const decided = DECIDED.includes(status);
   const scheduled = status === 'VISIT_SCHEDULED';
 
-  const run = async (action: 'shortlist' | 'reject') => {
+  const run = async (action: 'shortlist' | 'reject' | 'accept') => {
     setPending(action);
     setError(null);
     try {
       if (action === 'shortlist') await shortlistApplication(applicationId);
-      else await rejectApplication(applicationId, reason || undefined);
+      else if (action === 'accept') {
+        const lease = await acceptApplication(applicationId);
+        // Accepter ouvre le bail : on y emmène directement, c'est la suite
+        // immédiate du geste.
+        router.push(`/baux/${lease.reference}`);
+        return;
+      } else await rejectApplication(applicationId, reason || undefined);
       setConfirming(false);
       setReason('');
       router.refresh();
@@ -132,9 +139,23 @@ export function ApplicationDecision({
               Écarter
             </button>
           </div>
+          {/* Attribuer le logement n'a de sens qu'une fois le candidat retenu :
+              accepter d'emblée un dossier qu'on n'a pas encore examiné, sans
+              visite, n'est pas le parcours. */}
+          {status === 'SHORTLISTED' || scheduled ? (
+            <button
+              type="button"
+              className="btn btn--ink btn-block mt-12"
+              onClick={() => run('accept')}
+              disabled={pending !== null}
+            >
+              {pending === 'accept' ? 'Ouverture du bail…' : 'Attribuer le logement'}
+            </button>
+          ) : null}
+
           <p className="field__hint mt-10">
-            {scheduled
-              ? 'Le candidat a choisi un créneau. Écarter la candidature annulera le rendez-vous.'
+            {status === 'SHORTLISTED' || scheduled
+              ? 'Attribuer le logement ouvre le bail, fige les autres candidatures et retire l’annonce.'
               : 'Retenir un candidat lui ouvre la prise de rendez-vous. Vous pouvez en retenir plusieurs.'}
           </p>
         </>

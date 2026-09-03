@@ -2916,8 +2916,12 @@ textarea.field__box {
   margin-top: 3px;
 }
 
-/* Sous-titre monospace d'une identité (référence de dossier, âge). */
+/* Sous-titre monospace d'une identité (référence de dossier, âge).
+   `display: block` : la règle sert aussi sur des `span`, où la marge et le
+   retour à la ligne seraient sinon ignorés et le sous-titre se collerait au
+   libellé. */
 .doc__m {
+  display: block;
   font-family: var(--font-mono), ui-monospace, monospace;
   font-size: 10.5px;
   color: var(--ink-4);
@@ -3266,6 +3270,183 @@ a.tile[aria-current='true'] {
 .slot:disabled:hover {
   border-color: var(--line);
   color: var(--ink);
+}
+
+/* -----------------------------------------------------------------------------
+   Bail — parcours, acte et signature
+   -------------------------------------------------------------------------- */
+
+/* Frise du parcours : où en est le bail, d'un coup d'œil. Défile plutôt que de
+   s'écraser — six étapes tassées ne se lisent plus. */
+.flow {
+  display: flex;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  overflow-x: auto;
+}
+
+.flow__s {
+  flex: 1 1 0;
+  min-width: 132px;
+  padding: 13px 15px;
+  border-right: 1px solid var(--line-softer);
+  position: relative;
+}
+
+.flow__s:last-child {
+  border-right: 0;
+}
+
+.flow__n {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: var(--ink-4);
+}
+
+.flow__t {
+  font-size: 13px;
+  font-weight: 600;
+  margin-top: 6px;
+  letter-spacing: -0.008em;
+}
+
+.flow__d {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--ink-4);
+  margin-top: 4px;
+  letter-spacing: 0.05em;
+}
+
+.flow__s--done {
+  background: var(--accent-tint);
+}
+
+.flow__s--done .flow__n,
+.flow__s--done .flow__d {
+  color: var(--accent);
+}
+
+.flow__s--now {
+  background: var(--accent);
+}
+
+.flow__s--now .flow__n,
+.flow__s--now .flow__d {
+  color: var(--accent-on);
+  opacity: 0.8;
+}
+
+.flow__s--now .flow__t {
+  color: var(--accent-on);
+}
+
+.flow__s--next .flow__t {
+  color: var(--ink-4);
+}
+
+/* L'acte lui-même. Fond enfoncé et bordure marquée : c'est un document, pas
+   un panneau d'interface. */
+.deed {
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+}
+
+.deed__head {
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.deed__body {
+  padding: 26px 30px;
+  max-height: 440px;
+  overflow-y: auto;
+  background: var(--bg-sunk);
+}
+
+.deed__art {
+  margin-bottom: 20px;
+}
+
+.deed__art h4 {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin: 0 0 7px;
+}
+
+.deed__art p {
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--ink-2);
+  max-width: 72ch;
+  margin: 0;
+}
+
+/* Valeur injectée. Surlignée pour que la promesse « aucune clause rédigée par
+   la plateforme » se vérifie à l'œil : ce qui est surligné vient du dossier,
+   tout le reste est le texte légal verrouillé. */
+.slotv {
+  background: var(--accent-tint-strong);
+  border-bottom: 1px solid var(--accent-border-soft);
+  padding: 0 3px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 12.5px;
+  color: var(--ink);
+}
+
+/* Marqueur resté vide : signalé, jamais effacé en silence. */
+.slotv--empty {
+  background: var(--reject-tint);
+  border-bottom-color: var(--reject-border);
+  color: var(--reject);
+}
+
+.deed__foot {
+  padding: 18px 22px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* Signataires, côte à côte. */
+.sig {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+}
+
+.sig__c {
+  padding: 16px 18px;
+  border-right: 1px solid var(--line-softer);
+  border-bottom: 1px solid var(--line-softer);
+  background: var(--surface);
+}
+
+.sig__name {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 8px 0 3px;
+}
+
+.sig__role {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--ink-4);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 /* -----------------------------------------------------------------------------

@@ -3,6 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import { MockPaymentDriver } from './mock-payment.driver';
 import { PAYMENT_DRIVER, type PaymentDriver } from './payment.driver';
 import { StripePaymentDriver } from './stripe-payment.driver';
+import { FeesController } from './fees.controller';
+import { FeesService } from './fees.service';
 import { SubscriptionService } from './subscription.service';
 import { SubscriptionController } from './subscription.controller';
 import { PaymentWebhookController } from './webhook.controller';
@@ -21,9 +23,10 @@ import { PaymentWebhookController } from './webhook.controller';
  */
 @Global()
 @Module({
-  controllers: [SubscriptionController, PaymentWebhookController],
+  controllers: [SubscriptionController, PaymentWebhookController, FeesController],
   providers: [
     SubscriptionService,
+    FeesService,
     {
       provide: PAYMENT_DRIVER,
       inject: [ConfigService],
@@ -50,6 +53,6 @@ import { PaymentWebhookController } from './webhook.controller';
       },
     },
   ],
-  exports: [PAYMENT_DRIVER, SubscriptionService],
+  exports: [PAYMENT_DRIVER, SubscriptionService, FeesService],
 })
 export class PaymentsModule {}
