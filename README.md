@@ -63,17 +63,17 @@ prestataire. Sans Mailpit démarré, l'API le signale au lancement et les envois
 ## Tests
 
 ```bash
-npm test          # tout : 136 tests
+npm test          # tout : 168 tests
 ```
 
 Deux campagnes, séparées par ce qu'elles exigent pour tourner.
 
-| | Unitaires | Intégration |
-|---|---|---|
-| Quoi | fonctions pures : contrôle de cohérence du bail, règle de publication, pièces exigées d'un dossier, formats d'affichage | l'application Nest complète, contre une vraie base PostgreSQL |
-| Combien | 96 | 40 |
-| Exige | rien | `npm run db:up` |
-| Durée | ~12 s | ~50 s |
+| | Unitaires | Composants | Intégration |
+|---|---|---|---|
+| Quoi | fonctions pures : contrôle de cohérence du bail, règle de publication, pièces exigées d'un dossier, formats d'affichage | écrans où vit une logique client, montés dans un DOM | l'application Nest complète, contre une vraie base PostgreSQL |
+| Combien | 96 | 32 | 40 |
+| Exige | rien | rien | `npm run db:up` |
+| Durée | ~12 s | ~15 s | ~50 s |
 
 Les tests unitaires couvrent d'abord ce qui a une portée légale : plafonds du
 dépôt de garantie (1 mois en nu, 2 en meublé), durées de bail, refus d'un champ
@@ -92,6 +92,13 @@ inscrite plus bas dans ce fichier.
 La base de test (`bail_test`) est distincte de celle de développement et créée
 automatiquement ; aucun test ne touche `bail_dev`. Ces suites **tournent en
 série** : elles partagent une base et la vident entre chaque cas.
+
+Les tests de composants ne couvrent que les écrans où quelque chose se décide :
+un jeton à usage unique qui ne doit pas être consommé par une faute de frappe,
+un motif de refus qui ne doit pas suivre l'agent d'un onglet à l'autre — il part
+au locataire d'un côté, au propriétaire de l'autre —, un bouton qui ne doit pas
+promettre une décision que l'API refusera. Les écrans purement présentatifs n'y
+figurent pas : les tester reviendrait à recopier leur JSX dans une assertion.
 
 ## Environnements
 
@@ -232,10 +239,15 @@ hors dépôt.
 
 ## Dette connue
 
-- **Aucun test de rendu de composant.** Les écrans sont essentiellement de la
-  présentation et la logique vit dans l'API, mais rien ne vérifie aujourd'hui
-  qu'un blocage s'affiche bien ni qu'un bouton se désactive au bon moment. À
-  ajouter quand la maquette aura cessé de bouger.
+- **React est déclaré et épinglé à la racine** (`19.2.0`, plus des `overrides`) :
+  `@testing-library/react` ne l'exige qu'en pair (`^18 || ^19`), et sans version
+  concrète à la racine npm y installait un React 18 qui masquait le 19 du front.
+  Next et Testing Library chargeaient alors deux React différents. À revoir en
+  même temps que la montée de version de Next.
+- Les tests de composants ne couvrent que quatre écrans. Les parcours de
+  candidature, de visite et de bail n'ont pas encore d'équivalent : leur logique
+  est surtout côté API, déjà testée, mais un blocage mal affiché y passerait
+  inaperçu.
 - Les tests d'intégration démarrent l'application entière : **Nest 12 est
   distribué en ESM pur**, que le runtime CommonJS de Jest ne sait pas charger,
   d'où `--experimental-vm-modules` et `useESM` sur cette seule campagne. Un

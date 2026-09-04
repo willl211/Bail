@@ -28,8 +28,15 @@
     "mail:down": "docker compose stop mailpit",
     "env:use": "node scripts/use-env.mjs"
   },
+  "//react": "React est déclaré ici, à la racine, et épinglé. @testing-library/react ne l'exige qu'en pair (^18 || ^19) : sans version concrète à la racine, npm installait un React 18 qui masquait le 19 du front — Next et Testing Library chargeaient alors deux React différents, et le rendu de test échouait sur des erreurs internes de react-dom. Les `overrides` verrouillent la même version pour toute dépendance transitive.",
+  "overrides": {
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
   "devDependencies": {
     "npm-run-all": "^4.1.5",
-    "prettier": "^3.3.3"
+    "prettier": "^3.3.3",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
   }
 }
