@@ -36,5 +36,48 @@ services:
       MP_SMTP_AUTH_ACCEPT_ANY: 1
       MP_SMTP_AUTH_ALLOW_INSECURE: 1
 
+  # Stockage objet local, compatible S3. Même rôle que Mailpit pour le courrier :
+  # il permet de vérifier réellement le driver — écriture, lecture, suppression,
+  # cloisonnement public/privé — sans compte chez un hébergeur. Le protocole est
+  # le même que celui d'OVH Object Storage, seules les variables changent.
+  minio:
+    image: minio/minio:latest
+    container_name: bail-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    ports:
+      - '9000:9000' # API S3
+      - '9001:9001' # console web
+    environment:
+      MINIO_ROOT_USER: bail
+      MINIO_ROOT_PASSWORD: bailbailbail
+    volumes:
+      - bail-miniodata:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Crée les deux conteneurs au démarrage, et n'ouvre en lecture anonyme que le
+  # public. Le privé — pièces d'identité, bulletins de salaire — ne doit être
+  # accessible que par une route applicative qui vérifie qui demande quoi.
+  minio-init:
+    image: minio/mc:latest
+    container_name: bail-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 bail bailbailbail &&
+      mc mb --ignore-existing local/bail-public &&
+      mc mb --ignore-existing local/bail-private &&
+      mc anonymous set download local/bail-public &&
+      mc anonymous set none local/bail-private &&
+      echo 'Conteneurs prêts : bail-public (lecture anonyme), bail-private (fermé)'
+      "
+
 volumes:
   bail-pgdata:
+  bail-miniodata:

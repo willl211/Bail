@@ -1,26 +1,15 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { constants, createReadStream } from 'node:fs';
-import { access, mkdir, unlink, writeFile } from 'node:fs/promises';
-import { extname, join, normalize, resolve, sep } from 'node:path';
+import { extname } from 'node:path';
 import type { Readable } from 'node:stream';
+import {
+  STORAGE_DRIVER,
+  type StorageDriver,
+  type StorageScope,
+} from './storage.driver';
+import { sanitizeFolder } from './storage.keys';
 
-/**
- * Régime d'accès du fichier. La distinction est structurelle, pas cosmétique :
- *
- * - `public`  : photos d'annonces. Servies directement par le serveur web, comme
- *               elles le seront par un CDN en production.
- * - `private` : diagnostics techniques d'un bien, et pièces de dossier locataire
- *               (identité, bulletins de salaire). **Jamais** exposés
- *               statiquement — ils ne sortent que par une route qui vérifie
- *               d'abord qui demande quoi.
- *
- * Les deux régimes écrivent dans des racines distinctes pour qu'une erreur de
- * configuration du service de fichiers statiques ne puisse pas rendre une carte
- * d'identité téléchargeable.
- */
-export type StorageScope = 'public' | 'private';
+export type { StorageScope } from './storage.driver';
 
 export interface StoredFile {
   /** Chemin relatif à la racine du régime, ex. `properties/mz-0193/a1b2.jpg`. */
@@ -48,31 +37,27 @@ const EXTENSIONS: Record<string, string> = {
   'application/pdf': '.pdf',
 };
 
+/**
+ * Dépôt et lecture des fichiers.
+ *
+ * Toutes les **règles** vivent ici et nulle part ailleurs : formats acceptés,
+ * nommage des fichiers, assainissement des dossiers. Le driver, en dessous, ne
+ * fait que des entrées-sorties. Cette séparation n'est pas décorative — si le
+ * nommage vivait dans chaque driver, changer de support reviendrait à réécrire
+ * les garde-fous, et donc à risquer de les affaiblir sans s'en apercevoir.
+ */
 @Injectable()
 export class StorageService {
   private readonly logger = new Logger(StorageService.name);
 
-  constructor(private readonly config: ConfigService) {}
-
-  private get driver(): string {
-    return this.config.get<string>('storage.driver', 'local');
-  }
-
-  private rootFor(scope: StorageScope): string {
-    const base = this.config.get<string>('storage.localPath', './storage');
-    return resolve(base, scope);
-  }
+  constructor(@Inject(STORAGE_DRIVER) private readonly driver: StorageDriver) {}
 
   /**
    * URL publique du fichier. `null` pour un fichier privé : il n'en a pas, et
    * ne doit pas en avoir — c'est le sens même du régime privé.
    */
   publicUrl(scope: StorageScope, key: string): string | null {
-    if (scope !== 'public') return null;
-    const base = this.config
-      .get<string>('storage.publicBaseUrl', 'http://localhost:4000/uploads')
-      .replace(/\/+$/, '');
-    return `${base}/${key}`;
+    return this.driver.publicUrl(scope, key);
   }
 
   /**
@@ -95,23 +80,14 @@ export class StorageService {
       );
     }
 
-    if (this.driver !== 'local') {
-      // Le driver S3/OVH viendra ici. Échouer bruyamment vaut mieux que d'écrire
-      // sur le disque d'un serveur applicatif en croyant écrire sur l'objet.
-      throw new BadRequestException(
-        `Driver de stockage « ${this.driver} » non implémenté. Utilisez « local ».`,
-      );
-    }
-
-    const safeFolder = this.sanitizeFolder(folder);
+    const safeFolder = sanitizeFolder(folder);
+    if (!safeFolder) throw new BadRequestException('Destination de stockage invalide.');
     const name = `${randomUUID()}${EXTENSIONS[file.mimetype] ?? extname(file.originalname)}`;
     const key = `${safeFolder}/${name}`;
 
-    const directory = join(this.rootFor(scope), safeFolder);
-    await mkdir(directory, { recursive: true });
-    await writeFile(join(directory, name), file.buffer);
+    await this.driver.put(scope, key, file.buffer, file.mimetype);
 
-    this.logger.log(`Fichier écrit (${scope}) : ${key} — ${file.size} octets`);
+    this.logger.log(`Fichier écrit (${scope}, ${this.driver.name}) : ${key} — ${file.size} octets`);
     return { key, size: file.size, mimeType: file.mimetype };
   }
 
@@ -119,67 +95,22 @@ export class StorageService {
    * Ouvre un fichier en lecture.
    *
    * C'est la seule façon de sortir un fichier **privé** : il n'est servi par
-   * aucune URL statique, donc il faut une route applicative qui vérifie d'abord
-   * qui demande quoi.
+   * aucune URL, donc il faut une route applicative qui vérifie d'abord qui
+   * demande quoi.
    */
-  async read(scope: StorageScope, key: string): Promise<Readable> {
-    if (this.driver !== 'local') {
-      throw new BadRequestException(
-        `Driver de stockage « ${this.driver} » non implémenté. Utilisez « local ».`,
-      );
-    }
-
-    const target = this.resolveWithinRoot(scope, key);
-    if (!target) throw new NotFoundException('Fichier introuvable.');
-
-    try {
-      await access(target, constants.R_OK);
-    } catch {
-      throw new NotFoundException('Fichier introuvable.');
-    }
-
-    return createReadStream(target);
+  read(scope: StorageScope, key: string): Promise<Readable> {
+    return this.driver.get(scope, key);
   }
 
   /** Suppression idempotente : un fichier déjà absent n'est pas une erreur. */
   async remove(scope: StorageScope, key: string): Promise<void> {
-    if (this.driver !== 'local') return;
-
-    const target = this.resolveWithinRoot(scope, key);
-    if (!target) return;
-
     try {
-      await unlink(target);
-    } catch {
-      // Fichier déjà supprimé, ou jamais écrit : rien à faire.
+      await this.driver.delete(scope, key);
+    } catch (error) {
+      // Ne remonte pas : la suppression accompagne toujours une opération
+      // métier déjà accomplie — remplacer un diagnostic, retirer une photo — et
+      // la faire échouer laisserait la base et le stockage en désaccord.
+      this.logger.warn(`Suppression impossible (${scope}) : ${(error as Error).message}`);
     }
-  }
-
-  /**
-   * Résout une clé en chemin absolu, en refusant tout ce qui sortirait de la
-   * racine du régime. Une clé forgée (`../../`) ne doit pas donner accès au
-   * disque, et surtout pas faire franchir la frontière entre public et privé.
-   */
-  private resolveWithinRoot(scope: StorageScope, key: string): string | null {
-    const root = this.rootFor(scope);
-    const target = resolve(root, normalize(key));
-    if (target !== root && !target.startsWith(root + sep)) {
-      this.logger.warn(`Clé hors racine refusée (${scope}) : ${key}`);
-      return null;
-    }
-    return target;
-  }
-
-  /** N'autorise qu'un segment de dossier simple, en minuscules. */
-  private sanitizeFolder(folder: string): string {
-    const cleaned = folder
-      .toLowerCase()
-      .replace(/[^a-z0-9/-]/g, '-')
-      .replace(/\.+/g, '')
-      .replace(/\/+/g, '/')
-      .replace(/^\/|\/$/g, '');
-
-    if (!cleaned) throw new BadRequestException('Destination de stockage invalide.');
-    return cleaned;
   }
 }

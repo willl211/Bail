@@ -94,10 +94,22 @@ export default () => ({
       process.env.PUBLIC_ASSET_BASE_URL ?? 'http://localhost:4000/uploads',
     s3: {
       endpoint: process.env.S3_ENDPOINT,
-      region: process.env.S3_REGION,
-      bucket: process.env.S3_BUCKET,
+      region: process.env.S3_REGION ?? 'gra',
+      /**
+       * Deux conteneurs, pas un seul avec deux préfixes : un préfixe se
+       * contourne par une règle d'accès trop large, deux conteneurs se
+       * configurent séparément — et celui des pièces de dossier reste fermé
+       * sans exception à prévoir.
+       */
+      publicBucket: process.env.S3_BUCKET_PUBLIC,
+      privateBucket: process.env.S3_BUCKET_PRIVATE,
       accessKeyId: process.env.S3_ACCESS_KEY_ID,
       secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
+      /**
+       * Style de chemin plutôt que de sous-domaine. Requis par MinIO et par la
+       * plupart des stockages compatibles S3 sans DNS générique par conteneur.
+       */
+      forcePathStyle: (process.env.S3_FORCE_PATH_STYLE ?? 'true') !== 'false',
     },
   },
 

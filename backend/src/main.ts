@@ -34,14 +34,25 @@ async function bootstrap() {
   // ça — or elle est journalisée avec chaque session, pour l'audit.
   app.set('trust proxy', 1);
 
-  // Fichiers publics (photos d'annonces) uniquement.
+  // Fichiers publics (photos d'annonces) uniquement, et seulement quand ils sont
+  // sur le disque de ce serveur.
   //
   // On sert `storage/public`, JAMAIS `storage/` : la racine privée contient les
   // pièces de dossier locataire — identité, bulletins de salaire — qui ne
   // doivent sortir que par une route contrôlant qui demande quoi. Élargir ce
   // chemin d'un niveau les rendrait téléchargeables par quiconque devine une clé.
-  const storageRoot = resolve(config.get<string>('storage.localPath', './storage'), 'public');
-  app.useStaticAssets(storageRoot, { prefix: '/uploads/', index: false });
+  //
+  // Avec le stockage objet, l'API ne sert plus aucun fichier : les photos
+  // viennent du conteneur public ou du CDN. Continuer à exposer un dossier
+  // local ouvrirait une seconde porte, non contrôlée, vers des fichiers qu'on
+  // croirait pourtant hébergés ailleurs.
+  if (config.get<string>('storage.driver', 'local') === 'local') {
+    const storageRoot = resolve(
+      config.get<string>('storage.localPath', './storage'),
+      'public',
+    );
+    app.useStaticAssets(storageRoot, { prefix: '/uploads/', index: false });
+  }
 
   app.useGlobalPipes(
     new ValidationPipe({

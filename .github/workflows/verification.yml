@@ -28,27 +28,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: bail
-          POSTGRES_PASSWORD: bail
-          POSTGRES_DB: bail_dev
-        ports:
-          - 5432:5432
-        # Sans ce contrôle, les premières étapes démarreraient avant que le
-        # serveur n'accepte les connexions.
-        options: >-
-          --health-cmd "pg_isready -U bail -d bail_dev"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-
     env:
       # La campagne d'intégration en dérive `bail_test` : elle ne touche jamais
       # la base nommée ici (voir backend/test/setup-database.ts).
-      DATABASE_URL: postgresql://bail:bail@localhost:5432/bail_dev?schema=public
+      DATABASE_URL: postgresql://bail:bail@localhost:5433/bail_dev?schema=public
       # Toutes les intégrations réglementées restent simulées (CLAUDE.md
       # règle 5). Un test qui appellerait un vrai prestataire dépendrait d'un
       # réseau, d'un quota et d'un compte.
@@ -60,6 +43,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+
+      # Les mêmes services que sur un poste de développement, démarrés par le
+      # même fichier : `services:` aurait demandé de redéclarer PostgreSQL et
+      # MinIO ici, et deux définitions finissent toujours par diverger.
+      # `--wait` attend les contrôles de santé du compose.
+      - name: Démarrer les services
+        run: docker compose up -d --wait postgres minio minio-init
 
       - uses: actions/setup-node@v5
         with:
@@ -93,6 +83,11 @@ jobs:
 
       - name: Tests d'intégration
         run: npm run test:int --workspace backend
+        env:
+          # Le contrat de stockage est joué contre MinIO, pas seulement contre
+          # le disque : c'est ce qui prouve que passer en objet ne change rien
+          # au comportement attendu.
+          S3_ENDPOINT: http://localhost:9000
 
       - name: Compilation
         run: npm run build

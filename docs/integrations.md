@@ -249,3 +249,47 @@ ou renvoyée ; visite réservée ou annulée.
 Restent à écrire, faute de parcours atteignable aujourd'hui : bail prêt à
 signer, bail signé, honoraires réglés, échec de prélèvement d'abonnement. Les
 trois premiers supposent un modèle de bail validé, le dernier un compte Stripe.
+
+## Stockage objet — précision du 4 septembre 2026
+
+Deux drivers derrière un contrat commun : `local` (disque du serveur) et `s3`
+(stockage objet). Le premier convient au développement et à une instance
+unique ; il ne convient **pas** à plusieurs serveurs derrière un répartiteur,
+où une photo déposée sur l'un serait introuvable depuis l'autre. C'est la raison
+d'être du second, et la condition d'un déploiement.
+
+Comme SMTP, S3 est un protocole et non une API propriétaire : le driver se
+vérifie de bout en bout contre [MinIO](https://min.io) (`npm run storage:up`,
+console sur http://localhost:9001) sans compte chez quiconque. Le même code
+parlera à OVH Object Storage — seules les variables changent.
+
+### Deux conteneurs, jamais un seul
+
+`S3_BUCKET_PUBLIC` et `S3_BUCKET_PRIVATE` désignent deux conteneurs distincts,
+et le démarrage échoue s'ils sont identiques. Un préfixe partagé
+(`public/`, `private/` dans un même conteneur) se contourne par une règle
+d'accès trop large ; deux conteneurs se configurent séparément, et celui des
+pièces de dossier reste fermé sans exception à prévoir.
+
+Vérifié contre MinIO : la photo d'annonce répond 200 en HTTP anonyme, la pièce
+de dossier répond **403**, et deviner la clé privée dans le conteneur public
+donne 404 — elle n'y est pas.
+
+### Ce qui échoue au démarrage plutôt qu'en silence
+
+| Situation | Conséquence si on laissait passer |
+|---|---|
+| `STORAGE_DRIVER` inconnu | Retomber sur `local` en production écrirait les pièces d'identité sur le disque éphémère d'un conteneur, où elles disparaîtraient au premier redéploiement. |
+| Variables `S3_*` manquantes | L'API accepterait des dépôts de fichiers qui n'aboutiraient nulle part. |
+| Conteneurs public et privé identiques | Une seule règle d'accès trop large rendrait les pièces d'identité téléchargeables. |
+
+Un conteneur momentanément injoignable, en revanche, ne fait qu'avertir : la
+recherche, les candidatures et le back-office n'en dépendent pas, et rendre tout
+le site indisponible pour cela serait disproportionné.
+
+### État au 4 septembre 2026
+
+Driver écrit et vérifié contre MinIO. **Jamais éprouvé contre OVH** : endpoint,
+région et style d'URL restent à confirmer à l'ouverture du compte.
+`STORAGE_DRIVER=local` reste la valeur par défaut en développement — exiger un
+conteneur de plus pour lancer le projet ne se justifie pas.

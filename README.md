@@ -26,8 +26,7 @@ Prérequis : Node ≥ 20 (`.nvmrc` : 22) et Docker Desktop.
 ```bash
 npm install                  # installe les deux workspaces
 npm run env:use development  # crée backend/.env et frontend/.env.local
-npm run db:up                # PostgreSQL sur le port 5433
-npm run mail:up              # Mailpit : boîte aux lettres locale
+npm run services:up          # PostgreSQL, Mailpit et MinIO d'un coup
 npm run db:migrate           # applique les migrations
 npm run db:seed              # 6 quartiers, 8 biens, barème, modèles de bail
 npm run dev                  # backend :4000 et frontend :3000 en parallèle
@@ -37,6 +36,7 @@ npm run dev                  # backend :4000 et frontend :3000 en parallèle
 - API : http://localhost:4000/api/v1
 - État de l'API et des intégrations : http://localhost:4000/api/v1/health
 - **E-mails envoyés : http://localhost:8025** (Mailpit)
+- Stockage objet : http://localhost:9001 (console MinIO, `bail` / `bailbailbail`)
 
 Le port PostgreSQL est **5433**, pas 5432, pour ne pas entrer en conflit avec un
 Postgres déjà installé sur le poste.
@@ -59,13 +59,16 @@ prestataire. Sans Mailpit démarré, l'API le signale au lancement et les envois
 | `npm run db:studio` | Prisma Studio |
 | `npm run db:reset` | remet la base à zéro et rejoue le seed |
 | `npm run db:down` | arrête PostgreSQL |
+| `npm run services:up` | démarre PostgreSQL, Mailpit et MinIO |
 | `npm run mail:up` | démarre Mailpit (SMTP :1025, interface :8025) |
 | `npm run mail:down` | arrête Mailpit |
+| `npm run storage:up` | démarre MinIO (S3 :9000, console :9001) et crée les conteneurs |
+| `npm run storage:down` | arrête MinIO |
 
 ## Tests
 
 ```bash
-npm test          # tout : 189 tests
+npm test          # tout : 216 tests
 ```
 
 Deux campagnes, séparées par ce qu'elles exigent pour tourner.
@@ -73,7 +76,7 @@ Deux campagnes, séparées par ce qu'elles exigent pour tourner.
 | | Unitaires | Composants | Intégration |
 |---|---|---|---|
 | Quoi | fonctions pures : contrôle de cohérence du bail, règle de publication, pièces exigées d'un dossier, formats d'affichage | écrans où vit une logique client, montés dans un DOM | l'application Nest complète, contre une vraie base PostgreSQL |
-| Combien | 105 | 32 | 51 |
+| Combien | 116 | 32 | 67 |
 | Exige | rien | rien | `npm run db:up` |
 | Durée | ~12 s | ~15 s | ~50 s |
 
@@ -156,11 +159,14 @@ Ces contraintes sont dans le schéma et dans le code, pas seulement dans la doc.
    d'effort, état du garant — jamais les documents. C'est la promesse faite au
    locataire, et elle est tenue par le code : aucune route ne sert une pièce de
    dossier à quelqu'un d'autre que son titulaire.
-7. **Fichiers publics et privés sont séparés physiquement.** `storage/public`
-   (photos d'annonces) est servi statiquement ; `storage/private` (pièces de
-   dossier locataire : identité, bulletins de salaire) ne l'est **jamais** et
-   ne sortira que par une route contrôlant qui demande quoi. Élargir le chemin
-   servi d'un niveau rendrait des cartes d'identité téléchargeables.
+7. **Fichiers publics et privés sont séparés physiquement.** Deux racines sur
+   disque (`storage/public`, `storage/private`), **deux conteneurs distincts**
+   en stockage objet — jamais un seul avec deux préfixes, qu'une règle d'accès
+   trop large suffirait à contourner. Le public est servi directement, le privé
+   (identité, bulletins de salaire) ne l'est **jamais** : il ne sort que par une
+   route contrôlant qui demande quoi. Avec le driver `s3`, l'API cesse même de
+   servir le moindre fichier — un dossier local resté exposé serait une seconde
+   porte, non contrôlée, vers des fichiers qu'on croirait hébergés ailleurs.
 8. **Le design vient de la maquette.** `frontend/app/globals.css` reprend les
    valeurs exactes de [`maquette_interface/bail/bail.html`](maquette_interface/bail/bail.html)
    (accent vert forêt `#0e5c3a`, papier `#f1f0ea`, Archivo à chasse variable +
@@ -339,6 +345,7 @@ hors dépôt.
   Mailpit en local ; passer en réel ne demande que les variables `SMTP_*` d'un
   hébergeur de messagerie. Viser un prestataire européen (Brevo, Mailjet) pour
   rester cohérent avec le choix OVH fait pour la conformité RGPD.
-- Le driver de stockage `s3` n'est pas implémenté : seul `local` fonctionne.
-  Le service échoue explicitement si un autre driver est configuré, plutôt que
-  d'écrire sur le disque du serveur applicatif en croyant écrire sur l'objet.
+- Le stockage objet est écrit et vérifié contre MinIO, mais **jamais éprouvé
+  contre OVH** : l'endpoint, la région et le style d'URL restent à confirmer à
+  l'ouverture du compte. Le protocole étant le même, seules les variables
+  devraient changer.
