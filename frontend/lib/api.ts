@@ -132,7 +132,19 @@ export interface PropertySearchResult {
   total: number;
   page: number;
   pageSize: number;
+  /**
+   * Tri réellement appliqué, qui peut différer de celui demandé : sans dossier
+   * renseignant les revenus, « compatibilité » retombe sur la récence.
+   */
+  sort: PropertySort;
 }
+
+export type PropertySort =
+  | 'compatibility'
+  | 'recent'
+  | 'rent_asc'
+  | 'rent_desc'
+  | 'surface_desc';
 
 export interface District {
   slug: string;
@@ -163,13 +175,16 @@ export interface OwnerSubscriptionPricing {
 // Appels
 // -----------------------------------------------------------------------------
 
+// Authentifiées bien qu'ouvertes à tous : le classement par compatibilité a
+// besoin du dossier de celui qui regarde. Sans session, l'API répond la même
+// chose qu'avant.
 export function getFeaturedProperties(limit = 3) {
-  return apiFetch<PropertyListItem[]>(`/properties/featured?limit=${limit}`);
+  return apiFetchAuthed<PropertyListItem[]>(`/properties/featured?limit=${limit}`);
 }
 
 export function searchProperties(params: URLSearchParams) {
   const query = params.toString();
-  return apiFetch<PropertySearchResult>(`/properties${query ? `?${query}` : ''}`);
+  return apiFetchAuthed<PropertySearchResult>(`/properties${query ? `?${query}` : ''}`);
 }
 
 export function getProperty(reference: string) {

@@ -123,6 +123,17 @@ interface SeedProperty {
   gesRating: EnergyRating;
   constructionYear: number | null;
   availableFrom: string | null; // null = disponible immédiatement
+  /**
+   * Critères du propriétaire, quand ils s'écartent du cas courant — garant
+   * exigé, CDI / fonction publique / étudiant acceptés.
+   *
+   * Ils varient d'une annonce à l'autre dans la vraie vie, et c'est ce qui
+   * donne au classement par compatibilité quelque chose à départager : avec
+   * huit biens aux exigences identiques, il produirait exactement l'ordre du
+   * tri « loyer croissant » et ne prouverait rien.
+   */
+  guarantorRequirement?: GuarantorRequirement;
+  acceptedContractTypes?: string[];
   description: string;
   photos: string[];
 }
@@ -194,6 +205,12 @@ const PROPERTIES: SeedProperty[] = [
   {
     reference: 'MZ-0168',
     pub: 12, // ordre de publication de la maquette (1 = le plus récent)
+    // Le studio le moins cher du portefeuille, et le bailleur le plus strict :
+    // CDI exclusivement. C'est fréquent sur les petites surfaces, très
+    // demandées. Conséquence à l'écran : un étudiant ou un CDD ne le voit pas
+    // remonter en tête malgré son loyer, alors que le tri « loyer croissant »
+    // le placerait toujours premier.
+    acceptedContractTypes: ['CDI'],
     title: 'Studio, Outre-Seille',
     districtSlug: 'outre-seille',
     addressLine: '11 rue Mazelle',
@@ -236,6 +253,10 @@ const PROPERTIES: SeedProperty[] = [
   {
     reference: 'MZ-0180',
     pub: 8, // ordre de publication de la maquette (1 = le plus récent)
+    // Bailleur qui ne demande pas de garant : il compte sur le niveau de
+    // revenus exigé. Le bien remonte donc pour un dossier sans garant, que les
+    // autres annonces pénalisent.
+    guarantorRequirement: GuarantorRequirement.NONE,
     title: '3 pièces, Queuleu',
     districtSlug: 'queuleu',
     addressLine: '3 rue des Alliés',
@@ -256,6 +277,9 @@ const PROPERTIES: SeedProperty[] = [
   },
   {
     reference: 'MZ-0186',
+    // Quartier étudiant, bailleur qui n'exclut aucun type de contrat : la liste
+    // vide vaut « rien d'exclu », pas « rien d'accepté ».
+    acceptedContractTypes: [],
     pub: 10, // ordre de publication de la maquette (1 = le plus récent)
     title: 'T1 bis meublé, Nouvelle Ville',
     districtSlug: 'nouvelle-ville',
@@ -787,8 +811,12 @@ async function main() {
       // sur cette base que la fiche annonce « 3 × le loyer »), garant exigé,
       // CDI, fonction publique ou étudiant avec garant.
       minMonthlyIncomeCents: (rentCents + chargesCents) * 3,
-      guarantorRequirement: GuarantorRequirement.REQUIRED,
-      acceptedContractTypes: ['CDI', 'PUBLIC_SECTOR', 'STUDENT'],
+      guarantorRequirement: seed.guarantorRequirement ?? GuarantorRequirement.REQUIRED,
+      acceptedContractTypes: seed.acceptedContractTypes ?? [
+        'CDI',
+        'PUBLIC_SECTOR',
+        'STUDENT',
+      ],
       status: PropertyStatus.ONLINE,
       publishedAt,
     };

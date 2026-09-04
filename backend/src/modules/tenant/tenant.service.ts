@@ -18,6 +18,7 @@ import {
 } from '@prisma/client';
 import { Readable } from 'node:stream';
 import { PrismaService } from '../../prisma/prisma.service';
+import type { CompatibilityFile } from '../properties/compatibility';
 import { DOCUMENT_TYPES, IncomingFile, StorageService } from '../storage/storage.service';
 import { VERIFICATION_DRIVER, type VerificationDriver } from '../verification/verification.driver';
 import { UpsertGuarantorDto } from './dto/upsert-guarantor.dto';
@@ -252,6 +253,27 @@ export class TenantService {
   async getFile(tenantId: string): Promise<TenantFileView> {
     const file = await this.fileOf(tenantId);
     return this.toView(tenantId, file);
+  }
+
+  /**
+   * Dossier réduit à ce que la note de compatibilité regarde.
+   *
+   * **Lecture seule**, contrairement à `getFile` qui crée le dossier s'il
+   * n'existe pas encore : le classement des annonces passe ici à chaque
+   * recherche, et ouvrir un dossier vide à quelqu'un qui n'a fait que chercher
+   * serait un effet de bord invisible et faux.
+   *
+   * `null` quand il n'y a pas de dossier — les annonces s'affichent alors dans
+   * l'ordre par défaut, sans que la recherche échoue.
+   */
+  async compatibilitySummary(tenantId: string): Promise<CompatibilityFile | null> {
+    const file = await this.prisma.tenantFile.findUnique({
+      where: { tenantId },
+      include: { documents: true, guarantors: true },
+    });
+    if (!file) return null;
+
+    return toCompatibilityFile(await this.toView(tenantId, file));
   }
 
   async updateFile(tenantId: string, dto: UpdateTenantFileDto): Promise<TenantFileView> {
@@ -749,4 +771,23 @@ export class TenantService {
 
     return entries.sort((a, b) => b.at.localeCompare(a.at));
   }
+}
+
+/**
+ * Dossier ramené à ce que la note de compatibilité regarde.
+ *
+ * `TenantFileView` porte tout l'écran du dossier — pièces, manques, échéances.
+ * Le barème n'en lit que six valeurs : les lui passer explicitement évite qu'il
+ * se mette un jour à dépendre du reste, et garde le barème lui-même sans
+ * dépendance, donc testable sur des valeurs.
+ */
+export function toCompatibilityFile(file: TenantFileView): CompatibilityFile {
+  return {
+    netMonthlyIncomeCents: file.netMonthlyIncomeCents,
+    verified: file.status === TenantFileStatus.VERIFIED,
+    submitted: file.submittedAt !== null,
+    contractType: file.contractType,
+    hasGuarantor: file.guarantor !== null,
+    guarantorVerified: file.groups.guarantor === 'VERIFIED',
+  };
 }

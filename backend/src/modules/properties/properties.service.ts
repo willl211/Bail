@@ -1,7 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import type { PublicUser } from '../auth/auth.service';
 import { StorageService } from '../storage/storage.service';
+import { TenantService } from '../tenant/tenant.service';
+import {
+  canRankByCompatibility,
+  compatibilityScore,
+  type CompatibilityFile,
+} from './compatibility';
 import { VISIBLE_STATUSES, visiblePropertyWhere } from './property-visibility';
 import {
   FurnishedFilter,
@@ -21,14 +28,48 @@ export interface PropertySearchResult {
   total: number;
   page: number;
   pageSize: number;
+  /**
+   * Tri réellement appliqué.
+   *
+   * Peut différer de celui demandé : « compatibilité » retombe sur la récence
+   * pour un visiteur sans dossier, faute de quoi la calculer. L'écran doit
+   * pouvoir le dire plutôt que d'afficher une promesse non tenue.
+   */
+  sort: PropertySort;
 }
+
+/**
+ * Au-delà de ce nombre d'annonces retenues, le classement par compatibilité
+ * cède la place à la récence.
+ *
+ * La note dépend de celui qui regarde : aucune colonne ne la porte, il faut
+ * charger et noter tout l'ensemble retenu à chaque recherche. C'est sans
+ * conséquence sur le pilote messin — quelques dizaines d'annonces — et ce
+ * serait déraisonnable sur dix mille. La borne rend la limite explicite plutôt
+ * que de la laisser se découvrir un jour en production.
+ */
+const COMPATIBILITY_MAX_SET = 300;
 
 @Injectable()
 export class PropertiesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    private readonly tenant: TenantService,
   ) {}
+
+  /**
+   * Dossier du visiteur, s'il permet un classement par compatibilité.
+   *
+   * `null` couvre trois cas qui reviennent tous au même à l'écran : personne
+   * n'est connecté, la personne connectée n'est pas locataire, ou son dossier
+   * ne dit pas encore ses revenus. Le classement retombe alors sur la récence.
+   */
+  private async rankingFile(viewer: PublicUser | null): Promise<CompatibilityFile | null> {
+    if (viewer?.role !== UserRole.TENANT) return null;
+    const file = await this.tenant.compatibilitySummary(viewer.id);
+    return canRankByCompatibility(file) ? file : null;
+  }
 
   private buildWhere(query: SearchPropertiesDto): Prisma.PropertyWhereInput {
     const where: Prisma.PropertyWhereInput = visiblePropertyWhere();
@@ -83,10 +124,14 @@ export class PropertiesService {
     }
   }
 
-  async search(query: SearchPropertiesDto): Promise<PropertySearchResult> {
+  async search(
+    query: SearchPropertiesDto,
+    viewer: PublicUser | null = null,
+  ): Promise<PropertySearchResult> {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
     const where = this.buildWhere(query);
+    const asked = query.sort ?? PropertySort.COMPATIBILITY;
 
     // Le filtre « loyer charges comprises » porte sur une somme de colonnes :
     // on restreint d'abord l'ensemble des identifiants avec une requête SQL,
@@ -101,29 +146,86 @@ export class PropertiesService {
       where.id = { in: rows.map((row) => row.id) };
     }
 
-    const [total, properties] = await this.prisma.$transaction([
-      this.prisma.property.count({ where }),
-      this.prisma.property.findMany({
-        where,
-        include: propertyPublicInclude,
-        orderBy: this.buildOrderBy(query.sort ?? PropertySort.COMPATIBILITY),
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-      }),
-    ]);
+    const total = await this.prisma.property.count({ where });
 
-    return { items: properties.map(toListItem), total, page, pageSize };
+    if (asked === PropertySort.COMPATIBILITY && total <= COMPATIBILITY_MAX_SET) {
+      const file = await this.rankingFile(viewer);
+      if (file) {
+        // Le tri se fait en mémoire : la note dépend du dossier de celui qui
+        // regarde, elle n'existe donc dans aucune colonne. Toutes les annonces
+        // retenues sont chargées, notées, triées, puis découpées en pages —
+        // trier page par page ne trierait rien du tout.
+        const all = await this.prisma.property.findMany({
+          where,
+          include: propertyPublicInclude,
+          orderBy: this.buildOrderBy(PropertySort.RECENT),
+        });
+
+        const ranked = all
+          .map((property) => ({ property, score: compatibilityScore(property, file) }))
+          // À note égale, l'ordre de la récence : `sort` est stable, la liste
+          // arrive déjà dans cet ordre, il suffit de ne pas le défaire.
+          .sort((a, b) => b.score - a.score)
+          .slice((page - 1) * pageSize, page * pageSize)
+          .map((entry) => toListItem(entry.property));
+
+        return {
+          items: ranked,
+          total,
+          page,
+          pageSize,
+          sort: PropertySort.COMPATIBILITY,
+        };
+      }
+    }
+
+    // Sans dossier exploitable, « compatibilité » n'a pas de base de calcul :
+    // on sert la récence, et on le dit.
+    const applied = asked === PropertySort.COMPATIBILITY ? PropertySort.RECENT : asked;
+
+    const properties = await this.prisma.property.findMany({
+      where,
+      include: propertyPublicInclude,
+      orderBy: this.buildOrderBy(applied),
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    });
+
+    return { items: properties.map(toListItem), total, page, pageSize, sort: applied };
   }
 
   /** Bloc « Biens en avant à Metz » de la page d'accueil. */
-  async findFeatured(limit = 3): Promise<PropertyListItem[]> {
-    const properties = await this.prisma.property.findMany({
+  /**
+   * « Biens en avant » de l'accueil.
+   *
+   * Pour un locataire dont le dossier dit ses revenus, ce sont les logements
+   * les plus à sa portée ; pour tout le monde d'autre, les plus récents. Pas de
+   * classement par nombre de sauvegardes : il s'auto-entretient — une annonce
+   * nouvelle en a zéro, donc ne remonte jamais, donc n'en obtient jamais
+   * (docs/product-brief.md).
+   */
+  async findFeatured(limit = 3, viewer: PublicUser | null = null): Promise<PropertyListItem[]> {
+    const recents = await this.prisma.property.findMany({
       where: visiblePropertyWhere(),
       include: propertyPublicInclude,
       orderBy: [{ publishedAt: 'desc' }, { reference: 'asc' }],
-      take: limit,
+      // Toutes les annonces visibles, pas seulement `limit` : les trois plus
+      // récentes ne sont pas les trois plus compatibles, et n'en garder que
+      // trois avant de noter reviendrait à classer ce qu'on a déjà choisi.
+      take: COMPATIBILITY_MAX_SET,
     });
-    return properties.map(toListItem);
+
+    const file = await this.rankingFile(viewer);
+    if (!file) return recents.slice(0, limit).map(toListItem);
+
+    // Notés une fois chacun, puis triés : calculer la note dans le comparateur
+    // la recalculerait à chaque comparaison.
+    return recents
+      .map((property) => ({ property, score: compatibilityScore(property, file) }))
+      // À note égale, l'ordre de la récence : `sort` est stable.
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit)
+      .map((entry) => toListItem(entry.property));
   }
 
   async findByReference(reference: string): Promise<PropertyDetail> {

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { Suspense } from 'react';
 import { PropertyRow } from '@/components/property-row';
 import { SearchFilters } from '@/components/search-filters';
@@ -55,6 +56,14 @@ export default async function SearchPage({
 
   const maxRent = params.get('maxRent');
 
+  // Le tri par compatibilité n'est offert qu'au locataire, et l'API dit s'il a
+  // pu l'appliquer : sans revenus au dossier, elle sert la récence. On le lui
+  // signale plutôt que de laisser un classement muet passer pour un classement
+  // par compatibilité.
+  const isTenant = user?.role === 'TENANT';
+  const askedCompatibility = (resolved.sort ?? 'compatibility') === 'compatibility';
+  const compatibilityFellBack = isTenant && askedCompatibility && results.sort !== 'compatibility';
+
   return (
     <main className="results anim-fade-in">
       <Suspense fallback={<aside className="filters" />}>
@@ -74,10 +83,18 @@ export default async function SearchPage({
           <div className="results__sort">
             <span className="label">Tri</span>
             <Suspense fallback={null}>
-              <SortSelect />
+              <SortSelect compatibility={isTenant} />
             </Suspense>
           </div>
         </div>
+
+        {compatibilityFellBack ? (
+          <p className="reminder">
+            Classement par date de publication. Renseignez vos revenus dans votre
+            dossier pour voir d’abord les biens à votre portée.{' '}
+            <Link href="/dossier">Compléter mon dossier</Link>
+          </p>
+        ) : null}
 
         {results.items.length === 0 ? (
           <div className="results__empty">

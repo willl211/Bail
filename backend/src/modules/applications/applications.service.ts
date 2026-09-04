@@ -20,8 +20,13 @@ import {
   type ActiveFeeSchedule,
   type TenantFees,
 } from '../properties/property.mapper';
+import { compatibilityScore } from '../properties/compatibility';
 import { StorageService } from '../storage/storage.service';
-import { TenantService, type TenantFileView } from '../tenant/tenant.service';
+import {
+  TenantService,
+  toCompatibilityFile,
+  type TenantFileView,
+} from '../tenant/tenant.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
 
 /** Statuts pour lesquels un bien accepte encore des candidatures. */
@@ -250,29 +255,15 @@ export class ApplicationsService {
    * décider — la décision reste au propriétaire, sur les mêmes données qu'il
    * voit dans le détail (`OwnerApplicationsService`).
    */
+  /**
+   * Note figée sur la candidature, telle que le propriétaire l'a vue.
+   *
+   * Le barème est partagé avec le classement des annonces : ce que le locataire
+   * voit remonter en tête et ce que le propriétaire lit sur son dossier sont
+   * une seule et même mesure.
+   */
   private scoreOf(property: CandidacyProperty, file: TenantFileView): number {
-    let score = 0;
-    const totalRentCents = property.rentCents + property.chargesCents;
-
-    if (file.netMonthlyIncomeCents) {
-      const ratio = totalRentCents / file.netMonthlyIncomeCents;
-      // Effort nul → 40 points ; effort de 50 % ou plus → 0.
-      score += Math.max(0, Math.round(40 * (1 - ratio / 0.5)));
-    }
-
-    if (file.status === 'VERIFIED') score += 30;
-    else if (file.submittedAt !== null) score += 15;
-
-    const acceptedContract =
-      property.acceptedContractTypes.length === 0 ||
-      (file.contractType !== null && property.acceptedContractTypes.includes(file.contractType));
-    if (acceptedContract) score += 20;
-
-    if (property.guarantorRequirement === GuarantorRequirement.NONE) score += 10;
-    else if (file.guarantor !== null && file.groups.guarantor === 'VERIFIED') score += 10;
-    else if (file.guarantor !== null) score += 5;
-
-    return Math.min(100, Math.max(0, score));
+    return compatibilityScore(property, toCompatibilityFile(file));
   }
 
   private toPropertySummary(property: CandidacyProperty): CandidacyPropertySummary {

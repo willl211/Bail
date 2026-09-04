@@ -67,3 +67,34 @@ Ce que la donnée permet, au-delà du classement :
 
 Le compteur n'est **jamais** montré aux autres locataires : voir README,
 principe 15.
+
+## Biens mis en avant — ce qui a été construit le 4 septembre 2026
+
+C'est la **recommandation par profil** qui a été faite, pas le classement par
+popularité. Le tri « compatibilité » de la maquette existait dans le code depuis
+le premier écran, mais il retombait sur la récence faute d'avoir quoi que ce
+soit à confronter : il n'y avait pas encore de dossier locataire.
+
+Il s'appuie sur le barème qui note déjà chaque candidature — budget (40 points),
+état du dossier (30), type de contrat accepté (20), garant (10) — extrait en
+fonction pure et partagé par les deux usages. Deux barèmes distincts auraient
+fini par diverger, et le produit aurait promis à l'écran autre chose que ce
+qu'il calcule.
+
+Ce que ça change concrètement, sur les huit annonces du pilote :
+
+| Qui regarde | Trois biens en avant |
+|---|---|
+| Visiteur anonyme | les trois plus récents |
+| CDI 2 240 €, sans garant | le studio le moins cher, puis le seul bien qui n'exige pas de garant |
+| Fonction publique 2 610 € | les deux moins chers qui acceptent son contrat |
+| Étudiant 780 € | les plus récents — aucun bien n'est dans son budget, et le classement ne fait pas semblant |
+
+Le classement retombe sur la récence dès que les revenus ne sont pas
+renseignés, **et l'écran le dit** avec le moyen d'y remédier. Un tri qui ne
+classe rien sous une étiquette flatteuse vaudrait moins que pas de tri du tout.
+
+Le classement par sauvegardes reste à faire, et reste subordonné : il
+s'auto-entretient (une annonce nouvelle a zéro sauvegarde, donc ne remonte
+jamais, donc n'en obtient jamais), là où la compatibilité se calcule dès la
+première visite d'une annonce.

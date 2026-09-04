@@ -68,7 +68,7 @@ prestataire. Sans Mailpit démarré, l'API le signale au lancement et les envois
 ## Tests
 
 ```bash
-npm test          # tout : 254 tests
+npm test          # tout : 280 tests
 ```
 
 Deux campagnes, séparées par ce qu'elles exigent pour tourner.
@@ -352,11 +352,16 @@ hors dépôt.
   rien à ce que voit un visiteur, et un classement fondé sur les likes
   s'auto-entretient : une annonce nouvelle a zéro sauvegarde, donc ne remonte
   jamais, donc n'en obtient jamais. Il faudra normaliser (sauvegardes par jour
-  en ligne) et réserver une place aux annonces récentes. Les sauvegardes
-  constituent en attendant la matière première d'une recommandation par profil,
-  l'autre piste envisagée : elles enregistrent des préférences réelles
-  (quartier, surface, meublé), et le tri `COMPATIBILITY` existe déjà dans le
-  code sans rien pour l'alimenter.
+  en ligne) et réserver une place aux annonces récentes. C'est la
+  **recommandation par profil** qui a été construite à la place, avec le barème
+  des candidatures (voir `docs/product-brief.md`).
+- Le classement par compatibilité **trie en mémoire** : la note dépend du
+  dossier de celui qui regarde, aucune colonne ne la porte. Tout l'ensemble
+  retenu par les filtres est donc chargé, noté, trié, puis découpé en pages —
+  trier page par page ne trierait rien. Au-delà de `COMPATIBILITY_MAX_SET`
+  (300 annonces), le tri cède la place à la récence. Sans conséquence sur le
+  pilote messin ; à revoir si le portefeuille change d'ordre de grandeur, en
+  exprimant le barème en SQL — au prix d'une seconde définition de la règle.
 - **Aucune notification sur un bien sauvegardé.** Baisse de loyer, changement
   de disponibilité, bien loué : le canal e-mail et sa file existent, il ne
   manque que les gabarits et les points d'appel.
