@@ -26,9 +26,9 @@
     "db:reset": "npm run prisma:reset --workspace backend",
     "mail:up": "docker compose up -d mailpit",
     "mail:down": "docker compose stop mailpit",
-    "storage:up": "docker compose up -d --wait minio minio-init",
+    "storage:up": "docker compose up -d --wait minio && docker compose run --rm minio-init",
     "storage:down": "docker compose stop minio",
-    "services:up": "docker compose up -d --wait postgres mailpit minio minio-init",
+    "services:up": "docker compose up -d --wait postgres mailpit minio && docker compose run --rm minio-init",
     "env:use": "node scripts/use-env.mjs"
   },
   "//react": "React est déclaré ici, à la racine, et épinglé. @testing-library/react ne l'exige qu'en pair (^18 || ^19) : sans version concrète à la racine, npm installait un React 18 qui masquait le 19 du front — Next et Testing Library chargeaient alors deux React différents, et le rendu de test échouait sur des erreurs internes de react-dom. Les `overrides` verrouillent la même version pour toute dépendance transitive.",

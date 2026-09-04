@@ -47,9 +47,18 @@ jobs:
       # Les mêmes services que sur un poste de développement, démarrés par le
       # même fichier : `services:` aurait demandé de redéclarer PostgreSQL et
       # MinIO ici, et deux définitions finissent toujours par diverger.
-      # `--wait` attend les contrôles de santé du compose.
+      #
+      # Deux commandes et non une : `--wait` attend les contrôles de santé des
+      # services durables, mais **échoue** dès qu'un conteneur se termine — même
+      # avec le code 0. La création des conteneurs de stockage, elle, est une
+      # tâche ponctuelle : `run --rm` propage son code de sortie, de sorte
+      # qu'un échec de configuration arrête la vérification au lieu de la
+      # laisser buter plus loin sur des conteneurs absents.
       - name: Démarrer les services
-        run: docker compose up -d --wait postgres minio minio-init
+        run: docker compose up -d --wait postgres minio
+
+      - name: Créer les conteneurs de stockage
+        run: docker compose run --rm minio-init
 
       - uses: actions/setup-node@v5
         with:
