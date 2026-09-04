@@ -559,6 +559,12 @@ async function main() {
     lastName: 'Kremer',
     phone: '+33 6 12 44 08 71',
     emailVerifiedAt: new Date(),
+    // Adresse du bailleur, obligatoire au bail (loi n° 89-462, article 3).
+    // Renseignée ici pour que le contrôle de cohérence d'un bail de
+    // démonstration ne bute pas sur un champ que rien ne pourrait remplir.
+    addressLine: '9 rue Serpenoise',
+    postalCode: '57000',
+    city: 'Metz',
     passwordHash,
   };
   const owner = await prisma.user.upsert({

@@ -16,7 +16,7 @@ export function OwnerAside({
 }: {
   user: CurrentUser;
   summary: OwnerSummary;
-  current: 'properties' | 'applications' | 'subscription';
+  current: 'properties' | 'applications' | 'subscription' | 'account';
 }) {
   const items = [
     {
@@ -35,6 +35,12 @@ export function OwnerAside({
       key: 'subscription' as const,
       label: 'Abonnement',
       href: '/proprietaires/abonnement',
+      count: null,
+    },
+    {
+      key: 'account' as const,
+      label: 'Mon compte',
+      href: '/proprietaires/compte',
       count: null,
     },
   ];

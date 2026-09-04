@@ -25,6 +25,7 @@ import { LeaseService } from '../lease/lease.service';
 import { OwnerApplicationsService } from './applications.service';
 import { OwnerService } from './owner.service';
 import { UpsertPropertyDto } from './dto/upsert-property.dto';
+import { UpdateOwnerProfileDto } from './dto/owner-profile.dto';
 import { RejectApplicationDto } from './dto/reject-application.dto';
 
 /**
@@ -54,6 +55,24 @@ export class OwnerController {
   @Get('summary')
   summary(@CurrentUser() user: PublicUser) {
     return this.owner.getSummary(user.id);
+  }
+
+  /**
+   * Coordonnées postales du bailleur.
+   *
+   * Obligatoires au bail (loi n° 89-462, article 3) : sans elles, le locataire
+   * n'a pas d'adresse où notifier un congé ou une réclamation. Elles ne sont
+   * pas demandées à l'inscription — trois champs de plus sur l'étape la plus
+   * fragile du parcours — mais leur absence empêche la signature.
+   */
+  @Get('profile')
+  profile(@CurrentUser() user: PublicUser) {
+    return this.owner.getProfile(user.id);
+  }
+
+  @Patch('profile')
+  updateProfile(@CurrentUser() user: PublicUser, @Body() dto: UpdateOwnerProfileDto) {
+    return this.owner.updateProfile(user.id, dto);
   }
 
   /**

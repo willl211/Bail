@@ -98,3 +98,30 @@ passant sur un modèle temporairement publié, puis remise à l'état bloqué.
 - le champ verrouillé `clausesLegalesTexteValide` attend le texte de l'avocat.
   Dans un modèle réellement publié, ces clauses feront partie du corps et le
   marqueur n'existera plus.
+
+## Adresse du bailleur — précision du 4 septembre 2026
+
+L'article 3 de la loi n° 89-462 du 6 juillet 1989 impose que le contrat désigne
+le **domicile du bailleur**. Sans lui, le locataire n'a pas d'adresse où
+notifier un congé, une réclamation ou une mise en demeure : l'acte est
+incomplet.
+
+Elle est demandée dans l'espace propriétaire (« Mon compte »), et non à
+l'inscription : trois champs de plus sur l'étape la plus fragile du parcours
+feraient abandonner des comptes, pour une donnée qui ne sert qu'au bail.
+
+Les trois éléments — voie, code postal, commune — sont exigés **ensemble**. Une
+voie sans commune ne désigne aucun domicile ; l'accepter mettrait sur l'acte une
+adresse à laquelle personne ne peut écrire. La règle tient dans une fonction
+pure partagée (`isAddressComplete`), et son absence est signalée par le contrôle
+de cohérence du bail comme n'importe quel autre champ manquant.
+
+Ce que ça bloque, et ce que ça ne bloque pas : **la signature du bail**, oui —
+un acte sans domicile du bailleur n'a pas à partir. La mise en ligne d'une
+annonce, non : le bailleur n'y est pas encore engagé, et refuser une annonce
+pour une donnée qui ne servira qu'au bail serait disproportionné. L'espace
+propriétaire affiche un rappel plutôt qu'un barrage.
+
+Le code postal est vérifié sur sa forme (cinq chiffres), pas sur son existence :
+tenir un référentiel à jour serait une charge, et refuser à tort un code valide
+empêcherait quelqu'un de signer son bail.

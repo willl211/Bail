@@ -20,6 +20,7 @@ import { createHash } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EVENT } from '../mail/event.templates';
 import { MailService } from '../mail/mail.service';
+import { formatAddress } from '../owner/address.checks';
 import {
   SIGNATURE_DRIVER,
   type SignatureDriver,
@@ -339,9 +340,11 @@ export class LeaseService {
           ? 'Contrat de location — logement meublé'
           : 'Contrat de location — logement vide',
       bailleurNomComplet: `${owner.firstName} ${owner.lastName}`,
-      // L'adresse personnelle du bailleur n'est pas collectée : le champ reste
-      // vide et le contrôle de complétude le signale, plutôt que d'inventer.
-      bailleurAdresse: '',
+      // Adresse du bailleur, obligatoire au bail (loi n° 89-462, article 3).
+      // Reste vide si le propriétaire ne l'a pas renseignée dans son espace :
+      // le contrôle de complétude le signale et refuse l'envoi en signature,
+      // plutôt que d'inventer un domicile ou de retomber sur celui du logement.
+      bailleurAdresse: formatAddress(owner),
       locataireNomComplet: `${application.tenant.firstName} ${application.tenant.lastName}`,
       logementAdresse: `${property.addressLine}, ${property.postalCode} ${property.city}`,
       logementTypeHabitat: 'immeuble collectif',

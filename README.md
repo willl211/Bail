@@ -65,7 +65,7 @@ prestataire. Sans Mailpit démarré, l'API le signale au lancement et les envois
 ## Tests
 
 ```bash
-npm test          # tout : 168 tests
+npm test          # tout : 189 tests
 ```
 
 Deux campagnes, séparées par ce qu'elles exigent pour tourner.
@@ -73,7 +73,7 @@ Deux campagnes, séparées par ce qu'elles exigent pour tourner.
 | | Unitaires | Composants | Intégration |
 |---|---|---|---|
 | Quoi | fonctions pures : contrôle de cohérence du bail, règle de publication, pièces exigées d'un dossier, formats d'affichage | écrans où vit une logique client, montés dans un DOM | l'application Nest complète, contre une vraie base PostgreSQL |
-| Combien | 96 | 32 | 40 |
+| Combien | 105 | 32 | 51 |
 | Exige | rien | rien | `npm run db:up` |
 | Durée | ~12 s | ~15 s | ~50 s |
 
@@ -169,13 +169,18 @@ Ces contraintes sont dans le schéma et dans le code, pas seulement dans la doc.
 9. **Un seul rôle interne.** `AGENT` couvre l'agent de terrain et
    l'administrateur du back-office ; il n'y a pas de rôle `ADMIN` distinct tant
    que le produit n'en a pas besoin.
-10. **Une seule règle de publication.** `propertyChecks()`
+10. **Les règles métier vivent dans des modules purs.** `propertyChecks`,
+    `accountBlockers`, `isAddressComplete`, `validateLease`, `requiredTypes`,
+    `overlaps` ne dépendent ni de Nest ni de Prisma. Ce n'est pas une coquetterie
+    d'architecture : c'est ce qui permet de les tester sans démarrer
+    l'application, et donc de couvrir sérieusement ce qui a une portée légale.
+11. **Une seule règle de publication.** `propertyChecks()`
     ([`backend/src/modules/owner/property.checks.ts`](backend/src/modules/owner/property.checks.ts))
     est une fonction pure, appelée aux trois endroits qui en dépendent : ce que
     le propriétaire voit avant de soumettre, ce que l'API vérifie à la
     soumission, ce que le back-office rejoue avant de mettre en ligne. La
     dupliquer serait le plus sûr moyen de publier un jour un bien sans DPE.
-11. **Une adresse confirmée est exigée pour engager un tiers.** Candidater et
+12. **Une adresse confirmée est exigée pour engager un tiers.** Candidater et
     publier une annonce la demandent ; se connecter, remplir son dossier ou
     préparer une annonce, non. On ne coupe pas l'accès à quelqu'un dont le
     fournisseur de messagerie met dix minutes à distribuer, mais un dossier ou
@@ -183,18 +188,18 @@ Ces contraintes sont dans le schéma et dans le code, pas seulement dans la doc.
     candidat ne saurait pas qu'il est retenu, le propriétaire pas qu'il a reçu
     une candidature. La règle vit dans une seule fonction, `accountBlockers`,
     partagée par les deux profils.
-12. **Aucun e-mail ne transporte de donnée de dossier.** Ni revenu, ni pièce
+13. **Aucun e-mail ne transporte de donnée de dossier.** Ni revenu, ni pièce
     jointe, ni lien vers un fichier privé : le message dit qu'il s'est passé
     quelque chose et renvoie sur le site, où la session contrôle qui voit quoi.
     La promesse faite au locataire (point 6) ne s'arrête pas au bord du
     navigateur — une boîte aux lettres se transfère, se pirate et s'indexe.
-13. **Le journal des envois ne garde pas le contenu des messages.**
+14. **Le journal des envois ne garde pas le contenu des messages.**
     `email_messages` consigne le destinataire, le gabarit et le statut, jamais
     le corps rendu ni les variables. Un lien de réinitialisation en base
     vaudrait une prise de contrôle de compte pour qui sait lire une ligne SQL —
     c'est aussi pourquoi ces e-mails partent en direct plutôt que par une file
     d'attente, qui devrait les stocker.
-14. **Le journal du back-office ne raconte que du vrai.** Il est reconstitué à
+15. **Le journal du back-office ne raconte que du vrai.** Il est reconstitué à
     partir d'horodatages réels — publications, candidatures, pièces contrôlées,
     visites, baux. Rien n'y est ajouté pour remplir la page : un journal qui
     mentirait sur ce qui s'est passé n'aurait aucune valeur d'audit. De même,
@@ -310,10 +315,6 @@ hors dépôt.
   existe. L'interface (`SignatureDriver`) et les variables `DOCUSIGN_*` sont
   déjà en place : il n'y a qu'une classe à ajouter et un nom de driver à
   accepter dans `SignatureModule`.
-- L'**adresse du bailleur n'est collectée nulle part**, alors qu'elle est
-  obligatoire au bail (loi n° 89-462, article 3). Le contrôle de cohérence la
-  signale comme champ manquant. À ajouter au compte propriétaire avant le
-  premier bail réel.
 - **Aucun honoraire ne peut être encaissé**, pour trois raisons cumulées, toutes
   volontaires : le barème est `isLegallyApproved = false`, aucun prestataire de
   paiement n'est branché, et le règlement suppose un bail signé — qui ne peut pas

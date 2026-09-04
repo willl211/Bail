@@ -305,6 +305,24 @@ export function getOwnerSummary() {
   return apiFetchAuthed<OwnerSummary>('/owner/summary');
 }
 
+/**
+ * Coordonnées postales du bailleur, obligatoires au bail
+ * (loi n° 89-462, article 3).
+ *
+ * `complete` est calculé par l'API : le front n'a pas à réimplémenter la règle
+ * « les trois champs vont ensemble ».
+ */
+export interface OwnerProfile {
+  addressLine: string | null;
+  postalCode: string | null;
+  city: string | null;
+  complete: boolean;
+}
+
+export function getOwnerProfile() {
+  return apiFetchAuthed<OwnerProfile>('/owner/profile');
+}
+
 // --- Abonnement propriétaire -------------------------------------------------
 
 export type SubscriptionStatus = 'TRIALING' | 'ACTIVE' | 'PAST_DUE' | 'CANCELLED';

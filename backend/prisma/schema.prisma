@@ -57,6 +57,22 @@ model User {
   lastLoginAt     DateTime?
   isActive        Boolean   @default(true)
 
+  /// Adresse postale du titulaire du compte.
+  ///
+  /// Celle de la **personne**, pas celle du logement loué. Obligatoire au bail
+  /// pour le bailleur (loi n° 89-462 du 6 juillet 1989, article 3) : un contrat
+  /// qui ne désigne pas le domicile du bailleur est incomplet, et le locataire
+  /// n'a plus d'adresse où lui notifier quoi que ce soit — congé, réclamation,
+  /// mise en demeure.
+  ///
+  /// Nullable : un compte se crée en trois champs, et réclamer une adresse à
+  /// l'inscription allongerait l'étape la plus fragile du parcours. Elle est
+  /// demandée dans l'espace propriétaire, et son absence bloque la signature du
+  /// bail — pas la mise en ligne d'une annonce.
+  addressLine String?
+  postalCode  String?
+  city        String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

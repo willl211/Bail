@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { OwnerAside } from '@/components/owner-aside';
-import { getCurrentUser, getOwnerProperties, getOwnerSummary } from '@/lib/api';
+import { getCurrentUser, getOwnerProfile, getOwnerProperties, getOwnerSummary } from '@/lib/api';
 import { VerifyEmailNotice } from '@/components/verify-email-notice';
 import type { OwnerProperty, PropertyStatus } from '@/lib/api';
 import * as fmt from '@/lib/format';
@@ -71,14 +71,34 @@ export default async function OwnerPropertiesPage() {
   if (!user) redirect('/proprietaires');
   if (user.role !== 'OWNER') redirect('/');
 
-  const [properties, summary] = await Promise.all([
+  const [properties, summary, profile] = await Promise.all([
     getOwnerProperties(),
     getOwnerSummary(),
+    getOwnerProfile(),
   ]);
 
   return (
     <div className="page" style={{ paddingBottom: 0 }}>
       {user.emailVerified ? null : <VerifyEmailNotice email={user.email} />}
+
+      {/* Rappel, pas blocage : l'adresse conditionne la signature du bail, pas
+          la mise en ligne d'une annonce. Mais la découvrir au moment de signer
+          serait la découvrir trop tard. */}
+      {profile.complete ? null : (
+        <div className="reminder" role="status">
+          <div>
+            <span className="label label--accent">Adresse à renseigner</span>
+            <p className="p-sm mt-6">
+              Votre adresse postale figure obligatoirement au bail (loi du 6 juillet
+              1989). Sans elle, un bail peut être préparé mais pas envoyé en
+              signature. Elle n’apparaît sur aucune annonce.
+            </p>
+          </div>
+          <Link href="/proprietaires/compte" className="btn btn--ghost btn-sm">
+            Renseigner
+          </Link>
+        </div>
+      )}
 
       <div className="app">
         <OwnerAside user={user} summary={summary} current="properties" />

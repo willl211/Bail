@@ -15,7 +15,9 @@ import {
 import { Readable } from 'node:stream';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UpsertPropertyDto } from './dto/upsert-property.dto';
+import { UpdateOwnerProfileDto } from './dto/owner-profile.dto';
 import { accountBlockers } from '../auth/account.checks';
+import { isAddressComplete } from './address.checks';
 import { propertyChecks } from './property.checks';
 import {
   DOCUMENT_TYPES,
@@ -84,6 +86,20 @@ export interface OwnerPropertyDetail
     issuedAt: string | null;
     rejectionReason: string | null;
   }[];
+}
+
+/**
+ * Coordonnées postales du bailleur, telles qu'elles figureront au bail.
+ *
+ * `complete` est calculé côté API et non déduit du front : c'est cette valeur
+ * qui décide si le rappel s'affiche, et le front n'a pas à réimplémenter la
+ * règle « les trois champs vont ensemble ».
+ */
+export interface OwnerProfile {
+  addressLine: string | null;
+  postalCode: string | null;
+  city: string | null;
+  complete: boolean;
 }
 
 export interface OwnerSummary {
@@ -659,6 +675,31 @@ export class OwnerService {
     });
 
     return { status: updated.status };
+  }
+
+  /** Coordonnées du bailleur. Obligatoires au bail (loi n° 89-462, article 3). */
+  async getProfile(ownerId: string): Promise<OwnerProfile> {
+    const owner = await this.prisma.user.findUniqueOrThrow({
+      where: { id: ownerId },
+      select: { addressLine: true, postalCode: true, city: true },
+    });
+    return { ...owner, complete: isAddressComplete(owner) };
+  }
+
+  async updateProfile(
+    ownerId: string,
+    dto: UpdateOwnerProfileDto,
+  ): Promise<OwnerProfile> {
+    const owner = await this.prisma.user.update({
+      where: { id: ownerId },
+      data: {
+        addressLine: dto.addressLine,
+        postalCode: dto.postalCode,
+        city: dto.city,
+      },
+      select: { addressLine: true, postalCode: true, city: true },
+    });
+    return { ...owner, complete: isAddressComplete(owner) };
   }
 
   async getSummary(ownerId: string): Promise<OwnerSummary> {
