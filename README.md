@@ -1,5 +1,7 @@
 # Bail — plateforme de location longue durée (MVP v0, pilote Metz)
 
+[![Vérification](https://github.com/willl211/Bail/actions/workflows/verification.yml/badge.svg)](https://github.com/willl211/Bail/actions/workflows/verification.yml)
+
 Monorepo de la plateforme. Le contexte produit fait foi et vit dans
 [`CLAUDE.md`](CLAUDE.md) et [`docs/`](docs/) — à lire avant d'écrire du code.
 
@@ -92,6 +94,13 @@ inscrite plus bas dans ce fichier.
 La base de test (`bail_test`) est distincte de celle de développement et créée
 automatiquement ; aucun test ne touche `bail_dev`. Ces suites **tournent en
 série** : elles partagent une base et la vident entre chaque cas.
+
+Tout est rejoué à chaque poussée et sur chaque pull request par
+[`.github/workflows/verification.yml`](.github/workflows/verification.yml), avec
+un vrai PostgreSQL en service — les tests d'intégration ne valent que contre un
+moteur transactionnel. Les étapes vont du moins cher au plus cher : lint et
+types échouent en quelques secondes, les tests en quelques minutes, la
+compilation en dernier.
 
 Les tests de composants ne couvrent que les écrans où quelque chose se décide :
 un jeton à usage unique qui ne doit pas être consommé par une faute de frappe,

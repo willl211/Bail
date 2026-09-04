@@ -1,0 +1,92 @@
+# Vérification automatique de chaque poussée et de chaque pull request.
+#
+# L'ordre des étapes est celui du coût : lint et types échouent en quelques
+# secondes, les tests en quelques minutes, la compilation en dernier. Une faute
+# de frappe n'a pas à attendre trois minutes pour être signalée.
+#
+# Les tests d'intégration parlent à un vrai PostgreSQL — c'est tout leur
+# intérêt : deux onglets qui créent un dossier en même temps, deux locataires
+# qui réservent le même créneau, un index d'unicité qui absorbe un doublon. Le
+# service ci-dessous en fournit un ; aucune donnée réelle ne le traverse.
+
+name: Vérification
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+# Une poussée annule la vérification précédente sur la même branche : la seule
+# qui compte est celle du dernier commit.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verifier:
+    name: Lint, types, tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: bail
+          POSTGRES_PASSWORD: bail
+          POSTGRES_DB: bail_dev
+        ports:
+          - 5432:5432
+        # Sans ce contrôle, les premières étapes démarreraient avant que le
+        # serveur n'accepte les connexions.
+        options: >-
+          --health-cmd "pg_isready -U bail -d bail_dev"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # La campagne d'intégration en dérive `bail_test` : elle ne touche jamais
+      # la base nommée ici (voir backend/test/setup-database.ts).
+      DATABASE_URL: postgresql://bail:bail@localhost:5432/bail_dev?schema=public
+      # Toutes les intégrations réglementées restent simulées (CLAUDE.md
+      # règle 5). Un test qui appellerait un vrai prestataire dépendrait d'un
+      # réseau, d'un quota et d'un compte.
+      MAIL_DRIVER: mock
+      KYC_DRIVER: mock
+      PAYMENT_DRIVER: mock
+      SIGNATURE_DRIVER: mock
+      VIDEO_DRIVER: mock
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # `ci` et non `install` : la version installée doit être exactement celle
+      # du verrou, sans réévaluation des plages de versions.
+      - name: Installer les dépendances
+        run: npm ci
+
+      - name: Générer le client Prisma
+        run: npm run prisma:generate --workspace backend
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Types
+        run: npm run typecheck
+
+      - name: Tests unitaires et de composants
+        run: |
+          npm run test:unit --workspace backend
+          npm test --workspace frontend
+
+      - name: Tests d'intégration
+        run: npm run test:int --workspace backend
+
+      - name: Compilation
+        run: npm run build
