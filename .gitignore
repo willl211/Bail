@@ -20,20 +20,28 @@ out/
 !.env.example
 !env/*.env.example
 
-# Stockage local des fichiers uploadés (dev)
-storage/
+# Stockage local des fichiers uploadés (dev).
+#
+# Chemins ANCRÉS, avec une barre initiale : un motif comme `storage/` seul
+# s'applique à tous les niveaux de l'arborescence et emportait aussi
+# `backend/src/modules/storage/` — le module de stockage n'était donc pas dans
+# le dépôt, et la compilation échouait sur une copie fraîche. Même précaution
+# pour les autres motifs de dossier ci-dessous.
+/backend/storage/
 # Écritures des tests d'intégration (e-mails simulés, pièces déposées).
-storage-test/
-uploads/
+/backend/storage-test/
+/backend/uploads/
 
 # Logs
 *.log
 npm-debug.log*
-logs/
+/logs/
 
 # Tests / couverture
 coverage/
 .nyc_output/
+# `dist/` et `build/` restent volontairement non ancrés : ce sont des noms de
+# sortie de compilation, jamais de dossiers de source ici.
 
 # Éditeurs / OS
 .DS_Store

@@ -248,6 +248,12 @@ hors dépôt.
 
 ## Dette connue
 
+- Les motifs de `.gitignore` qui désignent un **dossier de données** sont
+  ancrés par une barre initiale (`/backend/storage/`). Un motif non ancré
+  s'applique à tous les niveaux : `storage/` emportait aussi
+  `backend/src/modules/storage/`, et le module de stockage est resté hors du
+  dépôt jusqu'à ce que la première exécution de la CI le révèle. Toute nouvelle
+  entrée désignant un dossier de données doit être ancrée de la même façon.
 - **React est déclaré et épinglé à la racine** (`19.2.0`, plus des `overrides`) :
   `@testing-library/react` ne l'exige qu'en pair (`^18 || ^19`), et sans version
   concrète à la racine npm y installait un React 18 qui masquait le 19 du front.
