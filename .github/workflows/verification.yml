@@ -59,17 +59,23 @@ jobs:
       VIDEO_DRIVER: mock
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version-file: .nvmrc
           cache: npm
 
       # `ci` et non `install` : la version installée doit être exactement celle
       # du verrou, sans réévaluation des plages de versions.
+      #
+      # L'installation est de loin l'étape la plus longue (sept minutes sans
+      # cache, contre soixante-dix secondes pour tout le reste réuni).
+      # `--prefer-offline` sert le cache restauré par `setup-node` plutôt que le
+      # réseau ; l'audit et le message de financement n'ont rien à faire dans
+      # une vérification automatique.
       - name: Installer les dépendances
-        run: npm ci
+        run: npm ci --prefer-offline --no-audit --fund=false
 
       - name: Générer le client Prisma
         run: npm run prisma:generate --workspace backend
