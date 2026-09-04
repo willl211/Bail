@@ -20,7 +20,7 @@ Fonds propres. Budget de développement pas encore chiffré précisément.
 - Recruter un développeur/CTO.
 - Trouver un avocat en droit immobilier.
 - Identifier l'organisme de garantie financière et l'assurance RC Pro.
-- Trancher carte T seule vs T+G.
+- ~~Trancher carte T seule vs T+G.~~ **Tranché le 4 septembre 2026 : T + G + S.**
 - Figer le barème d'honoraires et le montant de l'abonnement propriétaire.
 - Choisir un prestataire KYC définitif (actuellement mocké).
 

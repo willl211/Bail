@@ -4,14 +4,24 @@ Ce document existe pour que le développement n'ignore pas ces contraintes, mais
 
 ## Statut
 
-- **Carte professionnelle T** (et probablement G) : portée par un associé ou salarié déjà titulaire (décision prise).
-- **Carte T seule ou T+G** : pas encore tranché — dépend du circuit des fonds (voir ci-dessous). À trancher avec un avocat, pas encore identifié.
+- **Cartes professionnelles T, G et S** : portées par un associé ou salarié déjà
+  titulaire (décision prise). Arbitrage T seule vs T+G **tranché le 4 septembre
+  2026 : ce sera T + G + S.**
+  - **T** (transactions) : la mise en location elle-même.
+  - **G** (gestion immobilière) : indispensable au circuit des fonds retenu —
+    la plateforme encaisse dépôts de garantie et premiers loyers pour le compte
+    du propriétaire. Sans elle, il aurait fallu des paiements directs entre
+    parties, et refaire le module de paiement.
+  - **S** (syndic de copropriété) : hors périmètre du MVP v0. Elle prépare les
+    services post-emménagement évoqués dans `product-brief.md`, qui viendront
+    après le lancement commercial. **Rien à construire pour elle aujourd'hui**,
+    et rien ne doit être ajouté au produit sous prétexte qu'elle existera.
 - **Garantie financière et assurance RC Pro** : organisme pas encore identifié.
 - **Avocat en droit immobilier** : pas encore trouvé, à faire avant de figer le mandat de location et le modèle de bail définitif.
 
 ## Circuit des fonds (impacte le modèle de données)
 
-La plateforme **encaisse les loyers/dépôts pour le compte du propriétaire** (plutôt que des paiements directs entre parties). Cette décision implique le besoin d'une carte G en plus de la carte T. Le module paiement doit donc prévoir un état "fonds reçus, à reverser au propriétaire", pas seulement un paiement direct.
+La plateforme **encaisse les loyers/dépôts pour le compte du propriétaire** (plutôt que des paiements directs entre parties). Cette décision implique le besoin d'une carte G en plus de la carte T — **obtenue** (voir ci-dessus), ce qui lève la seule incertitude qui pesait sur ce circuit. Le module paiement prévoit donc un état « fonds reçus, à reverser au propriétaire », pas seulement un paiement direct : c'est le champ `Payment.fundsStatus`, et le back-office l'affiche dans son onglet « Baux & paiements ».
 
 ## Barème d'honoraires et abonnement
 

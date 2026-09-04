@@ -21,6 +21,7 @@ import { propertyChecks } from '../owner/property.checks';
 import { SubscriptionService } from '../payments/subscription.service';
 import { EVENT } from '../mail/event.templates';
 import { MailService } from '../mail/mail.service';
+import { SavedService } from '../saved/saved.service';
 import { requiredTypes } from '../tenant/tenant.slots';
 
 export interface BackofficeSummary {
@@ -71,6 +72,8 @@ export interface AdminPropertyRow {
   status: PropertyStatus;
   totalRentCents: number;
   surfaceM2: number;
+  /** Locataires ayant mis ce bien de côté. Agrégat, jamais nominatif. */
+  savedCount: number;
   blockers: string[];
   warnings: string[];
   submittedAt: string | null;
@@ -136,6 +139,7 @@ export class BackofficeService {
     private readonly config: ConfigService,
     private readonly subscriptions: SubscriptionService,
     private readonly mail: MailService,
+    private readonly saved: SavedService,
   ) {}
 
   // ---------------------------------------------------------------- Registre
@@ -426,6 +430,8 @@ export class BackofficeService {
       },
     });
 
+    const saved = await this.saved.countsByProperty(properties.map((p) => p.id));
+
     return properties.map((property) => ({
       reference: property.reference,
       title: property.title,
@@ -434,6 +440,7 @@ export class BackofficeService {
       status: property.status,
       totalRentCents: property.rentCents + property.chargesCents,
       surfaceM2: property.surfaceM2,
+      savedCount: saved.get(property.id) ?? 0,
       ...propertyChecks(property),
       submittedAt: property.updatedAt.toISOString(),
     }));

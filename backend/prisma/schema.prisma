@@ -82,10 +82,11 @@ model User {
   mandatesAsOwner Mandate[]      @relation("MandateOwner")
 
   // Locataire
-  tenantFile     TenantFile?
-  applications   Application[]
-  visitsAsTenant Visit[]       @relation("VisitTenant")
-  leasesAsTenant Lease[]       @relation("LeaseTenant")
+  tenantFile      TenantFile?
+  applications    Application[]
+  visitsAsTenant  Visit[]         @relation("VisitTenant")
+  leasesAsTenant  Lease[]         @relation("LeaseTenant")
+  savedProperties SavedProperty[]
 
   // Agent interne
   visitsAsAgent    Visit[]     @relation("VisitAgent")
@@ -342,6 +343,7 @@ model Property {
   photos       PropertyPhoto[]
   documents    PropertyDocument[]
   applications Application[]
+  savedBy      SavedProperty[]
   visits       Visit[]
   visitSlots   VisitSlot[]
   leases       Lease[]
@@ -685,6 +687,42 @@ model Application {
 //   - caméra obligatoire pendant la visite (pas d'option de désactivation)
 //   - enregistrement conservé 15 jours, puis purgé automatiquement
 // =============================================================================
+
+/// Bien mis de côté par un locataire.
+///
+/// Comble le vide entre « je regarde » et « je candidate » : sans lui, un
+/// visiteur qui hésite n'a aucun moyen de retrouver un bien le lendemain.
+///
+/// Ce que ce modèle N'EST PAS, volontairement : un signal de popularité affiché
+/// aux autres locataires. Le marché messin reçoit en moyenne 6,8 candidatures
+/// par bien (docs/market-context.md) ; annoncer « 42 personnes ont sauvegardé
+/// ce bien » découragerait des candidats — ce qui dessert aussi le propriétaire
+/// — et concentrerait tout le monde sur les mêmes annonces. Le décompte est
+/// donc servi au propriétaire du bien et au back-office, jamais aux autres
+/// locataires.
+///
+/// Donnée personnelle : une liste de biens sauvegardés révèle une intention de
+/// déménagement. Elle est supprimable par son titulaire, et n'est jamais
+/// exposée nominativement au propriétaire — seulement en agrégat, comme le
+/// résultat des contrôles d'un dossier.
+model SavedProperty {
+  id String @id @default(uuid())
+
+  tenantId String
+  tenant   User   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  /// Sauvegarder deux fois le même bien n'a pas de sens : la contrainte rend
+  /// l'opération idempotente sans que l'appelant ait à s'en soucier.
+  @@unique([tenantId, propertyId])
+  /// Le décompte par bien est la lecture la plus fréquente côté propriétaire.
+  @@index([propertyId])
+  @@map("saved_properties")
+}
 
 enum VisitType {
   ACCOMPANIED // visite physique avec un agent

@@ -57,6 +57,7 @@ const propertyEnAttente: AdminPropertyRow = {
   status: 'PENDING_REVIEW',
   totalRentCents: 83_000,
   surfaceM2: 44,
+  savedCount: 0,
   blockers: [],
   warnings: ['Photos (0 / 6)'],
   submittedAt: '2026-09-02T19:45:00.000Z',

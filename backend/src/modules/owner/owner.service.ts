@@ -19,6 +19,7 @@ import { UpdateOwnerProfileDto } from './dto/owner-profile.dto';
 import { accountBlockers } from '../auth/account.checks';
 import { isAddressComplete } from './address.checks';
 import { propertyChecks } from './property.checks';
+import { SavedService } from '../saved/saved.service';
 import {
   DOCUMENT_TYPES,
   IMAGE_TYPES,
@@ -46,6 +47,17 @@ export interface OwnerPropertyItem {
   totalRentCents: number;
   photoCount: number;
   applicationCount: number;
+  /**
+   * Nombre de locataires ayant mis ce bien de côté.
+   *
+   * Rapproché du nombre de candidatures, c'est un signal de **prix** : beaucoup
+   * de sauvegardes et peu de candidatures signifient que le bien plaît mais que
+   * quelque chose retient — le loyer, les critères, le garant exigé. Un
+   * compteur de vues ne dirait rien d'actionnable ; celui-ci, si.
+   *
+   * Agrégat seulement : le propriétaire ne voit jamais qui a sauvegardé.
+   */
+  savedCount: number;
   publishedAt: string | null;
   /**
    * Motif du dernier renvoi par le contrôle de Bail. Le propriétaire doit le
@@ -127,6 +139,7 @@ export class OwnerService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    private readonly saved: SavedService,
   ) {}
 
   /**
@@ -364,6 +377,7 @@ export class OwnerService {
     // Le blocage tient au compte, pas au bien : il s'ajoute donc à chaque
     // ligne, pour que le propriétaire le voie là où il s'apprête à soumettre.
     const account = accountBlockers(owner);
+    const saved = await this.saved.countsByProperty(properties.map((p) => p.id));
 
     return properties.map((property) => {
       const checks = propertyChecks(property);
@@ -382,6 +396,7 @@ export class OwnerService {
         totalRentCents: property.rentCents + property.chargesCents,
         photoCount: property.photos.length,
         applicationCount: property._count.applications,
+        savedCount: saved.get(property.id) ?? 0,
         publishedAt: property.publishedAt?.toISOString() ?? null,
         reviewNote: property.reviewNote,
         blockers: [...account, ...checks.blockers],
@@ -450,6 +465,7 @@ export class OwnerService {
       })),
       photoCount: property.photos.length,
       applicationCount: property._count.applications,
+      savedCount: (await this.saved.countsByProperty([property.id])).get(property.id) ?? 0,
       publishedAt: property.publishedAt?.toISOString() ?? null,
       reviewNote: property.reviewNote,
       ...(() => {

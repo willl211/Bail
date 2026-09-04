@@ -3,7 +3,7 @@ import { Suspense } from 'react';
 import { PropertyRow } from '@/components/property-row';
 import { SearchFilters } from '@/components/search-filters';
 import { SortSelect } from '@/components/sort-select';
-import { getDistricts, searchProperties } from '@/lib/api';
+import { getCurrentUser, getDistricts, getSavedReferences, searchProperties } from '@/lib/api';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,7 +46,12 @@ export default async function SearchPage({
 }) {
   const resolved = await searchParams;
   const params = toApiParams(resolved);
-  const [results, districts] = await Promise.all([searchProperties(params), getDistricts()]);
+  const [results, districts, user, savedReferences] = await Promise.all([
+    searchProperties(params),
+    getDistricts(),
+    getCurrentUser(),
+    getSavedReferences(),
+  ]);
 
   const maxRent = params.get('maxRent');
 
@@ -81,7 +86,12 @@ export default async function SearchPage({
           </div>
         ) : (
           results.items.map((property) => (
-            <PropertyRow key={property.reference} property={property} />
+            <PropertyRow
+              key={property.reference}
+              property={property}
+              saved={savedReferences.includes(property.reference)}
+              role={user?.role ?? null}
+            />
           ))
         )}
       </section>

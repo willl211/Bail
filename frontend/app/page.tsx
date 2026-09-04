@@ -6,7 +6,9 @@ import { PlanWalkthrough } from '@/components/plan-walkthrough';
 import { ActivityTicker, buildTickerItems } from '@/components/activity-ticker';
 import {
   getDistricts,
+  getCurrentUser,
   getFeaturedProperties,
+  getSavedReferences,
   getMarketSnapshot,
   getOwnerSubscriptionPricing,
   searchProperties,
@@ -34,13 +36,19 @@ const OWNER_STEPS = [
 ];
 
 export default async function HomePage() {
-  const [featured, districts, market, subscription, all] = await Promise.all([
-    getFeaturedProperties(3),
-    getDistricts(),
-    getMarketSnapshot(),
-    getOwnerSubscriptionPricing(),
-    searchProperties(new URLSearchParams({ pageSize: '8' })),
-  ]);
+  const [featured, districts, market, subscription, all, user, savedReferences] =
+    await Promise.all([
+      getFeaturedProperties(3),
+      getDistricts(),
+      getMarketSnapshot(),
+      getOwnerSubscriptionPricing(),
+      searchProperties(new URLSearchParams({ pageSize: '8' })),
+      getCurrentUser(),
+      // Une seule requête pour marquer toutes les cartes, plutôt qu'un champ
+      // ajouté à chaque bien : les routes publiques d'annonces restent
+      // publiques et sans état.
+      getSavedReferences(),
+    ]);
 
   return (
     <>
@@ -117,7 +125,12 @@ export default async function HomePage() {
 
           <div className="card-grid">
             {featured.map((property) => (
-              <PropertyCard key={property.reference} property={property} />
+              <PropertyCard
+                key={property.reference}
+                property={property}
+                saved={savedReferences.includes(property.reference)}
+                role={user?.role ?? null}
+              />
             ))}
           </div>
         </section>

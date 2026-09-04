@@ -1069,6 +1069,46 @@ async function main() {
   }
   console.log(`  ${TENANTS.length} locataires de démonstration, candidatures et créneaux`);
 
+  // --- Biens mis de côté ------------------------------------------------------
+  //
+  // Le jeu est choisi pour montrer le signal qui rend ce décompte utile :
+  // MZ-0161 est sauvegardé par trois locataires et ne reçoit **aucune**
+  // candidature. Le bien plaît, mais quelque chose retient — le loyer, les
+  // critères, le garant exigé. C'est ce que le propriétaire doit pouvoir lire,
+  // et qu'aucun compteur de vues ne lui dirait.
+  const SAVED: Record<string, string[]> = {
+    'MZ-0161': ['camille.ferry', 'noah.bertrand', 'ines.lemoine'],
+    'MZ-0142': ['theo.marchand'],
+    'MZ-0155': ['ines.lemoine'],
+  };
+
+  let savedCount = 0;
+  for (const [reference, handles] of Object.entries(SAVED)) {
+    const property = await prisma.property.findUnique({
+      where: { reference },
+      select: { id: true },
+    });
+    if (!property) continue;
+
+    for (const handle of handles) {
+      const tenant = await prisma.user.findUnique({
+        where: { email: `${handle}@bail.local` },
+        select: { id: true },
+      });
+      if (!tenant) continue;
+
+      await prisma.savedProperty.upsert({
+        where: {
+          tenantId_propertyId: { tenantId: tenant.id, propertyId: property.id },
+        },
+        update: {},
+        create: { tenantId: tenant.id, propertyId: property.id },
+      });
+      savedCount += 1;
+    }
+  }
+  console.log(`  ${savedCount} biens mis de côté par les locataires`);
+
   console.log('Seed — terminé');
 }
 

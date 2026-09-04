@@ -121,6 +121,9 @@ export function TenantFileScreen({
                 {file.verifiedSlotCount}/{file.expectedSlotCount}
               </span>
             </Link>
+            <Link href="/dossier/sauvegardes" className="aside__item">
+              Biens sauvegardés
+            </Link>
             <Link href="/recherche" className="aside__item">
               Rechercher un bien
             </Link>

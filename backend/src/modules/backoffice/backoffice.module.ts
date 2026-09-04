@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { BackofficeController } from './backoffice.controller';
 import { BackofficeService } from './backoffice.service';
+import { SavedModule } from '../saved/saved.module';
 
 /**
  * Back-office de l'agence.
@@ -10,6 +11,7 @@ import { BackofficeService } from './backoffice.service';
  * qui sait la resynchroniser.
  */
 @Module({
+  imports: [SavedModule],
   controllers: [BackofficeController],
   providers: [BackofficeService],
 })

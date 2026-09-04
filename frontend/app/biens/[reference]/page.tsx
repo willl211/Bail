@@ -2,12 +2,16 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { PhotoPlaceholder } from '@/components/photo-placeholder';
-import { ApiError, getCurrentUser, getMarketSnapshot, getProperty } from '@/lib/api';
+import { SaveButton } from '@/components/save-button';
+import { ApiError, getCurrentUser, getSavedReferences, getMarketSnapshot, getProperty } from '@/lib/api';
 import * as fmt from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
 
-type Params = { params: Promise<{ reference: string }> };
+type Params = {
+  params: Promise<{ reference: string }>;
+  searchParams: Promise<{ sauvegarder?: string }>;
+};
 
 async function loadProperty(reference: string) {
   try {
@@ -31,13 +35,15 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   }
 }
 
-export default async function PropertyPage({ params }: Params) {
-  const { reference } = await params;
-  const [property, market, user] = await Promise.all([
+export default async function PropertyPage({ params, searchParams }: Params) {
+  const [{ reference }, query] = await Promise.all([params, searchParams]);
+  const [property, market, user, savedReferences] = await Promise.all([
     loadProperty(reference),
     getMarketSnapshot().catch(() => null),
     getCurrentUser(),
+    getSavedReferences(),
   ]);
+  const saved = savedReferences.includes(reference);
 
   const responseDelay =
     market?.metrics.find((metric) => metric.key === 'averageResponseDelay')?.value ?? null;
@@ -213,6 +219,17 @@ export default async function PropertyPage({ params }: Params) {
                   {candidacyLabel}
                 </Link>
               ) : null}
+
+              {/* Sous la candidature, et visuellement plus léger : mettre de
+                  côté est l'issue de ceux qui hésitent, pas l'action attendue. */}
+              <div className="mt-10">
+                <SaveButton
+                  reference={property.reference}
+                  initiallySaved={saved}
+                  role={user?.role ?? null}
+                  autoSave={query.sauvegarder === '1'}
+                />
+              </div>
               {responseDelay ? (
                 <p className="booking__response">Réponse moyenne sous {responseDelay}</p>
               ) : null}

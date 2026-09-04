@@ -244,6 +244,11 @@ export interface OwnerProperty {
   totalRentCents: number;
   photoCount: number;
   applicationCount: number;
+  /**
+   * Locataires ayant mis ce bien de côté. Rapproché des candidatures, c'est un
+   * signal de prix — jamais nominatif.
+   */
+  savedCount: number;
   publishedAt: string | null;
   /** Motif du dernier renvoi par le contrôle de Bail. */
   reviewNote: string | null;
@@ -321,6 +326,43 @@ export interface OwnerProfile {
 
 export function getOwnerProfile() {
   return apiFetchAuthed<OwnerProfile>('/owner/profile');
+}
+
+// --- Biens sauvegardés -------------------------------------------------------
+
+export interface SavedPropertyItem {
+  reference: string;
+  title: string;
+  district: string;
+  surfaceM2: number;
+  rooms: number;
+  furnished: boolean;
+  energyRating: string | null;
+  totalRentCents: number;
+  photoUrl: string | null;
+  status: PropertyStatus;
+  /** Faux pour un bien loué ou retiré : il reste listé, avec une mention. */
+  available: boolean;
+  savedAt: string;
+}
+
+export function getSavedProperties() {
+  return apiFetchAuthed<SavedPropertyItem[]>('/tenant/saved');
+}
+
+/**
+ * Références sauvegardées, pour marquer les cartes d'une page de résultats.
+ *
+ * Ne lève jamais : un visiteur anonyme, ou un propriétaire, n'a simplement
+ * aucune sauvegarde — ce n'est pas une erreur, et une page de résultats ne doit
+ * pas tomber pour autant.
+ */
+export async function getSavedReferences(): Promise<string[]> {
+  try {
+    return await apiFetchAuthed<string[]>('/tenant/saved/references');
+  } catch {
+    return [];
+  }
 }
 
 // --- Abonnement propriétaire -------------------------------------------------
@@ -912,6 +954,7 @@ export interface AdminPropertyRow {
   status: PropertyStatus;
   totalRentCents: number;
   surfaceM2: number;
+  savedCount: number;
   blockers: string[];
   warnings: string[];
   submittedAt: string | null;

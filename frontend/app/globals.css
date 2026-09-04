@@ -447,6 +447,84 @@ p {
   padding: 34px 34px 38px;
 }
 
+/* Bouton « sauvegarder ». Discret par construction : ce n'est pas l'action
+   principale d'une fiche annonce, et lui donner le poids du bouton
+   « Candidater » brouillerait la hiérarchie. */
+.save {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: 1px solid var(--line-strong);
+  color: var(--ink-2);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 9px 14px;
+  cursor: pointer;
+  transition:
+    color 0.16s var(--ease-out),
+    border-color 0.16s var(--ease-out),
+    background 0.16s var(--ease-out);
+}
+
+.save:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent-border-soft);
+}
+
+.save:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+/* Sauvegardé : teinté accent, jamais rouge — mettre un bien de côté n'est ni
+   une alerte ni une action irréversible. */
+.save--on {
+  color: var(--accent);
+  border-color: var(--accent-border-soft);
+  background: var(--accent-tint);
+}
+
+.save__mark {
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1;
+}
+
+/* Sur une carte ou une ligne de résultat : posé en haut à droite, sans texte. */
+.save--icon {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  padding: 7px 9px;
+  /* Fond opaque : la vignette derrière peut être claire ou sombre. */
+  background: var(--surface);
+  border-color: var(--line);
+}
+
+.save--icon.save--on {
+  background: var(--accent-tint-strong);
+}
+
+/* Conteneur de la vignette d'une ligne de résultat : il ancre le bouton
+   « sauvegarder ». Ancré sur la ligne entière, celui-ci recouvrirait le loyer. */
+.property-row__media {
+  position: relative;
+}
+
+/* Dans une liste : même apparence que sur une carte, mais dans le flux. */
+.save--inline {
+  padding: 7px 9px;
+}
+
+.save--full {
+  width: 100%;
+  justify-content: center;
+}
+
 /* Bandeau d'information en tête d'espace personnel. Teinté accent, pas rouge :
    une adresse à confirmer n'est pas une erreur, c'est une étape en attente.
    Nommé `reminder` et non `notice` : ce dernier existe déjà plus bas, pour les

@@ -50,6 +50,15 @@ function Holding({ property }: { property: OwnerProperty }) {
       <div>
         <span className="label">Candidatures</span>
         <div className="stat__value">{property.applicationCount}</div>
+        {/* Rapproché des candidatures, le nombre de sauvegardes est un signal
+            de prix : beaucoup mis de côté et peu de candidatures signifie que
+            le bien plaît mais que quelque chose retient. Agrégat seulement —
+            le propriétaire ne voit jamais qui a sauvegardé. */}
+        <div className="holding__meta">
+          {property.savedCount === 0
+            ? 'aucune sauvegarde'
+            : `${property.savedCount} sauvegarde${property.savedCount > 1 ? 's' : ''}`}
+        </div>
       </div>
 
       <div>

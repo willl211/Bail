@@ -528,6 +528,13 @@ export function BackofficeScreen({
                       : property.warnings.length > 0
                         ? property.warnings.join(' · ')
                         : 'Contrôles passés'}
+                    {/* Un bien à zéro sauvegarde après plusieurs jours en ligne
+                        est un bien à retravailler avec son propriétaire.
+                        Agrégat, jamais nominatif. */}
+                    <span className="doc__m">
+                      {property.savedCount} sauvegarde
+                      {property.savedCount > 1 ? 's' : ''}
+                    </span>
                   </div>
 
                   <div className="doc__a">

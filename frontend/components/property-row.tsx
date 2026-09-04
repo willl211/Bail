@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { PropertyListItem } from '@/lib/api';
 import * as fmt from '@/lib/format';
 import { PhotoPlaceholder } from './photo-placeholder';
+import { SaveButton } from './save-button';
 
 /**
  * Ligne de résultat de recherche.
@@ -14,12 +15,31 @@ import { PhotoPlaceholder } from './photo-placeholder';
  * Le loyer affiché est charges comprises, avec le détail des charges en dessous :
  * c'est ce que la maquette met en gros, et ce sur quoi porte le filtre de loyer.
  */
-export function PropertyRow({ property }: { property: PropertyListItem }) {
+export function PropertyRow({
+  property,
+  saved = false,
+  role = null,
+}: {
+  property: PropertyListItem;
+  /** Déjà mis de côté par le visiteur connecté. */
+  saved?: boolean;
+  role?: 'OWNER' | 'TENANT' | 'AGENT' | null;
+}) {
   const visiting = property.status === 'VISITS_IN_PROGRESS';
 
   return (
     <Link href={`/biens/${property.reference}`} className="property-row reveal">
-      <PhotoPlaceholder label={property.photoLabel} className="property-row__photo" />
+      {/* La vignette porte le bouton, et non la ligne entière : posé au bord
+          de la ligne, il recouvrirait le bloc du loyer. */}
+      <div className="property-row__media">
+        <PhotoPlaceholder label={property.photoLabel} className="property-row__photo" />
+        <SaveButton
+          reference={property.reference}
+          initiallySaved={saved}
+          role={role}
+          variant="icon"
+        />
+      </div>
 
       <div>
         <div className="property-row__id">

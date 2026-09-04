@@ -31,3 +31,39 @@ Hors périmètre v0, à ne pas construire maintenant :
 ## Pourquoi ce phasage
 
 La visite autonome pose des questions de responsabilité (accident, dégradation, occupation frauduleuse pendant une visite sans témoin) et nécessite une infrastructure matérielle (boîtiers IoT) coûteuse à sécuriser correctement. Le choix a été fait de valider d'abord la demande, le parcours et le modèle économique avec des visites accompagnées/visio, avant d'investir dans le matériel connecté.
+
+## Biens mis en avant — précision du 4 septembre 2026
+
+Deux pistes avaient été envisagées : une recommandation par profil, ou un
+système de likes. **Le like est retenu pour commencer**, mais il faut distinguer
+ce qu'il sert :
+
+| | Sauvegarder un bien | Classer par popularité |
+|---|---|---|
+| Nature | privé, utilitaire | public, comparatif |
+| Bénéficiaire | le locataire | la plateforme |
+| Valeur au pilote | immédiate | quasi nulle |
+
+Seule la première moitié est construite. Avec huit annonces, un classement par
+sauvegardes ne changerait pratiquement rien à ce que voit un visiteur ; en
+revanche le vide entre « je regarde » et « je candidate » était réel, et rien ne
+le comblait — un visiteur qui hésitait n'avait aucun moyen de retrouver un bien
+le lendemain.
+
+Ce que la donnée permet, au-delà du classement :
+
+1. La liste « Mes biens sauvegardés » (fait).
+2. Un **signal de prix** pour le propriétaire : beaucoup de sauvegardes et peu
+   de candidatures signifient que le bien plaît mais que quelque chose retient.
+   Actionnable, contrairement à un compteur de vues (fait).
+3. Un indicateur au back-office : un bien à zéro sauvegarde après plusieurs
+   jours en ligne est un bien à retravailler avec son propriétaire (fait).
+4. Des notifications sur un bien mis de côté — baisse de loyer, bien loué (à
+   faire).
+5. Le classement des biens en avant (à faire, avec normalisation).
+6. La **matière première d'une recommandation par profil** : les sauvegardes
+   enregistrent des préférences réelles. Les likes ne s'opposent pas à cette
+   piste, ils la préparent.
+
+Le compteur n'est **jamais** montré aux autres locataires : voir README,
+principe 15.

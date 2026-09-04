@@ -68,7 +68,7 @@ prestataire. Sans Mailpit démarré, l'API le signale au lancement et les envois
 ## Tests
 
 ```bash
-npm test          # tout : 216 tests
+npm test          # tout : 236 tests
 ```
 
 Deux campagnes, séparées par ce qu'elles exigent pour tourner.
@@ -76,7 +76,7 @@ Deux campagnes, séparées par ce qu'elles exigent pour tourner.
 | | Unitaires | Composants | Intégration |
 |---|---|---|---|
 | Quoi | fonctions pures : contrôle de cohérence du bail, règle de publication, pièces exigées d'un dossier, formats d'affichage | écrans où vit une logique client, montés dans un DOM | l'application Nest complète, contre une vraie base PostgreSQL |
-| Combien | 116 | 32 | 67 |
+| Combien | 117 | 40 | 79 |
 | Exige | rien | rien | `npm run db:up` |
 | Durée | ~12 s | ~15 s | ~50 s |
 
@@ -205,7 +205,15 @@ Ces contraintes sont dans le schéma et dans le code, pas seulement dans la doc.
     vaudrait une prise de contrôle de compte pour qui sait lire une ligne SQL —
     c'est aussi pourquoi ces e-mails partent en direct plutôt que par une file
     d'attente, qui devrait les stocker.
-15. **Le journal du back-office ne raconte que du vrai.** Il est reconstitué à
+15. **Le décompte des sauvegardes ne sort jamais vers un autre locataire.** Le
+    marché messin reçoit en moyenne 6,8 candidatures par bien
+    (`docs/market-context.md`) : afficher « 42 personnes ont sauvegardé ce
+    bien » découragerait des candidats — ce qui dessert aussi le propriétaire —
+    et concentrerait tout le monde sur les mêmes annonces. Le décompte est servi
+    au propriétaire du bien et au back-office, en **agrégat** : ni l'un ni
+    l'autre ne voit *qui* a sauvegardé, comme aucun d'eux ne voit les pièces
+    d'un dossier.
+16. **Le journal du back-office ne raconte que du vrai.** Il est reconstitué à
     partir d'horodatages réels — publications, candidatures, pièces contrôlées,
     visites, baux. Rien n'y est ajouté pour remplir la page : un journal qui
     mentirait sur ce qui s'est passé n'aurait aucune valeur d'audit. De même,
@@ -228,6 +236,7 @@ un écran doit être fonctionnel avant de passer au suivant.
 | 7 | Paiement des honoraires | **fait** — détail par poste avec plafonds légaux, comparatif, ouverture du règlement (bloqué : voir ci-dessous) |
 | — | Back-office de l'agence | **fait** — registre à quatre onglets : dossiers, biens, baux & paiements, journal |
 | — | E-mails transactionnels | **fait** — driver SMTP vérifié, journal d'envoi, file différée, 3 messages de compte et 11 notifications d'événements |
+| — | Biens sauvegardés | **fait** — mise de côté par le locataire, décompte agrégé pour le propriétaire. Classement par popularité **non implémenté**, volontairement |
 
 Le schéma de base couvre déjà les sept étapes. **Les sept sont complètes**, et
 le back-office qui les débloque aussi.
@@ -341,6 +350,19 @@ hors dépôt.
 - Les tâches planifiées (file d'envoi, purge des enregistrements) supposent
   **une seule instance d'API**, ce qui est le cas du pilote. Avec plusieurs, il
   faudra les verrouiller pour qu'elles ne tournent pas en double.
+- **Le classement des biens par popularité n'est pas implémenté**, et c'est un
+  choix. Avec huit annonces, trier par sauvegardes ne changerait pratiquement
+  rien à ce que voit un visiteur, et un classement fondé sur les likes
+  s'auto-entretient : une annonce nouvelle a zéro sauvegarde, donc ne remonte
+  jamais, donc n'en obtient jamais. Il faudra normaliser (sauvegardes par jour
+  en ligne) et réserver une place aux annonces récentes. Les sauvegardes
+  constituent en attendant la matière première d'une recommandation par profil,
+  l'autre piste envisagée : elles enregistrent des préférences réelles
+  (quartier, surface, meublé), et le tri `COMPATIBILITY` existe déjà dans le
+  code sans rien pour l'alimenter.
+- **Aucune notification sur un bien sauvegardé.** Baisse de loyer, changement
+  de disponibilité, bien loué : le canal e-mail et sa file existent, il ne
+  manque que les gabarits et les points d'appel.
 - **Aucun prestataire d'envoi n'est retenu.** `MAIL_DRIVER=smtp` pointe sur
   Mailpit en local ; passer en réel ne demande que les variables `SMTP_*` d'un
   hébergeur de messagerie. Viser un prestataire européen (Brevo, Mailjet) pour

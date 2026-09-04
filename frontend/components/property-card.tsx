@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { PropertyListItem } from '@/lib/api';
 import * as fmt from '@/lib/format';
 import { PhotoPlaceholder } from './photo-placeholder';
+import { SaveButton } from './save-button';
 
 /**
  * Carte de bien du bloc « Biens en avant à Metz » (page d'accueil).
@@ -11,10 +12,26 @@ import { PhotoPlaceholder } from './photo-placeholder';
  * référence n'occupe pas la ligne de métadonnées : elle apparaît en surimpression
  * au survol, ce qui accuse réception du pointage sans charger la carte au repos.
  */
-export function PropertyCard({ property }: { property: PropertyListItem }) {
+export function PropertyCard({
+  property,
+  saved = false,
+  role = null,
+}: {
+  property: PropertyListItem;
+  /** Déjà mis de côté par le visiteur connecté. */
+  saved?: boolean;
+  role?: 'OWNER' | 'TENANT' | 'AGENT' | null;
+}) {
   return (
     <Link href={`/biens/${property.reference}`} className="property-card reveal">
       <span className="property-card__ref">{property.reference}</span>
+
+      <SaveButton
+        reference={property.reference}
+        initiallySaved={saved}
+        role={role}
+        variant="icon"
+      />
 
       <PhotoPlaceholder
         label={property.photoLabel}

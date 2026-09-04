@@ -20,6 +20,7 @@ import { VisitsModule } from './modules/visits/visits.module';
 import { SignatureModule } from './modules/signature/signature.module';
 import { LeaseModule } from './modules/lease/lease.module';
 import { BackofficeModule } from './modules/backoffice/backoffice.module';
+import { SavedModule } from './modules/saved/saved.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { BackofficeModule } from './modules/backoffice/backoffice.module';
     SignatureModule,
     LeaseModule,
     BackofficeModule,
+    SavedModule,
   ],
 })
 export class AppModule {}

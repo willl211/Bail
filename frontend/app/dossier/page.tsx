@@ -41,14 +41,20 @@ const STEPS = [
 export default async function TenantFilePage({
   searchParams,
 }: {
-  searchParams: Promise<{ candidature?: string }>;
+  searchParams: Promise<{ candidature?: string; bien?: string }>;
 }) {
   const [user, params] = await Promise.all([getCurrentUser(), searchParams]);
-  // Bien qu'on voulait candidater avant d'avoir de compte : on y renvoie une
-  // fois le dossier ouvert, plutôt que de perdre l'intention en route.
+  // Bien qu'on voulait candidater — ou seulement mettre de côté — avant d'avoir
+  // un compte : on y renvoie une fois le dossier ouvert, plutôt que de perdre
+  // l'intention en route. Sauvegarder demande un compte, mais c'est justement
+  // au moment où l'on hésite : abandonner là serait perdre la personne.
   const returnTo = params.candidature
     ? `/biens/${encodeURIComponent(params.candidature)}/candidater`
-    : null;
+    : params.bien
+      ? // `?sauvegarder=1` : le bien est mis de côté à l'arrivée, sans que la
+        // personne ait à recliquer sur l'étoile qui l'a amenée ici.
+        `/biens/${encodeURIComponent(params.bien)}?sauvegarder=1`
+      : null;
 
   // Un propriétaire n'a pas de dossier locataire : l'API le lui refuserait
   // (403), autant le renvoyer chez lui plutôt que de lui montrer une erreur.
@@ -77,9 +83,11 @@ export default async function TenantFilePage({
             Toutes vos candidatures.
           </h1>
           <p className="p mt-16">
-            {returnTo
-              ? 'Créez votre dossier ou connectez-vous pour reprendre votre candidature.'
-              : 'Vos pièces une seule fois, vérifiées par Bail. Ensuite, chaque candidature part en un clic.'}
+            {params.bien
+              ? 'Créez votre dossier ou connectez-vous : ce bien sera mis de côté, et vous le retrouverez ici.'
+              : returnTo
+                ? 'Créez votre dossier ou connectez-vous pour reprendre votre candidature.'
+                : 'Vos pièces une seule fois, vérifiées par Bail. Ensuite, chaque candidature part en un clic.'}
           </p>
 
           <TenantAuthForm redirectTo={returnTo ?? undefined} />
