@@ -52,11 +52,46 @@ prestataire. Sans Mailpit démarré, l'API le signale au lancement et les envois
 | `npm run build` | compile backend puis frontend |
 | `npm run typecheck` | TypeScript sur les deux workspaces |
 | `npm run lint` | ESLint sur les deux workspaces |
+| `npm test` | tests unitaires puis d'intégration, sur les deux workspaces |
+| `npm run test:unit --workspace backend` | uniquement les tests unitaires (rapides, sans base) |
 | `npm run db:studio` | Prisma Studio |
 | `npm run db:reset` | remet la base à zéro et rejoue le seed |
 | `npm run db:down` | arrête PostgreSQL |
 | `npm run mail:up` | démarre Mailpit (SMTP :1025, interface :8025) |
 | `npm run mail:down` | arrête Mailpit |
+
+## Tests
+
+```bash
+npm test          # tout : 136 tests
+```
+
+Deux campagnes, séparées par ce qu'elles exigent pour tourner.
+
+| | Unitaires | Intégration |
+|---|---|---|
+| Quoi | fonctions pures : contrôle de cohérence du bail, règle de publication, pièces exigées d'un dossier, formats d'affichage | l'application Nest complète, contre une vraie base PostgreSQL |
+| Combien | 96 | 40 |
+| Exige | rien | `npm run db:up` |
+| Durée | ~12 s | ~50 s |
+
+Les tests unitaires couvrent d'abord ce qui a une portée légale : plafonds du
+dépôt de garantie (1 mois en nu, 2 en meublé), durées de bail, refus d'un champ
+hors schéma, marqueur non remplacé qui **reste visible** plutôt que d'être
+effacé en silence. Ces valeurs sont en dur dans le code — les mettre en base
+laisserait croire qu'on peut les relever — et ces tests sont le garde-fou qui
+signalerait une tentative de les changer.
+
+Les tests d'intégration ne portent que sur ce qu'une fonction isolée ne peut pas
+prouver : six requêtes simultanées qui ne créent qu'un seul dossier, deux
+locataires qui ne peuvent pas réserver le même créneau, un 404 (et non un 403)
+sur le bien d'autrui, une session qui cesse de valoir dans la seconde. Chacun
+correspond à un défaut réellement rencontré ou à une décision de conception
+inscrite plus bas dans ce fichier.
+
+La base de test (`bail_test`) est distincte de celle de développement et créée
+automatiquement ; aucun test ne touche `bail_dev`. Ces suites **tournent en
+série** : elles partagent une base et la vident entre chaque cas.
 
 ## Environnements
 
@@ -197,6 +232,15 @@ hors dépôt.
 
 ## Dette connue
 
+- **Aucun test de rendu de composant.** Les écrans sont essentiellement de la
+  présentation et la logique vit dans l'API, mais rien ne vérifie aujourd'hui
+  qu'un blocage s'affiche bien ni qu'un bouton se désactive au bon moment. À
+  ajouter quand la maquette aura cessé de bouger.
+- Les tests d'intégration démarrent l'application entière : **Nest 12 est
+  distribué en ESM pur**, que le runtime CommonJS de Jest ne sait pas charger,
+  d'où `--experimental-vm-modules` et `useESM` sur cette seule campagne. Un
+  avertissement d'expérimentalité s'affiche à chaque exécution ; il est sans
+  conséquence.
 - `prisma` CLI tire `deepmerge-ts` signalé par `npm audit` (chaîne de
   développement uniquement, pas dans le runtime de l'API).
 - Prisma signale que `package.json#prisma` sera retiré en Prisma 7 : à migrer

@@ -22,6 +22,8 @@ out/
 
 # Stockage local des fichiers uploadés (dev)
 storage/
+# Écritures des tests d'intégration (e-mails simulés, pièces déposées).
+storage-test/
 uploads/
 
 # Logs

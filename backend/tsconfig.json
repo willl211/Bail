@@ -17,8 +17,11 @@
     "strictNullChecks": true,
     "noImplicitAny": true,
     "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    // Déclarés explicitement : dans ce monorepo, `@types/*` est remonté à la
+    // racine et la découverte implicite depuis `backend/` ne les y trouve pas.
+    "types": ["node", "jest"]
   },
-  "include": ["src/**/*", "prisma/**/*"],
+  "include": ["src/**/*", "prisma/**/*", "test/**/*"],
   "exclude": ["node_modules", "dist"]
 }
