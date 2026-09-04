@@ -68,7 +68,7 @@ prestataire. Sans Mailpit démarré, l'API le signale au lancement et les envois
 ## Tests
 
 ```bash
-npm test          # tout : 236 tests
+npm test          # tout : 248 tests
 ```
 
 Deux campagnes, séparées par ce qu'elles exigent pour tourner.
@@ -109,7 +109,8 @@ Les tests de composants ne couvrent que les écrans où quelque chose se décide
 un jeton à usage unique qui ne doit pas être consommé par une faute de frappe,
 un motif de refus qui ne doit pas suivre l'agent d'un onglet à l'autre — il part
 au locataire d'un côté, au propriétaire de l'autre —, un bouton qui ne doit pas
-promettre une décision que l'API refusera. Les écrans purement présentatifs n'y
+promettre une décision que l'API refusera, un quartier inventé qui doit être
+refusé plutôt que silencieusement ignoré. Les écrans purement présentatifs n'y
 figurent pas : les tester reviendrait à recopier leur JSX dans une assertion.
 
 ## Environnements
@@ -279,7 +280,7 @@ hors dépôt.
   concrète à la racine npm y installait un React 18 qui masquait le 19 du front.
   Next et Testing Library chargeaient alors deux React différents. À revoir en
   même temps que la montée de version de Next.
-- Les tests de composants ne couvrent que quatre écrans. Les parcours de
+- Les tests de composants ne couvrent qu'une poignée d'écrans. Les parcours de
   candidature, de visite et de bail n'ont pas encore d'équivalent : leur logique
   est surtout côté API, déjà testée, mais un blocage mal affiché y passerait
   inaperçu.

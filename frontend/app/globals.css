@@ -1175,8 +1175,65 @@ p {
   font-size: 14.5px;
   padding: 0;
   margin-top: 4px;
-  cursor: pointer;
   color: var(--ink);
+}
+
+.searchbar__value::placeholder {
+  color: var(--ink-4);
+}
+
+/* Les flèches natives d'un champ numérique amputeraient la valeur d'un tiers
+   dans une colonne aussi étroite, et n'apportent rien à côté du clavier. */
+.searchbar__value[type='number'] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.searchbar__value[type='number']::-webkit-outer-spin-button,
+.searchbar__value[type='number']::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+/* L'unité suit la valeur au lieu d'être ancrée à droite du champ : « 950 € »
+   se lit d'un bloc, « 950      € » se lit en deux fois. */
+.searchbar__unit {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 14.5px;
+  color: var(--ink);
+}
+
+/* Largeur posée en ligne, calculée sur la longueur de la saisie : le champ ne
+   s'étire pas, et l'unité reste contre le chiffre. */
+.searchbar__unit .searchbar__value {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+/* Sur mobile, la barre passe sur deux lignes et chaque colonne se réduit de
+   moitié : le quartier, qui porte le libellé le plus long, prend alors toute la
+   largeur plutôt que de tronquer sa saisie au milieu d'un mot. */
+@media (max-width: 560px) {
+  .searchbar__field--wide {
+    flex: 1 0 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--line-softer);
+  }
+}
+
+/* Le motif du refus occupe toute la largeur, sous la barre : glissé dans une
+   colonne, il serait tronqué au premier mot. */
+.searchbar__error {
+  flex: 1 0 100%;
+  border-top: 1px solid var(--line-softer);
+  padding: 9px 14px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--reject);
+  background: var(--reject-tint);
 }
 
 .searchbar__submit {

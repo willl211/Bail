@@ -5,14 +5,21 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import type { District } from '@/lib/api';
 
-// Paliers de la maquette : toutes, puis les trois seuils qui séparent
-// réellement le portefeuille de Metz (studio, deux pièces, trois pièces).
-const SURFACE_OPTIONS = [
-  { label: 'Toutes', value: 0 },
-  { label: '25 m²+', value: 25 },
-  { label: '45 m²+', value: 45 },
-  { label: '65 m²+', value: 65 },
-];
+export const SURFACE_MIN = 0;
+export const SURFACE_MAX = 120;
+/**
+ * Zéro par défaut, donc aucun bien masqué.
+ *
+ * Même raison que pour le loyer : arriver sur la recherche sans critère doit
+ * montrer tout le portefeuille, et un filtre actif d'emblée cacherait des
+ * annonces sans que le visiteur l'ait demandé.
+ *
+ * Le curseur remplace les paliers figés de la maquette (25 / 45 / 65 m²), à la
+ * demande du porteur de projet : ces seuils obligeaient à s'accommoder de
+ * valeurs arbitraires, alors qu'on cherche rarement « 45 m² » et souvent
+ * « au moins 40 ».
+ */
+export const SURFACE_DEFAULT = SURFACE_MIN;
 
 const FURNISHED_OPTIONS = [
   { label: 'Tous', value: 'all' },
@@ -33,6 +40,10 @@ export const RENT_DEFAULT = RENT_MAX;
 
 const euros = (value: number) => `${value.toLocaleString('fr-FR')} €`;
 
+/** « Toutes » vaut mieux que « 0 m² et plus », qui ne filtre rien non plus. */
+const surfaceLabel = (value: number) =>
+  value === SURFACE_DEFAULT ? 'Toutes' : `${value} m² et plus`;
+
 /**
  * Panneau de filtres.
  *
@@ -48,13 +59,16 @@ export function SearchFilters({ districts }: { districts: District[] }) {
   const [, startTransition] = useTransition();
 
   const urlMaxRent = Number(searchParams.get('maxRent') ?? RENT_DEFAULT);
-  const minSurface = Number(searchParams.get('minSurface') ?? 0);
+  const urlMinSurface = Number(searchParams.get('minSurface') ?? SURFACE_DEFAULT);
   const furnished = searchParams.get('furnished') ?? 'all';
   const selectedDistricts = (searchParams.get('districts') ?? '').split(',').filter(Boolean);
 
   const [maxRent, setMaxRent] = useState(urlMaxRent);
   const [syncedRent, setSyncedRent] = useState(urlMaxRent);
+  const [minSurface, setMinSurface] = useState(urlMinSurface);
+  const [syncedSurface, setSyncedSurface] = useState(urlMinSurface);
   const debounce = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const surfaceDebounce = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Resynchronise le curseur quand l'URL change par ailleurs (réinitialisation,
   // navigation arrière). Ajustement pendant le rendu plutôt que dans un effet :
@@ -63,8 +77,18 @@ export function SearchFilters({ districts }: { districts: District[] }) {
     setSyncedRent(urlMaxRent);
     setMaxRent(urlMaxRent);
   }
+  if (urlMinSurface !== syncedSurface) {
+    setSyncedSurface(urlMinSurface);
+    setMinSurface(urlMinSurface);
+  }
 
-  useEffect(() => () => clearTimeout(debounce.current), []);
+  useEffect(
+    () => () => {
+      clearTimeout(debounce.current);
+      clearTimeout(surfaceDebounce.current);
+    },
+    [],
+  );
 
   const pushParams = useCallback(
     (mutate: (params: URLSearchParams) => void) => {
@@ -88,11 +112,19 @@ export function SearchFilters({ districts }: { districts: District[] }) {
     }, 250);
   };
 
-  const onSurface = (value: number) =>
-    pushParams((params) => {
-      if (value === 0) params.delete('minSurface');
-      else params.set('minSurface', String(value));
-    });
+  // Même traitement que le loyer : le curseur bouge tout de suite à l'écran et
+  // n'écrit dans l'URL qu'après 250 ms, pour ne pas relancer une requête à
+  // chaque pixel parcouru.
+  const onSurfaceInput = (value: number) => {
+    setMinSurface(value);
+    clearTimeout(surfaceDebounce.current);
+    surfaceDebounce.current = setTimeout(() => {
+      pushParams((params) => {
+        if (value === SURFACE_DEFAULT) params.delete('minSurface');
+        else params.set('minSurface', String(value));
+      });
+    }, 250);
+  };
 
   const onFurnished = (value: string) =>
     pushParams((params) => {
@@ -111,6 +143,7 @@ export function SearchFilters({ districts }: { districts: District[] }) {
 
   const onReset = () => {
     setMaxRent(RENT_DEFAULT);
+    setMinSurface(SURFACE_DEFAULT);
     startTransition(() => router.replace(pathname, { scroll: false }));
   };
 
@@ -148,20 +181,21 @@ export function SearchFilters({ districts }: { districts: District[] }) {
         <div className="filters__block">
           <div className="filters__legend">
             <span>Surface minimum</span>
+            <span className="filters__range-value">{surfaceLabel(minSurface)}</span>
           </div>
-          <div className="filters__chips">
-            {SURFACE_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                className="chip"
-                data-active={minSurface === option.value}
-                aria-pressed={minSurface === option.value}
-                onClick={() => onSurface(option.value)}
-              >
-                {option.label}
-              </button>
-            ))}
+          <input
+            type="range"
+            min={SURFACE_MIN}
+            max={SURFACE_MAX}
+            step={5}
+            value={minSurface}
+            aria-label="Surface habitable minimum"
+            aria-valuetext={surfaceLabel(minSurface)}
+            onChange={(event) => onSurfaceInput(Number(event.target.value))}
+          />
+          <div className="filters__range-bounds">
+            <span>Toutes</span>
+            <span>{SURFACE_MAX} m²</span>
           </div>
         </div>
 
