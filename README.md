@@ -124,18 +124,26 @@ Ces contraintes sont dans le schéma et dans le code, pas seulement dans la doc.
     le propriétaire voit avant de soumettre, ce que l'API vérifie à la
     soumission, ce que le back-office rejoue avant de mettre en ligne. La
     dupliquer serait le plus sûr moyen de publier un jour un bien sans DPE.
-11. **Aucun e-mail ne transporte de donnée de dossier.** Ni revenu, ni pièce
+11. **Une adresse confirmée est exigée pour engager un tiers.** Candidater et
+    publier une annonce la demandent ; se connecter, remplir son dossier ou
+    préparer une annonce, non. On ne coupe pas l'accès à quelqu'un dont le
+    fournisseur de messagerie met dix minutes à distribuer, mais un dossier ou
+    une annonce accrochés à une adresse jamais confirmée ne valent rien — le
+    candidat ne saurait pas qu'il est retenu, le propriétaire pas qu'il a reçu
+    une candidature. La règle vit dans une seule fonction, `accountBlockers`,
+    partagée par les deux profils.
+12. **Aucun e-mail ne transporte de donnée de dossier.** Ni revenu, ni pièce
     jointe, ni lien vers un fichier privé : le message dit qu'il s'est passé
     quelque chose et renvoie sur le site, où la session contrôle qui voit quoi.
     La promesse faite au locataire (point 6) ne s'arrête pas au bord du
     navigateur — une boîte aux lettres se transfère, se pirate et s'indexe.
-12. **Le journal des envois ne garde pas le contenu des messages.**
+13. **Le journal des envois ne garde pas le contenu des messages.**
     `email_messages` consigne le destinataire, le gabarit et le statut, jamais
     le corps rendu ni les variables. Un lien de réinitialisation en base
     vaudrait une prise de contrôle de compte pour qui sait lire une ligne SQL —
     c'est aussi pourquoi ces e-mails partent en direct plutôt que par une file
     d'attente, qui devrait les stocker.
-13. **Le journal du back-office ne raconte que du vrai.** Il est reconstitué à
+14. **Le journal du back-office ne raconte que du vrai.** Il est reconstitué à
     partir d'horodatages réels — publications, candidatures, pièces contrôlées,
     visites, baux. Rien n'y est ajouté pour remplir la page : un journal qui
     mentirait sur ce qui s'est passé n'aurait aucune valeur d'audit. De même,
@@ -157,7 +165,7 @@ un écran doit être fonctionnel avant de passer au suivant.
 | 6 | Génération de bail + signature | **fait** — attribution, injection des champs, contrôle de cohérence, envoi en signature (bloqué : voir ci-dessous) |
 | 7 | Paiement des honoraires | **fait** — détail par poste avec plafonds légaux, comparatif, ouverture du règlement (bloqué : voir ci-dessous) |
 | — | Back-office de l'agence | **fait** — registre à quatre onglets : dossiers, biens, baux & paiements, journal |
-| — | E-mails transactionnels | **socle fait** — driver SMTP vérifié, journal d'envoi, confirmation d'adresse, mot de passe oublié et changé. Les notifications d'événements restent à brancher |
+| — | E-mails transactionnels | **fait** — driver SMTP vérifié, journal d'envoi, file différée, 3 messages de compte et 11 notifications d'événements |
 
 Le schéma de base couvre déjà les sept étapes. **Les sept sont complètes**, et
 le back-office qui les débloque aussi.
@@ -213,10 +221,6 @@ hors dépôt.
   de retomber sur le simulateur — en production, ça donnerait des rendez-vous en
   visio impossibles à rejoindre. Les salles portent une URL en `.invalid`, que
   personne ne prendra pour un vrai lien.
-- La **purge des enregistrements de visite à 15 jours** n'a pas d'exécutant :
-  `Visit.recordingExpiresAt` est posée à l'ouverture de la salle, mais aucune
-  tâche planifiée ne balaie encore les enregistrements arrivés à échéance. À
-  brancher avant toute visio réelle (docs/integrations.md).
 - L'**empreinte bancaire avant visite** n'est pas demandée tant qu'aucun
   prestataire de paiement n'est branché : la visite est alors confirmée d'emblée
   et l'écran l'annonce. Elle redeviendra bloquante dès que `PAYMENT_DRIVER`
@@ -248,18 +252,17 @@ hors dépôt.
   c'est le prestataire qui les collecte, dans son propre cadre, ce qui nous tient
   hors du périmètre PCI-DSS. Reproduire le formulaire de la maquette aurait été
   une faute.
-- **Les notifications d'événements ne sont pas branchées.** Le socle e-mail est
-  posé et vérifié, mais seuls les trois messages liés au compte partent
-  aujourd'hui : confirmation d'adresse, mot de passe oublié, mot de passe
-  modifié. Le propriétaire n'est pas encore prévenu d'une candidature reçue, ni
-  le locataire d'une pièce refusée ou d'une visite confirmée — ces événements
-  existent tous en base, il reste à les relier au module `mail`. Ils ne portent
-  aucun secret : ils pourront, eux, passer par une file d'attente.
-- **La confirmation d'adresse ne bloque encore rien.** `emailVerifiedAt` est
-  désormais renseignée et exposée, un rappel s'affiche en tête des espaces
-  personnels, mais aucune action n'exige une adresse confirmée. À trancher :
-  candidater et publier une annonce devraient probablement l'exiger — un dossier
-  ou une annonce accrochés à une adresse jamais confirmée ne valent rien.
+- **Quatre notifications restent à écrire**, faute de parcours atteignable :
+  bail prêt à signer, bail signé, honoraires réglés, échec de prélèvement
+  d'abonnement. Les trois premières supposent un modèle de bail validé
+  juridiquement, la dernière un compte Stripe.
+- Les candidatures **figées par l'attribution du logement** à un autre candidat
+  ne déclenchent aucun e-mail : le gabarit disponible est celui d'un refus
+  explicite du propriétaire, et l'employer ici annoncerait une décision que
+  personne n'a formulée. Un gabarit dédié est à écrire.
+- Les tâches planifiées (file d'envoi, purge des enregistrements) supposent
+  **une seule instance d'API**, ce qui est le cas du pilote. Avec plusieurs, il
+  faudra les verrouiller pour qu'elles ne tournent pas en double.
 - **Aucun prestataire d'envoi n'est retenu.** `MAIL_DRIVER=smtp` pointe sur
   Mailpit en local ; passer en réel ne demande que les variables `SMTP_*` d'un
   hébergeur de messagerie. Viser un prestataire européen (Brevo, Mailjet) pour

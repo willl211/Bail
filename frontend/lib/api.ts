@@ -245,6 +245,8 @@ export interface OwnerProperty {
   photoCount: number;
   applicationCount: number;
   publishedAt: string | null;
+  /** Motif du dernier renvoi par le contrôle de Bail. */
+  reviewNote: string | null;
   /** Ce qui empêche la soumission au contrôle. */
   blockers: string[];
   /** Ce qui la dessert sans l'empêcher. */

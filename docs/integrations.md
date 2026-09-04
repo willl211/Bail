@@ -195,10 +195,57 @@ d'utiliser les formulaires publics pour inonder la boîte de quelqu'un d'autre.
 Le dépassement est silencieux côté « mot de passe oublié » : signaler qu'on a
 atteint le plafond reviendrait à confirmer que l'adresse a un compte.
 
+### Deux régimes d'envoi
+
+| | Messages du compte | Notifications d'événements |
+|---|---|---|
+| Exemples | confirmation d'adresse, mot de passe | candidature reçue, pièce refusée, visite réservée |
+| Envoi | immédiat, dans la requête | différé, par une file |
+| Pourquoi | ils portent un lien à usage unique, qu'une file devrait stocker — or un lien de réinitialisation en base vaut un mot de passe | une candidature ne doit ni échouer ni attendre parce qu'un serveur SMTP est lent |
+| Contenu | rendu à l'émission | reconstruit **à l'envoi**, depuis la base |
+
+Le second point mérite d'être explicite : la file ne stocke qu'un gabarit, un
+destinataire et l'identifiant de l'objet concerné. Tout le reste est relu au
+moment d'envoyer. Rien n'est donc recopié — le journal ne devient pas un double
+des données du produit — et un message parti avec dix minutes de retard dit ce
+qui est vrai, pas ce qui l'était à la mise en file. Si l'objet a disparu entre
+les deux, ou si la situation a changé au point que le message n'a plus de sens
+(une pièce refusée puis remplacée), il est abandonné plutôt que réessayé.
+
+Cinq tentatives espacées de 1, 5, 25 puis 125 minutes, puis abandon : une boîte
+pleine se vide, un serveur tombé se relève, mais réessayer indéfiniment ferait
+passer le domaine pour un émetteur de spam.
+
+Une clé d'unicité empêche le doublon. Elle porte l'identité de l'**événement**,
+pas celle de l'objet : une candidature ne se signale qu'une fois, mais une même
+pièce peut être refusée, corrigée, puis refusée à nouveau — et le locataire doit
+l'apprendre les deux fois.
+
+### Ordonnanceur
+
+`@nestjs/schedule` sert deux tâches, et n'a été introduit qu'à partir du moment
+où il en servait deux :
+
+| Tâche | Cadence |
+|---|---|
+| Vidage de la file d'envoi | toutes les 30 secondes |
+| Purge des enregistrements de visite | tous les jours à 3 h |
+
+La seconde referme une dette ouverte depuis l'écran 5 : `recordingExpiresAt`
+était posée à l'ouverture de la salle, mais rien ne la balayait. Une durée de
+conservation qu'aucune tâche n'applique n'est pas une durée de conservation.
+
+Ces tâches supposent **une seule instance d'API**, ce qui est le cas du pilote.
+Le jour où il y en aura plusieurs, il faudra les verrouiller pour qu'elles ne
+tournent pas en double.
+
 ### État au 4 septembre 2026
 
-Trois gabarits en service, tous liés au compte : confirmation d'adresse, lien de
-réinitialisation, notification de mot de passe modifié. Les notifications
-d'événements — candidature reçue, pièce refusée, visite confirmée, bail signé —
-restent à brancher ; elles ne portent aucun secret et pourront passer par une
-file d'attente.
+Trois gabarits liés au compte (confirmation d'adresse, réinitialisation, mot de
+passe modifié) et onze notifications d'événements : candidature reçue, retenue,
+écartée, acceptée ; pièce refusée ; dossier vérifié ou refusé ; annonce publiée
+ou renvoyée ; visite réservée ou annulée.
+
+Restent à écrire, faute de parcours atteignable aujourd'hui : bail prêt à
+signer, bail signé, honoraires réglés, échec de prélèvement d'abonnement. Les
+trois premiers supposent un modèle de bail validé, le dernier un compte Stripe.

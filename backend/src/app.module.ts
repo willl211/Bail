@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import configuration from './config/configuration';
 import { PrismaModule } from './prisma/prisma.module';
 import { HealthModule } from './modules/health/health.module';
@@ -23,6 +24,11 @@ import { BackofficeModule } from './modules/backoffice/backoffice.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, load: [configuration] }),
+    // Ordonnanceur : file d'envoi des notifications et purge des
+    // enregistrements de visite. Une seule instance API pour le pilote — le
+    // jour où il y en aura plusieurs, ces tâches devront être verrouillées
+    // pour ne pas tourner en double.
+    ScheduleModule.forRoot(),
     PrismaModule,
     MailModule,
     // AuthModule enregistre le guard global : toute route est privée par défaut

@@ -1,6 +1,8 @@
 import { Global, Logger, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { EventResolver } from './event.resolver';
 import { MailService } from './mail.service';
+import { MailWorker } from './mail.worker';
 import { MAIL_DRIVER, type MailDriver } from './mail.driver';
 import { MockMailDriver } from './mock-mail.driver';
 import { SmtpMailDriver } from './smtp-mail.driver';
@@ -58,6 +60,8 @@ import { SmtpMailDriver } from './smtp-mail.driver';
       },
     },
     MailService,
+    EventResolver,
+    MailWorker,
   ],
   exports: [MAIL_DRIVER, MailService],
 })

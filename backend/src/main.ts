@@ -4,11 +4,18 @@ import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import cookieParser from 'cookie-parser';
 import { resolve } from 'node:path';
-import type { NestExpressApplication } from '@nestjs/platform-express';
+import { ExpressAdapter, type NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+  // L'adaptateur HTTP est passé explicitement plutôt que découvert au
+  // démarrage. Dans un monorepo npm, `@nestjs/core` peut se retrouver remonté à
+  // la racine tandis que `@nestjs/platform-express` reste sous `backend/` : la
+  // découverte automatique échoue alors, puisque la résolution de Node ne
+  // redescend jamais dans un dossier voisin. Le déclarer ici ne dépend d'aucune
+  // disposition d'installation — et dit à la lecture quelle plateforme HTTP
+  // l'application utilise.
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, new ExpressAdapter(), {
     bufferLogs: false,
     // Conserve la charge brute des requêtes : la signature d'un webhook de
     // paiement se vérifie octet pour octet, et le JSON reparsé puis

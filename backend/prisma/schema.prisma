@@ -145,7 +145,7 @@ model AuthToken {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  expiresAt DateTime
+  expiresAt  DateTime
   /// Renseigné à la première utilisation : un jeton ne sert qu'une fois.
   consumedAt DateTime?
 
@@ -179,20 +179,39 @@ enum EmailStatus {
 model EmailMessage {
   id String @id @default(uuid())
 
-  /// Clé du gabarit (`password-reset`, `email-verification`, …).
-  template String
+  /// Clé du gabarit (`password-reset`, `application-received`, …).
+  template       String
   /// Adresse au moment de l'envoi : elle peut changer ensuite sur le compte.
   recipientEmail String
-  subject        String
+  /// Renseigné une fois le message rendu ; nul tant qu'il attend en file.
+  subject        String?
+
+  /// Identifiant de l'objet dont il faut parler — candidature, visite, bien.
+  ///
+  /// La file ne stocke **que cette référence**, jamais les valeurs à afficher :
+  /// le contenu est reconstruit au moment de l'envoi à partir de la base. Rien
+  /// n'est donc recopié, et un message parti en retard dit ce qui est vrai
+  /// plutôt que ce qui l'était à la mise en file.
+  subjectRef String?
+
+  /// Identité de l'**événement**, pas de l'objet.
+  ///
+  /// Deux notions distinctes : une candidature ne se signale qu'une fois, mais
+  /// une même pièce peut être refusée, corrigée, puis refusée à nouveau — et le
+  /// locataire doit l'apprendre les deux fois. L'appelant compose donc cette
+  /// clé avec ce qui rend l'événement unique, la date de décision comprise.
+  dedupeKey String? @unique
 
   recipientId String?
   recipient   User?   @relation(fields: [recipientId], references: [id], onDelete: SetNull)
 
-  status   EmailStatus @default(PENDING)
-  attempts Int         @default(0)
-  sentAt   DateTime?
+  status        EmailStatus @default(PENDING)
+  attempts      Int         @default(0)
+  sentAt        DateTime?
+  /// Prochaine tentative, espacée après chaque échec.
+  nextAttemptAt DateTime?
   /// Message d'erreur du prestataire, tronqué. Aucun contenu de l'e-mail.
-  lastError String?
+  lastError     String?
 
   /// Driver ayant traité l'envoi, pour distinguer un envoi réel d'un simulé.
   driver String
@@ -201,7 +220,7 @@ model EmailMessage {
   updatedAt DateTime @updatedAt
 
   @@index([recipientId, createdAt])
-  @@index([status])
+  @@index([status, nextAttemptAt])
   @@map("email_messages")
 }
 
@@ -292,6 +311,14 @@ model Property {
   status      PropertyStatus @default(DRAFT)
   publishedAt DateTime?
   rentedAt    DateTime?
+
+  /// Motif du dernier renvoi par le back-office.
+  ///
+  /// Stocké, et pas seulement journalisé : le back-office annonce au contrôleur
+  /// que son motif est « transmis au propriétaire ». Sans ce champ, la phrase
+  /// serait fausse — le propriétaire verrait son annonce repasser en brouillon
+  /// sans savoir pourquoi. Effacé à la resoumission.
+  reviewNote String? @db.Text
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

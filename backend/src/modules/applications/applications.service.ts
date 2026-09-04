@@ -11,6 +11,9 @@ import {
   PropertyStatus,
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { accountBlockers } from '../auth/account.checks';
+import { EVENT } from '../mail/event.templates';
+import { MailService } from '../mail/mail.service';
 import {
   computeTenantFees,
   type ActiveFeeSchedule,
@@ -29,6 +32,7 @@ const OPEN_STATUSES: PropertyStatus[] = [
 /** Champs du bien nécessaires à l'évaluation d'une candidature et à son aperçu. */
 const CANDIDACY_SELECT = {
   id: true,
+  ownerId: true,
   reference: true,
   title: true,
   addressLine: true,
@@ -119,6 +123,7 @@ export class ApplicationsService {
     private readonly prisma: PrismaService,
     private readonly tenant: TenantService,
     private readonly storage: StorageService,
+    private readonly mail: MailService,
   ) {}
 
   private async propertyForCandidacy(reference: string): Promise<CandidacyProperty> {
@@ -167,8 +172,12 @@ export class ApplicationsService {
   private evaluate(
     property: CandidacyProperty,
     file: TenantFileView,
+    account: { emailVerifiedAt: Date | null },
   ): { blockers: string[]; warnings: string[] } {
-    const blockers: string[] = [];
+    // Une candidature engage le propriétaire à répondre : encore faut-il
+    // pouvoir joindre le candidat. Le blocage porte sur le compte, pas sur le
+    // dossier — d'où une règle partagée avec l'espace propriétaire.
+    const blockers: string[] = accountBlockers(account);
     const warnings: string[] = [];
 
     if (file.submittedAt === null) {
@@ -292,18 +301,23 @@ export class ApplicationsService {
 
   /** Aperçu affiché avant l'envoi — et après, pour confirmer ce qui a été transmis. */
   async preview(tenantId: string, reference: string): Promise<CandidacyPreview> {
-    const [property, file, feeSchedule, existing, averageResponseDelay] = await Promise.all([
-      this.propertyForCandidacy(reference),
-      this.tenant.getFile(tenantId),
-      this.activeFeeSchedule(),
-      this.prisma.application.findFirst({
-        where: { tenant: { id: tenantId }, property: { reference } },
-        select: { status: true },
-      }),
-      this.averageResponseDelay(),
-    ]);
+    const [property, file, feeSchedule, existing, averageResponseDelay, account] =
+      await Promise.all([
+        this.propertyForCandidacy(reference),
+        this.tenant.getFile(tenantId),
+        this.activeFeeSchedule(),
+        this.prisma.application.findFirst({
+          where: { tenant: { id: tenantId }, property: { reference } },
+          select: { status: true },
+        }),
+        this.averageResponseDelay(),
+        this.prisma.user.findUniqueOrThrow({
+          where: { id: tenantId },
+          select: { emailVerifiedAt: true },
+        }),
+      ]);
 
-    const { blockers, warnings } = this.evaluate(property, file);
+    const { blockers, warnings } = this.evaluate(property, file, account);
     const totalRentCents = property.rentCents + property.chargesCents;
 
     return {
@@ -335,12 +349,16 @@ export class ApplicationsService {
   ): Promise<CandidacyPreview> {
     // Une seule lecture du dossier : deux appels concurrents en ouvriraient
     // deux sur un compte qui n'en a pas encore.
-    const [property, { view: file, id: fileId }] = await Promise.all([
+    const [property, { view: file, id: fileId }, account] = await Promise.all([
       this.propertyForCandidacy(reference),
       this.tenant.getFileWithId(tenantId),
+      this.prisma.user.findUniqueOrThrow({
+        where: { id: tenantId },
+        select: { emailVerifiedAt: true },
+      }),
     ]);
 
-    const { blockers } = this.evaluate(property, file);
+    const { blockers } = this.evaluate(property, file, account);
     if (blockers.length > 0) {
       throw new BadRequestException({
         statusCode: 400,
@@ -354,8 +372,9 @@ export class ApplicationsService {
       ? totalRentCents / file.netMonthlyIncomeCents
       : null;
 
+    let application: { id: string };
     try {
-      await this.prisma.application.create({
+      application = await this.prisma.application.create({
         data: {
           propertyId: property.id,
           tenantId,
@@ -364,6 +383,7 @@ export class ApplicationsService {
           compatibilityScore: this.scoreOf(property, file),
           message: dto.message ?? null,
         },
+        select: { id: true },
       });
     } catch (error) {
       // Contrainte `@@unique([propertyId, tenantId])` : on candidate une fois
@@ -373,6 +393,14 @@ export class ApplicationsService {
       }
       throw error;
     }
+
+    // Mise en file, pas envoi : une candidature ne doit pas échouer — ni même
+    // attendre — parce qu'un serveur de messagerie est lent.
+    await this.mail.enqueue({
+      template: EVENT.applicationReceived,
+      userId: property.ownerId,
+      subjectRef: application.id,
+    });
 
     return this.preview(tenantId, reference);
   }

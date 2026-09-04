@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { EmailStatus } from '@prisma/client';
+import { EmailStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import type { EventKey } from './event.templates';
 import { MAIL_DRIVER, type MailDriver } from './mail.driver';
 import type { RenderedTemplate, TemplateKey } from './mail.templates';
 
@@ -10,6 +11,22 @@ export interface SendOptions {
   /** Destinataire connu, pour retrouver ses envois. Absent si le compte n'existe pas. */
   userId?: string;
   message: RenderedTemplate;
+}
+
+export interface EnqueueOptions {
+  template: EventKey;
+  /** Compte à prévenir. Le contenu sera relu à l'envoi à partir de son profil. */
+  userId: string;
+  /** Identifiant de l'objet concerné — candidature, visite, bien. */
+  subjectRef: string;
+  /**
+   * Identité de l'événement, quand l'objet seul ne suffit pas à le distinguer.
+   *
+   * Une candidature ne se signale qu'une fois, mais une même pièce peut être
+   * refusée, corrigée, puis refusée à nouveau : la clé doit alors porter la
+   * date de décision, sans quoi le second refus serait avalé comme un doublon.
+   */
+  dedupeKey?: string;
 }
 
 @Injectable()
@@ -76,6 +93,53 @@ export class MailService {
       // e-mail est une donnée personnelle, et les logs se recopient.
       this.logger.error(`Envoi « ${options.template} » échoué : ${reason}`);
       return false;
+    }
+  }
+
+  /**
+   * Met une notification en file.
+   *
+   * Rien n'est rendu ni envoyé ici : c'est le point du dispositif. Une
+   * candidature ne doit pas échouer parce qu'un serveur SMTP est lent, et
+   * l'appelant n'a pas à attendre un réseau tiers pour rendre la main. La ligne
+   * ne porte qu'une référence — le contenu est reconstruit à l'envoi.
+   *
+   * Ne lève jamais, y compris sur un doublon : c'est le comportement attendu,
+   * pas une erreur.
+   */
+  async enqueue(options: EnqueueOptions): Promise<void> {
+    const recipient = await this.prisma.user.findUnique({
+      where: { id: options.userId },
+      select: { email: true, isActive: true },
+    });
+    if (!recipient?.isActive) return;
+
+    try {
+      await this.prisma.emailMessage.create({
+        data: {
+          template: options.template,
+          recipientEmail: recipient.email,
+          recipientId: options.userId,
+          subjectRef: options.subjectRef,
+          dedupeKey: options.dedupeKey ?? `${options.template}:${options.subjectRef}`,
+          driver: this.driver.name,
+          nextAttemptAt: new Date(),
+        },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        // Événement déjà en file ou déjà parti : c'est précisément ce que la
+        // contrainte d'unicité doit produire.
+        return;
+      }
+      // Un échec de mise en file ne remonte pas non plus : il ne doit pas
+      // annuler l'action métier qui vient d'aboutir.
+      this.logger.error(
+        `Mise en file « ${options.template} » impossible : ${(error as Error).message}`,
+      );
     }
   }
 

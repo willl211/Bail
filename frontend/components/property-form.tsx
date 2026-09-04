@@ -446,6 +446,21 @@ export function PropertyForm({
       </div>
 
       <aside>
+        {/* Motif du dernier renvoi. Il s'affiche là où la correction se fait,
+            et non dans une notification qu'on aurait pu manquer : le
+            back-office promet au contrôleur qu'il est « transmis au
+            propriétaire », la promesse se tient ici. */}
+        {property?.reviewNote ? (
+          <div className="panel pad mb-16" role="status">
+            <span className="label label--accent">Correction demandée</span>
+            <p className="p-sm mt-8">{property.reviewNote}</p>
+            <p className="field__hint mt-10">
+              Corrigez ce point puis soumettez de nouveau votre annonce. Rien n’est
+              perdu : votre fiche est conservée telle quelle.
+            </p>
+          </div>
+        ) : null}
+
         <div className="panel panel--strong tick" style={{ padding: '19px 20px' }}>
           <span className="label label--ink">Avant publication</span>
 

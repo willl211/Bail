@@ -11,6 +11,8 @@ import {
   type TenantFileStatus,
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { MailService } from '../mail/mail.service';
+import { EVENT } from '../mail/event.templates';
 
 /** Vignette par bien : combien de candidatures, et sur quel loyer. */
 export interface ApplicationTile {
@@ -113,7 +115,10 @@ const CLOSED_HINT: Partial<Record<PropertyStatus, string>> = {
 
 @Injectable()
 export class OwnerApplicationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mail: MailService,
+  ) {}
 
   async list(ownerId: string): Promise<OwnerApplicationsView> {
     const [properties, applications] = await Promise.all([
@@ -240,7 +245,7 @@ export class OwnerApplicationsService {
   private async ownedOrFail(ownerId: string, applicationId: string) {
     const application = await this.prisma.application.findFirst({
       where: { id: applicationId, property: { ownerId } },
-      select: { id: true, status: true, readAt: true },
+      select: { id: true, status: true, readAt: true, tenantId: true },
     });
     if (!application) throw new NotFoundException('Candidature introuvable.');
     return application;
@@ -273,6 +278,14 @@ export class OwnerApplicationsService {
         // resterait vide alors que le propriétaire a bel et bien répondu.
         readAt: application.readAt ?? new Date(),
       },
+    });
+
+    // Le candidat ne peut pas deviner qu'un créneau vient de s'ouvrir pour lui,
+    // et les créneaux partent au premier qui réserve.
+    await this.mail.enqueue({
+      template: EVENT.applicationShortlisted,
+      userId: application.tenantId,
+      subjectRef: application.id,
     });
 
     return this.list(ownerId);
@@ -327,6 +340,14 @@ export class OwnerApplicationsService {
           data: { visitId: null },
         });
       }
+    });
+
+    // Hors transaction : la notification ne doit pas pouvoir faire échouer la
+    // décision, et une décision annulée ne doit pas laisser un message en file.
+    await this.mail.enqueue({
+      template: EVENT.applicationRejected,
+      userId: application.tenantId,
+      subjectRef: application.id,
     });
 
     return this.list(ownerId);

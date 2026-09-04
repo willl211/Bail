@@ -18,6 +18,8 @@ import {
 } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
+import { EVENT } from '../mail/event.templates';
+import { MailService } from '../mail/mail.service';
 import {
   SIGNATURE_DRIVER,
   type SignatureDriver,
@@ -105,6 +107,7 @@ export class LeaseService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(SIGNATURE_DRIVER) private readonly signature: SignatureDriver,
+    private readonly mail: MailService,
   ) {}
 
   // ---------------------------------------------------------------- Réglages
@@ -266,6 +269,17 @@ export class LeaseService {
       });
 
       return leaseReference;
+    });
+
+    // Le candidat retenu l'apprend ; les autres ont déjà reçu leur réponse au
+    // moment où leur candidature a été écartée par le propriétaire. Celles que
+    // l'attribution vient de figer ne sont pas notifiées ici : le message
+    // partirait pour un refus que personne n'a formulé — à trancher avec un
+    // gabarit dédié plutôt qu'en réutilisant celui du refus explicite.
+    await this.mail.enqueue({
+      template: EVENT.applicationAccepted,
+      userId: application.tenantId,
+      subjectRef: application.id,
     });
 
     this.logger.log(`Bail ${reference} ouvert pour la candidature ${application.id}.`);

@@ -17,6 +17,8 @@ import {
   VisitType,
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { EVENT } from '../mail/event.templates';
+import { MailService } from '../mail/mail.service';
 import { PAYMENT_DRIVER, type PaymentDriver } from '../payments/payment.driver';
 import { TenantService } from '../tenant/tenant.service';
 import { VIDEO_DRIVER, type VideoDriver } from '../video/video.driver';
@@ -108,6 +110,7 @@ export class VisitsService {
     private readonly tenant: TenantService,
     @Inject(VIDEO_DRIVER) private readonly video: VideoDriver,
     @Inject(PAYMENT_DRIVER) private readonly payment: PaymentDriver,
+    private readonly mail: MailService,
   ) {}
 
   // ---------------------------------------------------------------- Réglages
@@ -169,6 +172,7 @@ export class VisitsService {
       },
       select: {
         id: true,
+        ownerId: true,
         reference: true,
         title: true,
         addressLine: true,
@@ -475,6 +479,14 @@ export class VisitsService {
       await this.openPreauthorization(visitId, tenantId, property.id, policy);
     }
 
+    // Le propriétaire n'a rien à faire pour la visite — un agent Bail
+    // l'accompagne — mais il doit savoir que son bien est visité.
+    await this.mail.enqueue({
+      template: EVENT.visitBooked,
+      userId: property.ownerId,
+      subjectRef: visitId,
+    });
+
     return this.bookingView(tenantId, reference);
   }
 
@@ -584,6 +596,7 @@ export class VisitsService {
         scheduledAt: true,
         videoRoomId: true,
         applicationId: true,
+        property: { select: { ownerId: true } },
       },
     });
     // 404 et non 403 : « interdit » confirmerait que la visite existe ailleurs.
@@ -636,6 +649,14 @@ export class VisitsService {
         this.logger.warn(`Salle ${visit.videoRoomId} non fermée : ${error.message}`);
       });
     }
+
+    // C'est le locataire qui annule : c'est donc au propriétaire d'être
+    // prévenu, pour qu'il n'attende pas quelqu'un qui ne viendra pas.
+    await this.mail.enqueue({
+      template: EVENT.visitCancelled,
+      userId: visit.property.ownerId,
+      subjectRef: visit.id,
+    });
 
     return this.listMine(tenantId);
   }

@@ -15,6 +15,7 @@ import {
 import { Readable } from 'node:stream';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UpsertPropertyDto } from './dto/upsert-property.dto';
+import { accountBlockers } from '../auth/account.checks';
 import { propertyChecks } from './property.checks';
 import {
   DOCUMENT_TYPES,
@@ -44,6 +45,12 @@ export interface OwnerPropertyItem {
   photoCount: number;
   applicationCount: number;
   publishedAt: string | null;
+  /**
+   * Motif du dernier renvoi par le contrôle de Bail. Le propriétaire doit le
+   * lire là où il corrige : sans lui, son annonce serait repassée en brouillon
+   * sans explication.
+   */
+  reviewNote: string | null;
   /** Ce qui empêche la publication. Vide = le bien peut être soumis. */
   blockers: string[];
   /** Ce qui la dessert sans l'empêcher (photos, description courte). */
@@ -321,39 +328,58 @@ export class OwnerService {
 
 
   async listProperties(ownerId: string): Promise<OwnerPropertyItem[]> {
-    const properties = await this.prisma.property.findMany({
-      where: { ownerId },
-      include: {
-        district: true,
-        photos: { select: { id: true } },
-        documents: { select: { type: true } },
-        _count: { select: { applications: true } },
-      },
-      orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
-    });
+    const [properties, owner] = await Promise.all([
+      this.prisma.property.findMany({
+        where: { ownerId },
+        include: {
+          district: true,
+          photos: { select: { id: true } },
+          documents: { select: { type: true } },
+          _count: { select: { applications: true } },
+        },
+        orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
+      }),
+      this.prisma.user.findUniqueOrThrow({
+        where: { id: ownerId },
+        select: { emailVerifiedAt: true },
+      }),
+    ]);
 
-    return properties.map((property) => ({
-      reference: property.reference,
-      title: property.title,
-      district: property.district.name,
-      addressLine: property.addressLine,
-      status: property.status,
-      surfaceM2: property.surfaceM2,
-      rooms: property.rooms,
-      furnished: property.furnished,
-      energyRating: property.energyRating,
-      rentCents: property.rentCents,
-      chargesCents: property.chargesCents,
-      totalRentCents: property.rentCents + property.chargesCents,
-      photoCount: property.photos.length,
-      applicationCount: property._count.applications,
-      publishedAt: property.publishedAt?.toISOString() ?? null,
-      ...propertyChecks(property),
-    }));
+    // Le blocage tient au compte, pas au bien : il s'ajoute donc à chaque
+    // ligne, pour que le propriétaire le voie là où il s'apprête à soumettre.
+    const account = accountBlockers(owner);
+
+    return properties.map((property) => {
+      const checks = propertyChecks(property);
+      return {
+        reference: property.reference,
+        title: property.title,
+        district: property.district.name,
+        addressLine: property.addressLine,
+        status: property.status,
+        surfaceM2: property.surfaceM2,
+        rooms: property.rooms,
+        furnished: property.furnished,
+        energyRating: property.energyRating,
+        rentCents: property.rentCents,
+        chargesCents: property.chargesCents,
+        totalRentCents: property.rentCents + property.chargesCents,
+        photoCount: property.photos.length,
+        applicationCount: property._count.applications,
+        publishedAt: property.publishedAt?.toISOString() ?? null,
+        reviewNote: property.reviewNote,
+        blockers: [...account, ...checks.blockers],
+        warnings: checks.warnings,
+      };
+    });
   }
 
   /** Bien complet, tel que le formulaire de dépôt doit le repeupler. */
   async getForEdit(ownerId: string, reference: string): Promise<OwnerPropertyDetail> {
+    const owner = await this.prisma.user.findUniqueOrThrow({
+      where: { id: ownerId },
+      select: { emailVerifiedAt: true },
+    });
     await this.ownedOrFail(ownerId, reference);
 
     const property = await this.prisma.property.findFirstOrThrow({
@@ -409,7 +435,14 @@ export class OwnerService {
       photoCount: property.photos.length,
       applicationCount: property._count.applications,
       publishedAt: property.publishedAt?.toISOString() ?? null,
-      ...propertyChecks(property),
+      reviewNote: property.reviewNote,
+      ...(() => {
+        const checks = propertyChecks(property);
+        return {
+          blockers: [...accountBlockers(owner), ...checks.blockers],
+          warnings: checks.warnings,
+        };
+      })(),
     };
   }
 
@@ -590,15 +623,24 @@ export class OwnerService {
       throw new ConflictException('Seul un brouillon peut être soumis au contrôle.');
     }
 
-    const withFiles = await this.prisma.property.findUniqueOrThrow({
-      where: { id: property.id },
-      include: {
-        photos: { select: { id: true } },
-        documents: { select: { type: true } },
-      },
-    });
+    const [withFiles, owner] = await Promise.all([
+      this.prisma.property.findUniqueOrThrow({
+        where: { id: property.id },
+        include: {
+          photos: { select: { id: true } },
+          documents: { select: { type: true } },
+        },
+      }),
+      this.prisma.user.findUniqueOrThrow({
+        where: { id: ownerId },
+        select: { emailVerifiedAt: true },
+      }),
+    ]);
 
-    const { blockers } = propertyChecks(withFiles);
+    // Une annonce diffusée engage des candidats : elle suppose qu'on puisse
+    // joindre le bailleur. L'adresse confirmée est donc exigée ici, pas à la
+    // création du brouillon.
+    const blockers = [...accountBlockers(owner), ...propertyChecks(withFiles).blockers];
     if (blockers.length > 0) {
       // `statusCode` est repris explicitement : les autres exceptions Nest le
       // portent, et le front discrimine dessus.
@@ -611,7 +653,9 @@ export class OwnerService {
 
     const updated = await this.prisma.property.update({
       where: { id: property.id },
-      data: { status: PropertyStatus.PENDING_REVIEW },
+      // Le motif du dernier renvoi s'efface à la resoumission : le garder
+      // afficherait un reproche déjà traité.
+      data: { status: PropertyStatus.PENDING_REVIEW, reviewNote: null },
     });
 
     return { status: updated.status };

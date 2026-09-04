@@ -19,6 +19,8 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { propertyChecks } from '../owner/property.checks';
 import { SubscriptionService } from '../payments/subscription.service';
+import { EVENT } from '../mail/event.templates';
+import { MailService } from '../mail/mail.service';
 import { requiredTypes } from '../tenant/tenant.slots';
 
 export interface BackofficeSummary {
@@ -133,6 +135,7 @@ export class BackofficeService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly subscriptions: SubscriptionService,
+    private readonly mail: MailService,
   ) {}
 
   // ---------------------------------------------------------------- Registre
@@ -287,7 +290,12 @@ export class BackofficeService {
   ): Promise<AdminFileRow[]> {
     const document = await this.prisma.tenantDocument.findUnique({
       where: { id: documentId },
-      select: { id: true, status: true, tenantFileId: true },
+      select: {
+        id: true,
+        status: true,
+        tenantFileId: true,
+        tenantFile: { select: { tenantId: true } },
+      },
     });
     if (!document) throw new NotFoundException('Pièce introuvable.');
 
@@ -318,6 +326,18 @@ export class BackofficeService {
             },
     });
 
+    if (decision === 'REJECT') {
+      // La clé de dédoublonnage porte l'instant de la décision : une même pièce
+      // peut être refusée, corrigée, puis refusée à nouveau, et le locataire
+      // doit l'apprendre les deux fois.
+      await this.mail.enqueue({
+        template: EVENT.documentRejected,
+        userId: document.tenantFile.tenantId,
+        subjectRef: document.id,
+        dedupeKey: `${EVENT.documentRejected}:${document.id}:${Date.now()}`,
+      });
+    }
+
     // Un dossier dont une pièce vient d'être refusée n'est plus « vérifié » :
     // le laisser tel quel le ferait passer pour bon auprès des propriétaires.
     if (decision === 'REJECT') {
@@ -347,6 +367,15 @@ export class BackofficeService {
       include: { documents: true, guarantors: { select: { kind: true } } },
     });
     if (!file) throw new NotFoundException('Dossier introuvable.');
+    const notify = (template: string) =>
+      this.mail.enqueue({
+        template: template as (typeof EVENT)[keyof typeof EVENT],
+        userId: file.tenantId,
+        subjectRef: file.id,
+        // Un dossier peut être vérifié, redevenir incomplet après le refus
+        // d'une pièce, puis vérifié à nouveau : chaque passage se notifie.
+        dedupeKey: `${template}:${file.id}:${Date.now()}`,
+      });
 
     if (decision === 'VERIFY') {
       const required = requiredTypes(file.contractType, file.guarantors[0]?.kind ?? null);
@@ -370,12 +399,14 @@ export class BackofficeService {
         where: { id: file.id },
         data: { status: TenantFileStatus.VERIFIED, verifiedAt: new Date() },
       });
+      await notify(EVENT.fileVerified);
     } else {
       if (!reason?.trim()) throw new BadRequestException('Un refus doit être motivé.');
       await this.prisma.tenantFile.update({
         where: { id: file.id },
         data: { status: TenantFileStatus.REJECTED, verifiedAt: null },
       });
+      await notify(EVENT.fileRejected);
     }
 
     return this.listFiles();
@@ -445,22 +476,38 @@ export class BackofficeService {
 
       await this.prisma.property.update({
         where: { id: property.id },
-        data: { status: PropertyStatus.ONLINE, publishedAt: new Date() },
+        data: { status: PropertyStatus.ONLINE, publishedAt: new Date(), reviewNote: null },
       });
 
       // Le bien entre dans l'assiette facturée : sans cet appel, un bien
       // publié ne serait jamais facturé au propriétaire.
       await this.subscriptions.syncQuantity(property.ownerId);
+      await this.mail.enqueue({
+        template: EVENT.propertyPublished,
+        userId: property.ownerId,
+        subjectRef: property.id,
+        dedupeKey: `${EVENT.propertyPublished}:${property.id}:${Date.now()}`,
+      });
       this.logger.log(`Annonce ${reference} publiée.`);
     } else {
       if (!reason?.trim()) throw new BadRequestException('Un refus doit être motivé.');
       // Retour en brouillon plutôt qu'un statut « refusé » : le propriétaire
       // doit pouvoir corriger et resoumettre, pas repartir de zéro.
+      //
+      // Le motif est **stocké**, pas seulement journalisé : le back-office
+      // annonce au contrôleur qu'il est « transmis au propriétaire ». Sans ce
+      // champ, la phrase serait fausse.
       await this.prisma.property.update({
         where: { id: property.id },
-        data: { status: PropertyStatus.DRAFT },
+        data: { status: PropertyStatus.DRAFT, reviewNote: reason.trim() },
       });
-      this.logger.log(`Annonce ${reference} renvoyée au propriétaire : ${reason}`);
+      await this.mail.enqueue({
+        template: EVENT.propertyReturned,
+        userId: property.ownerId,
+        subjectRef: property.id,
+        dedupeKey: `${EVENT.propertyReturned}:${property.id}:${Date.now()}`,
+      });
+      this.logger.log(`Annonce ${reference} renvoyée au propriétaire.`);
     }
 
     return this.listProperties();
