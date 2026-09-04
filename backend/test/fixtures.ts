@@ -11,6 +11,7 @@ import {
   type PrismaClient,
 } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { createHash } from 'node:crypto';
 
 /**
  * Jeux de données minimaux pour les tests d'intégration.
@@ -125,4 +126,50 @@ export async function createVerifiedFile(prisma: PrismaClient, tenantId: string)
   });
 
   return file;
+}
+
+/**
+ * Squelette de modèle de bail.
+ *
+ * Le seed en pose deux, mais `resetDatabase` vide tout : sans ce modèle,
+ * accepter un candidat échoue en 400 avant d'atteindre ce que le test vise.
+ *
+ * Volontairement réduit — quelques champs, aucune clause. Le texte de l'avocat
+ * n'existe pas encore (CLAUDE.md règle 2), et recopier ici le schéma complet du
+ * seed ferait dépendre ces suites d'un détail qu'elles ne vérifient pas. Il
+ * reste `isActive: false`, comme en base : un bail ne s'envoie pas en signature.
+ */
+export async function createLeaseTemplate(
+  prisma: PrismaClient,
+  type: LeaseType = LeaseType.NU,
+) {
+  const body = [
+    'CONTRAT DE LOCATION',
+    'Bailleur : {{bailleurNomComplet}}, {{bailleurAdresse}}',
+    'Locataire : {{locataireNomComplet}}',
+    'Logement : {{logementAdresse}}',
+    'Loyer mensuel : {{loyerMensuel}}',
+  ].join('\n\n');
+
+  return prisma.leaseTemplate.upsert({
+    where: { code_version: { code: `TEST_${type}`, version: 1 } },
+    update: {},
+    create: {
+      code: `TEST_${type}`,
+      version: 1,
+      label: 'Squelette de test',
+      type,
+      body,
+      fieldSchema: {
+        bailleurNomComplet: { type: 'string', required: true },
+        bailleurAdresse: { type: 'string', required: true },
+        locataireNomComplet: { type: 'string', required: true },
+        logementAdresse: { type: 'string', required: true },
+        loyerMensuel: { type: 'money', required: true },
+      },
+      checksum: createHash('sha256').update(body, 'utf8').digest('hex'),
+      legalReference: 'Loi n° 89-462 du 6 juillet 1989',
+      isActive: false,
+    },
+  });
 }

@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ApplicationStatus, DocumentType } from '@prisma/client';
+import { ApplicationStatus, DocumentType, VisitStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ATTRIBUTION_REASON, ATTRIBUTION_VISIT_REASON } from '../applications/attribution';
 import * as tpl from './event.templates';
 import { EVENT } from './event.templates';
 import type { RenderedTemplate } from './mail.templates';
@@ -84,6 +85,9 @@ export class EventResolver {
       case EVENT.applicationAccepted:
         return this.application(template, ref, firstName);
 
+      case EVENT.applicationClosedByAttribution:
+        return this.applicationClosedByAttribution(ref, firstName);
+
       case EVENT.documentRejected:
         return this.documentRejected(ref, firstName);
 
@@ -103,6 +107,55 @@ export class EventResolver {
         this.logger.error(`Gabarit d'événement inconnu : ${template}`);
         return null;
     }
+  }
+
+  /**
+   * Candidature fermée par l'attribution du logement à un autre candidat.
+   *
+   * Reconstruite comme les autres, avec une vérification de plus : si la
+   * candidature n'est plus fermée pour ce motif — rouverte depuis, ou tranchée
+   * autrement — le message est abandonné. Il annoncerait une situation qui n'a
+   * plus cours, et rien ne le rattraperait ensuite.
+   *
+   * L'annulation du rendez-vous n'est mentionnée que s'il y en avait un : la
+   * plupart de ces candidats n'avaient pas encore de créneau.
+   */
+  private async applicationClosedByAttribution(
+    id: string,
+    firstName: string,
+  ): Promise<RenderedTemplate | null> {
+    const application = await this.prisma.application.findUnique({
+      where: { id },
+      select: {
+        status: true,
+        rejectionReason: true,
+        property: { select: { reference: true, title: true } },
+        visits: {
+          where: {
+            status: VisitStatus.CANCELLED,
+            cancellationReason: ATTRIBUTION_VISIT_REASON,
+          },
+          select: { id: true },
+          take: 1,
+        },
+      },
+    });
+    if (!application) return null;
+
+    if (
+      application.status !== ApplicationStatus.REJECTED ||
+      application.rejectionReason !== ATTRIBUTION_REASON
+    ) {
+      return null;
+    }
+
+    return tpl.applicationClosedByAttribution({
+      tenantFirstName: firstName,
+      propertyReference: application.property.reference,
+      propertyTitle: application.property.title,
+      visitCancelled: application.visits.length > 0,
+      url: `${this.site}/recherche`,
+    });
   }
 
   private async application(

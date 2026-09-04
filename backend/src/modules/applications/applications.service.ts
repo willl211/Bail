@@ -12,6 +12,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { accountBlockers } from '../auth/account.checks';
+import { ATTRIBUTION_REASON } from './attribution';
 import { EVENT } from '../mail/event.templates';
 import { MailService } from '../mail/mail.service';
 import {
@@ -116,6 +117,19 @@ const STEP_LABEL: Record<ApplicationStatus, string> = {
   WITHDRAWN: 'Retirée',
   EXPIRED: 'Expirée',
 };
+
+/**
+ * Étape affichée au locataire.
+ *
+ * « Non retenue » dit qu'un dossier a été examiné puis écarté. Une candidature
+ * fermée parce que le logement est parti n'a rien connu de tel, et le lui
+ * annoncer ainsi lui ferait porter un jugement qui n'a pas eu lieu — c'est la
+ * même raison qui vaut à ce cas son propre gabarit d'e-mail.
+ */
+const stepLabel = (status: ApplicationStatus, rejectionReason: string | null) =>
+  status === ApplicationStatus.REJECTED && rejectionReason === ATTRIBUTION_REASON
+    ? 'Logement attribué'
+    : STEP_LABEL[status];
 
 @Injectable()
 export class ApplicationsService {
@@ -413,6 +427,7 @@ export class ApplicationsService {
       select: {
         id: true,
         status: true,
+        rejectionReason: true,
         submittedAt: true,
         property: {
           select: {
@@ -434,7 +449,7 @@ export class ApplicationsService {
       totalRentCents: application.property.rentCents + application.property.chargesCents,
       submittedAt: application.submittedAt.toISOString(),
       status: application.status,
-      stepLabel: STEP_LABEL[application.status],
+      stepLabel: stepLabel(application.status, application.rejectionReason),
     }));
   }
 }

@@ -12,12 +12,15 @@ import {
   DocumentType,
   LeaseStatus,
   LeaseType,
+  PreauthorizationStatus,
   Prisma,
   PropertyDocumentType,
   PropertyStatus,
+  VisitStatus,
 } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ATTRIBUTION_REASON, ATTRIBUTION_VISIT_REASON } from '../applications/attribution';
 import { EVENT } from '../mail/event.templates';
 import { MailService } from '../mail/mail.service';
 import { formatAddress } from '../owner/address.checks';
@@ -207,7 +210,7 @@ export class LeaseService {
 
     const fieldValues = await this.buildFieldValues(application.id, startDate, durationMonths);
 
-    const reference = await this.prisma.$transaction(async (tx) => {
+    const attribution = await this.prisma.$transaction(async (tx) => {
       const leaseReference = await this.nextReference(tx);
 
       await tx.lease.create({
@@ -241,8 +244,10 @@ export class LeaseService {
       });
 
       // Les autres candidatures du bien sont figées : le logement est pris, et
-      // les laisser « en étude » ferait attendre des gens pour rien.
-      await tx.application.updateMany({
+      // les laisser « en étude » ferait attendre des gens pour rien. On les
+      // relève avant de les fermer : `updateMany` ne rend pas les lignes
+      // touchées, or il faut savoir qui prévenir.
+      const closed = await tx.application.findMany({
         where: {
           propertyId: property.id,
           id: { not: application.id },
@@ -255,12 +260,51 @@ export class LeaseService {
             ],
           },
         },
+        select: { id: true, tenantId: true },
+      });
+      const closedIds = closed.map((entry) => entry.id);
+
+      await tx.application.updateMany({
+        where: { id: { in: closedIds } },
         data: {
           status: ApplicationStatus.REJECTED,
-          rejectionReason: 'Le logement a été attribué à un autre candidat.',
+          rejectionReason: ATTRIBUTION_REASON,
           decidedAt: new Date(),
         },
       });
+
+      // Les rendez-vous que portaient ces candidatures n'ont plus d'objet : le
+      // bien est loué. Sans cette annulation, un candidat se déplacerait pour
+      // visiter un logement déjà attribué — et le propriétaire l'y attendrait.
+      // Même traitement que sur un refus explicite, créneau rendu compris.
+      const visits = await tx.visit.findMany({
+        where: {
+          applicationId: { in: closedIds },
+          status: {
+            in: [VisitStatus.REQUESTED, VisitStatus.PENDING_CHECKS, VisitStatus.CONFIRMED],
+          },
+        },
+        select: { id: true },
+      });
+
+      if (visits.length > 0) {
+        const visitIds = visits.map((visit) => visit.id);
+        await tx.visit.updateMany({
+          where: { id: { in: visitIds } },
+          data: {
+            status: VisitStatus.CANCELLED,
+            cancelledAt: new Date(),
+            cancellationReason: ATTRIBUTION_VISIT_REASON,
+            preauthorizationStatus: PreauthorizationStatus.RELEASED,
+          },
+        });
+        // Le créneau redevient libre : le bien sort de la diffusion, mais le
+        // propriétaire garde un calendrier qui dit la vérité.
+        await tx.visitSlot.updateMany({
+          where: { visitId: { in: visitIds } },
+          data: { visitId: null },
+        });
+      }
 
       // Le bien sort de la diffusion : il est loué, le laisser en ligne
       // continuerait d'attirer des candidatures sans objet — et de le facturer.
@@ -269,21 +313,36 @@ export class LeaseService {
         data: { status: PropertyStatus.RENTED, rentedAt: new Date() },
       });
 
-      return leaseReference;
+      return { leaseReference, closed };
     });
 
-    // Le candidat retenu l'apprend ; les autres ont déjà reçu leur réponse au
-    // moment où leur candidature a été écartée par le propriétaire. Celles que
-    // l'attribution vient de figer ne sont pas notifiées ici : le message
-    // partirait pour un refus que personne n'a formulé — à trancher avec un
-    // gabarit dédié plutôt qu'en réutilisant celui du refus explicite.
+    const { leaseReference: reference, closed } = attribution;
+
+    // Hors transaction : la mise en file ne doit pas pouvoir faire échouer
+    // l'attribution, et une attribution annulée ne doit pas laisser partir un
+    // message.
     await this.mail.enqueue({
       template: EVENT.applicationAccepted,
       userId: application.tenantId,
       subjectRef: application.id,
     });
 
-    this.logger.log(`Bail ${reference} ouvert pour la candidature ${application.id}.`);
+    // Les candidatures que l'attribution vient de fermer reçoivent leur propre
+    // message. Employer le gabarit du refus annoncerait une décision que
+    // personne n'a formulée : ces dossiers n'ont pas été écartés, le logement
+    // est simplement parti.
+    for (const entry of closed) {
+      await this.mail.enqueue({
+        template: EVENT.applicationClosedByAttribution,
+        userId: entry.tenantId,
+        subjectRef: entry.id,
+      });
+    }
+
+    this.logger.log(
+      `Bail ${reference} ouvert pour la candidature ${application.id}` +
+        (closed.length > 0 ? `, ${closed.length} candidature(s) fermée(s).` : '.'),
+    );
     return this.getByReference(reference, ownerId, 'OWNER');
   }
 

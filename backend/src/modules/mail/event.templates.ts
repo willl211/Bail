@@ -22,6 +22,7 @@ export const EVENT = {
   applicationReceived: 'application-received',
   applicationShortlisted: 'application-shortlisted',
   applicationRejected: 'application-rejected',
+  applicationClosedByAttribution: 'application-closed-attribution',
   applicationAccepted: 'application-accepted',
   documentRejected: 'document-rejected',
   fileVerified: 'file-verified',
@@ -176,6 +177,43 @@ export function applicationRejected(p: {
       `Bonjour ${p.tenantFirstName},`,
       `Le propriétaire de ${p.propertyReference} a retenu un autre dossier.`,
       ...(p.reason ? [`Motif indiqué : ${p.reason}`] : []),
+      'Votre dossier reste vérifié et prêt : il repart en un clic sur un autre bien.',
+    ],
+    action: { label: 'Voir les biens disponibles', url: p.url },
+  });
+}
+
+/**
+ * Candidature close parce que le logement est parti.
+ *
+ * Distinct du refus explicite, et pas par délicatesse : personne n'a examiné ce
+ * dossier pour l'écarter. Le propriétaire en a retenu un autre, et toutes les
+ * candidatures encore ouvertes sur le bien se sont fermées d'un coup. Employer
+ * le gabarit du refus annoncerait une décision que personne n'a formulée — et
+ * ferait porter à ce candidat un jugement sur son dossier qui n'a pas eu lieu.
+ *
+ * Le mot « refus » n'y figure donc pas, et l'objet non plus : ce qui est arrivé
+ * est arrivé au logement, pas à la personne.
+ */
+export function applicationClosedByAttribution(p: {
+  tenantFirstName: string;
+  propertyReference: string;
+  propertyTitle: string;
+  /** Un rendez-vous déjà réservé a été annulé par l'attribution. */
+  visitCancelled: boolean;
+  url: string;
+}): RenderedTemplate {
+  return build(`Logement attribué — ${p.propertyReference}`, {
+    heading: 'Ce logement a trouvé preneur',
+    paragraphs: [
+      `Bonjour ${p.tenantFirstName},`,
+      `${p.propertyReference} — ${p.propertyTitle} vient d’être attribué à un autre candidat. Votre candidature se clôt donc là.`,
+      'Elle n’a pas été écartée : elle n’a simplement plus d’objet.',
+      ...(p.visitCancelled
+        ? [
+            'Le rendez-vous de visite que vous aviez réservé est annulé — vous n’avez pas à vous déplacer.',
+          ]
+        : []),
       'Votre dossier reste vérifié et prêt : il repart en un clic sur un autre bien.',
     ],
     action: { label: 'Voir les biens disponibles', url: p.url },

@@ -68,7 +68,7 @@ prestataire. Sans Mailpit démarré, l'API le signale au lancement et les envois
 ## Tests
 
 ```bash
-npm test          # tout : 248 tests
+npm test          # tout : 254 tests
 ```
 
 Deux campagnes, séparées par ce qu'elles exigent pour tourner.
@@ -344,10 +344,6 @@ hors dépôt.
   bail prêt à signer, bail signé, honoraires réglés, échec de prélèvement
   d'abonnement. Les trois premières supposent un modèle de bail validé
   juridiquement, la dernière un compte Stripe.
-- Les candidatures **figées par l'attribution du logement** à un autre candidat
-  ne déclenchent aucun e-mail : le gabarit disponible est celui d'un refus
-  explicite du propriétaire, et l'employer ici annoncerait une décision que
-  personne n'a formulée. Un gabarit dédié est à écrire.
 - Les tâches planifiées (file d'envoi, purge des enregistrements) supposent
   **une seule instance d'API**, ce qui est le cas du pilote. Avec plusieurs, il
   faudra les verrouiller pour qu'elles ne tournent pas en double.
