@@ -57,3 +57,8 @@ Thumbs.db
 # Configuration locale de l'outillage Claude Code — chemins et ports propres
 # à ce poste (voir .claude/settings.local.json), à ne jamais committer.
 .claude/settings.local.json
+
+# Variables de déploiement : elles portent les identifiants de la base, du
+# stockage objet et des prestataires. Le modèle (`deploy/.env.example`) est
+# versionné, les valeurs jamais.
+/deploy/.env

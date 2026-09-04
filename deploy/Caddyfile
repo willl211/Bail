@@ -1,0 +1,50 @@
+# Terminaison TLS et routage.
+#
+# Les noms viennent de l'environnement : rien n'est figé ici, le fichier sert
+# tel quel en pré-production et en production.
+
+{
+	email {$TLS_EMAIL}
+}
+
+# Le site.
+{$SITE_DOMAIN} {
+	encode zstd gzip
+
+	# Le serveur Next rend les pages à chaque requête (sessions, listes
+	# sauvegardées) : rien n'est mis en cache ici, il s'en charge lui-même par
+	# ses propres en-têtes.
+	reverse_proxy web:3000
+
+	header {
+		# Le site ne s'affiche dans aucun cadre : il n'y a pas d'intégration
+		# tierce prévue, et l'autoriser ouvrirait une porte au détournement de
+		# clic sur les écrans de décision (accepter un candidat, signer).
+		X-Frame-Options "DENY"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Deux ans, sous-domaines compris : le cookie de session porte sur
+		# `.domaine`, une seule requête en clair sur un sous-domaine suffirait
+		# à l'exposer.
+		Strict-Transport-Security "max-age=63072000; includeSubDomains"
+		-Server
+	}
+}
+
+# L'API.
+{$API_DOMAIN} {
+	encode zstd gzip
+
+	reverse_proxy api:4000 {
+		# Le webhook de signature et celui de paiement vérifient leur signature
+		# **octet pour octet**. Toute réécriture du corps invaliderait le
+		# contrôle : le proxy transmet, il ne touche à rien.
+		flush_interval -1
+	}
+
+	header {
+		X-Content-Type-Options "nosniff"
+		Strict-Transport-Security "max-age=63072000; includeSubDomains"
+		-Server
+	}
+}

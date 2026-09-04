@@ -33,6 +33,7 @@ Voir `docs/product-brief.md` pour le détail du périmètre fonctionnel et `docs
 | `docs/market-context.md` | Contexte marché Metz (cibles, volumes, profils) |
 | `docs/legal-context.md` | Ce qui est légalement contraint, et ce qui peut avancer sans attendre le juridique |
 | `docs/team-and-status.md` | Qui fait quoi, état d'avancement au moment du transfert |
+| `docs/deployment.md` | Comment mettre le produit en ligne, et ce que ça oblige à traiter |
 
 > `maquette_interface/project/` contient une maquette antérieure (nom « Seuil », accent bordeaux). Elle est **remplacée** par `maquette_interface/bail/` et ne fait plus foi — ne pas s'en inspirer en cas de divergence.
 

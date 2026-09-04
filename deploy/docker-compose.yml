@@ -1,0 +1,136 @@
+# Déploiement — staging et production.
+#
+# À lancer depuis la racine du dépôt, sur la machine hôte :
+#
+#   docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
+#
+# Il n'y a **pas de service PostgreSQL ici** : la base est managée, chez
+# l'hébergeur. Une base dans un conteneur sur la même machine, c'est un disque
+# qui meurt et le pilote avec — et sur un produit qui stocke des pièces
+# d'identité, la question n'est pas la performance mais qui fait les sauvegardes
+# et les teste.
+#
+# Les images sont construites sur la machine plutôt que tirées d'un registre :
+# ça évite d'avoir à en choisir un, à s'y authentifier et à y publier pour un
+# pilote sur une seule machine. Le jour où il en faudra un, seules les lignes
+# `image:` changeront — les noms sont déjà là pour ça.
+
+name: bail
+
+services:
+  # Applique les migrations, puis s'arrête. L'API ne démarre qu'après.
+  #
+  # Une étape séparée plutôt qu'un point d'entrée dans l'API : deux instances
+  # d'API qui démarreraient ensemble appliqueraient les migrations en même
+  # temps. Ici l'ordre est explicite, et un échec de migration empêche le
+  # déploiement au lieu de le laisser passer à moitié.
+  migrate:
+    image: bail-api:${TAG:-latest}
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    working_dir: /app/backend
+    command: ['npx', 'prisma', 'migrate', 'deploy']
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL est obligatoire}
+    restart: 'no'
+
+  api:
+    image: bail-api:${TAG:-latest}
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    # Le fichier porte les secrets et les adresses : il vit sur la machine,
+    # jamais dans le dépôt.
+    env_file:
+      - .env
+    expose:
+      - '4000'
+    restart: unless-stopped
+    # L'API porte les tâches planifiées (file d'envoi, purge des
+    # enregistrements). Le journal est la seule trace qu'elles tournent : sans
+    # limite de taille, il remplit le disque en quelques semaines.
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '5'
+
+  web:
+    image: bail-web:${TAG:-latest}
+    build:
+      context: ..
+      dockerfile: frontend/Dockerfile
+      # Rappel : ces valeurs sont inscrites dans le bundle du navigateur au
+      # moment de la compilation, pas lues au démarrage. Une image construite
+      # pour la pré-production ne peut donc pas être promue en production.
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?adresse publique de l API requise}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:?adresse publique du site requise}
+        NEXT_PUBLIC_APP_ENV: ${APP_ENV:-production}
+    depends_on:
+      api:
+        condition: service_healthy
+    # Environnement **explicite**, et non le fichier partagé : le serveur qui
+    # rend les pages n'a aucune raison de détenir l'URL de la base, la clé
+    # Stripe, le mot de passe SMTP ni les identifiants du stockage objet. Lui
+    # passer le fichier entier ferait porter tous les secrets par le conteneur
+    # le plus exposé du dispositif.
+    #
+    # `PORT` est la raison pratique du changement : le fichier partagé porte
+    # celui de l'API (4000), et le front démarrait dessus.
+    environment:
+      NODE_ENV: production
+      PORT: '3000'
+      HOSTNAME: 0.0.0.0
+      # Adresse de l'API vue depuis le réseau interne : les pages sont rendues
+      # côté serveur, le trafic n'a pas à ressortir par le proxy pour y revenir.
+      API_INTERNAL_URL: http://api:4000/${API_PREFIX:-api/v1}
+    expose:
+      - '3000'
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '5'
+
+  # Terminaison TLS et routage des deux noms.
+  #
+  # Caddy plutôt que nginx pour une seule raison : il obtient et renouvelle les
+  # certificats tout seul dès que les noms pointent sur la machine. Un
+  # certificat expiré un dimanche est une panne totale, et c'est la panne la
+  # plus bête à subir sur un pilote sans astreinte. Rien n'y est spécifique :
+  # remplacer ce service par nginx ne toucherait à aucun des deux autres.
+  proxy:
+    image: caddy:2-alpine
+    depends_on:
+      - api
+      - web
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:?nom de domaine du site requis}
+      API_DOMAIN: ${API_DOMAIN:?nom de domaine de l API requis}
+      TLS_EMAIL: ${TLS_EMAIL:?adresse de contact pour les certificats requise}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Les certificats survivent au redémarrage : sans ce volume, chaque
+      # `up` en redemanderait de nouveaux et se ferait limiter par Let's
+      # Encrypt au bout de quelques essais.
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '5'
+
+volumes:
+  caddy-data:
+  caddy-config:

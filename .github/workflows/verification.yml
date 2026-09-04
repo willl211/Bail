@@ -100,3 +100,61 @@ jobs:
 
       - name: Compilation
         run: npm run build
+
+  # ---------------------------------------------------------------------------
+  # Les images de production se construisent-elles encore ?
+  #
+  # Un Dockerfile ne casse jamais au moment où on le modifie : il casse trois
+  # semaines plus tard, quand une dépendance change ou qu'un fichier déplacé
+  # n'est plus copié — et on ne s'en aperçoit qu'au déploiement, c'est-à-dire au
+  # pire moment. Cette tâche construit les deux images à chaque poussée.
+  #
+  # Elle ne les publie nulle part : aucun registre n'est retenu, et un pilote sur
+  # une seule machine construit ses images sur place. Ce qui est vérifié ici est
+  # que la construction aboutit, pas qu'elle soit distribuée.
+  images:
+    name: Images de production
+    runs-on: ubuntu-latest
+    # Indépendante de la vérification du code : une image qui ne se construit
+    # plus est un problème distinct d'un test qui échoue, et les deux réponses
+    # sont plus utiles qu'une seule.
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Construire l'image de l'API
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: backend/Dockerfile
+          push: false
+          # Le cache d'actions évite de réinstaller les dépendances à chaque
+          # poussée ; sans lui la tâche durerait plusieurs minutes pour rien.
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
+
+      - name: Construire l'image du front
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: frontend/Dockerfile
+          push: false
+          # Les adresses publiques sont figées dans le bundle à la compilation.
+          # Celles-ci n'ont aucune valeur : on vérifie que la construction
+          # aboutit, pas qu'elle vise le bon environnement.
+          build-args: |
+            NEXT_PUBLIC_API_URL=https://exemple.invalid/api/v1
+            NEXT_PUBLIC_SITE_URL=https://exemple.invalid
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
+
+      - name: Vérifier le manifeste de déploiement
+        run: |
+          cp env/production.env.example deploy/.env
+          {
+            echo "SITE_DOMAIN=exemple.invalid"
+            echo "API_DOMAIN=api.exemple.invalid"
+            echo "TLS_EMAIL=ci@exemple.invalid"
+          } >> deploy/.env
+          docker compose -f deploy/docker-compose.yml --env-file deploy/.env config --quiet

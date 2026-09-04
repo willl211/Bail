@@ -1,0 +1,43 @@
+# Ce qui ne doit jamais entrer dans une image.
+#
+# Le contexte de construction est la racine du monorepo — les deux images en ont
+# besoin, puisque les dépendances sont remontées là par les workspaces npm.
+# Sans ce fichier, chaque construction enverrait au démon Docker le
+# `node_modules` complet et les artefacts de développement, soit près d'un
+# gigaoctet recopié à chaque fois pour rien.
+
+node_modules
+**/node_modules
+
+# Artefacts de compilation : reconstruits dans l'image, jamais copiés depuis
+# la machine de développement — celle-ci tourne sous Windows, et les binaires
+# natifs qu'elle produit ne s'exécutent pas dans le conteneur.
+backend/dist
+frontend/.next
+frontend/out
+
+# Données locales de développement.
+backend/storage
+backend/storage-test
+backend/uploads
+logs
+
+# Secrets et environnements. Les valeurs de production sont injectées au
+# démarrage du conteneur, jamais construites dedans : une image porte le code,
+# pas les identifiants.
+.env
+**/.env
+**/.env.*
+!env/*.example
+
+# Outillage, historique, documentation.
+.git
+.github
+.claude
+.agents
+docs
+maquette_interface
+**/*.spec.ts
+**/*.spec.tsx
+**/*.int-spec.ts
+backend/test

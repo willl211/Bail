@@ -12,6 +12,7 @@ frontend/            Next.js 16 (App Router, React 19) — web responsive
 backend/             NestJS 12 + Prisma 6 + PostgreSQL
   prisma/schema.prisma   schéma de base (docs/data-model.md)
   prisma/seed.ts         jeu de démonstration (les 8 biens de la maquette)
+deploy/              manifeste de mise en ligne (docs/deployment.md)
 docs/                cadrage produit, technique, juridique, marché
 maquette_interface/  export Claude Design — référence visuelle de tous les écrans
 env/                 modèles de variables d'environnement par environnement
