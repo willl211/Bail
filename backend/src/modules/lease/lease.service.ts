@@ -23,6 +23,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { ATTRIBUTION_REASON, ATTRIBUTION_VISIT_REASON } from '../applications/attribution';
 import { EVENT } from '../mail/event.templates';
 import { MailService } from '../mail/mail.service';
+import { SavedService } from '../saved/saved.service';
 import { formatAddress } from '../owner/address.checks';
 import {
   SIGNATURE_DRIVER,
@@ -30,6 +31,7 @@ import {
   type SignatureEvent,
 } from '../signature/signature.driver';
 import { renderPlainText, renderTemplate, type RenderedBlock } from './lease.renderer';
+import { SIGNATURE_VALIDITY_DAYS } from './signature.validity';
 import { validateLease, type LeaseValidationReport } from './lease.validation';
 
 /** Réglage qui autorise — ou non — la génération de baux. */
@@ -40,9 +42,6 @@ const LEGAL_DURATION_MONTHS: Record<LeaseType, number> = {
   [LeaseType.NU]: 36,
   [LeaseType.MEUBLE]: 12,
 };
-
-/** Validité d'une enveloppe de signature, en jours. */
-const SIGNATURE_VALIDITY_DAYS = 7;
 
 export interface LeaseSignerView {
   role: 'LANDLORD' | 'TENANT';
@@ -112,6 +111,7 @@ export class LeaseService {
     private readonly prisma: PrismaService,
     @Inject(SIGNATURE_DRIVER) private readonly signature: SignatureDriver,
     private readonly mail: MailService,
+    private readonly saved: SavedService,
   ) {}
 
   // ---------------------------------------------------------------- Réglages
@@ -338,6 +338,11 @@ export class LeaseService {
         subjectRef: entry.id,
       });
     }
+
+    // Le bien sort de la diffusion : ceux qui l'avaient mis de côté sans
+    // candidater ne l'apprendraient autrement qu'en revenant sur leur liste.
+    // Les candidats en sont exclus — ils viennent de recevoir leur réponse.
+    await this.saved.notifyRented(property.id);
 
     this.logger.log(
       `Bail ${reference} ouvert pour la candidature ${application.id}` +
@@ -744,6 +749,17 @@ export class LeaseService {
       },
     });
 
+    // Les deux parties sont prévenues. Le lien de signature, lui, vient du
+    // prestataire : il ne transite pas par la file, qui ne porte aucun secret.
+    for (const userId of [lease.property.ownerId, lease.tenantId]) {
+      await this.mail.enqueue({
+        template: EVENT.leaseReadyToSign,
+        userId,
+        subjectRef: lease.id,
+        dedupeKey: `${EVENT.leaseReadyToSign}:${lease.id}:${userId}`,
+      });
+    }
+
     return this.getByReference(reference, ownerId, 'OWNER');
   }
 
@@ -761,7 +777,13 @@ export class LeaseService {
   async applySignatureEvent(event: SignatureEvent): Promise<boolean> {
     const lease = await this.prisma.lease.findFirst({
       where: { signatureEnvelopeId: event.envelopeId },
-      select: { id: true, signatureEvents: true, status: true },
+      select: {
+        id: true,
+        signatureEvents: true,
+        status: true,
+        tenantId: true,
+        property: { select: { ownerId: true } },
+      },
     });
     if (!lease) {
       this.logger.warn(`Événement reçu pour une enveloppe inconnue : ${event.envelopeId}`);
@@ -808,6 +830,20 @@ export class LeaseService {
         declineReason: status === LeaseStatus.DECLINED ? event.reason : undefined,
       },
     });
+
+    // Signé des deux côtés : les parties l'apprennent. La clé de dédoublonnage
+    // porte le bail, pas l'événement — un rejeu du prestataire ne doit pas
+    // annoncer deux fois la même signature.
+    if (status === LeaseStatus.SIGNED && lease.status !== LeaseStatus.SIGNED) {
+      for (const userId of [lease.property.ownerId, lease.tenantId]) {
+        await this.mail.enqueue({
+          template: EVENT.leaseSigned,
+          userId,
+          subjectRef: lease.id,
+          dedupeKey: `${EVENT.leaseSigned}:${lease.id}:${userId}`,
+        });
+      }
+    }
 
     return true;
   }

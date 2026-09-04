@@ -107,23 +107,50 @@ export function eurosPrecise(cents: number): string {
   })} €`;
 }
 
+/**
+ * Fuseau du produit.
+ *
+ * Le pilote est messin : un créneau de visite s'annonce en heure française,
+ * quelle que soit la machine qui rend la page. Épingler le fuseau plutôt que
+ * s'en remettre à celui du serveur n'est pas une précaution de principe — le
+ * rendu Next tourne en UTC en production, et un rendez-vous de 16 h s'y
+ * afficherait à 14 h, alors que l'e-mail de confirmation, lui, dit déjà
+ * l'heure de Paris (`event.templates.ts`). Deux heures pour le même
+ * rendez-vous, c'est quelqu'un qui arrive quand l'agent est reparti.
+ */
+const TZ = 'Europe/Paris';
+
+/** Champs d'un instant, lus dans le fuseau du produit. */
+function parts(iso: string): Record<string, string> {
+  const formatted = new Intl.DateTimeFormat('fr-FR', {
+    timeZone: TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    // `h23` plutôt que `hour12: false` : ce dernier rend minuit « 24 » dans
+    // certaines implémentations.
+    hourCycle: 'h23',
+  }).formatToParts(new Date(iso));
+  return Object.fromEntries(formatted.map((part) => [part.type, part.value]));
+}
+
+/** Portion de date en toutes lettres, dans le fuseau du produit. */
+function words(iso: string, options: Intl.DateTimeFormatOptions): string {
+  return new Date(iso).toLocaleDateString('fr-FR', { ...options, timeZone: TZ });
+}
+
 /** Date longue : « 1er octobre 2026 ». */
 export function longDate(iso: string): string {
-  const date = new Date(iso);
-  const day = date.getDate();
-  return `${day === 1 ? '1er' : day} ${date.toLocaleDateString('fr-FR', {
-    month: 'long',
-    year: 'numeric',
-  })}`;
+  const day = Number(parts(iso).day);
+  return `${day === 1 ? '1er' : day} ${words(iso, { month: 'long', year: 'numeric' })}`;
 }
 
 /** Horodatage court du journal : « 02.09 · 09:14 ». */
 export function logStamp(iso: string): string {
-  const date = new Date(iso);
-  const pad = (value: number) => String(value).padStart(2, '0');
-  return `${pad(date.getDate())}.${pad(date.getMonth() + 1)} · ${pad(date.getHours())}:${pad(
-    date.getMinutes(),
-  )}`;
+  const { day, month, hour, minute } = parts(iso);
+  return `${day}.${month} · ${hour}:${minute}`;
 }
 
 /**
@@ -141,10 +168,8 @@ export function relativeAge(iso: string, now = new Date()): string {
   if (hours < 48) return 'hier';
   const days = Math.floor(hours / 24);
   if (days < 8) return `${days} jours`;
-  const date = new Date(iso);
-  return `${String(date.getDate()).padStart(2, '0')}.${String(
-    date.getMonth() + 1,
-  ).padStart(2, '0')}`;
+  const { day, month } = parts(iso);
+  return `${day}.${month}`;
 }
 
 /** Taux d'effort : 0.324 -> « 32 % ». */
@@ -154,25 +179,18 @@ export function percent(ratio: number): string {
 
 /** En-tête de colonne du calendrier de visites : « LUN 08.09 ». */
 export function dayHeading(iso: string): string {
-  const date = new Date(iso);
-  const day = date.toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', '');
-  return `${day} ${String(date.getDate()).padStart(2, '0')}.${String(
-    date.getMonth() + 1,
-  ).padStart(2, '0')}`;
+  const weekday = words(iso, { weekday: 'short' }).replace('.', '');
+  const { day, month } = parts(iso);
+  return `${weekday} ${day}.${month}`;
 }
 
 /** Heure seule d'un créneau : « 18:30 ». */
 export function timeOfDay(iso: string): string {
-  const date = new Date(iso);
-  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  const { hour, minute } = parts(iso);
+  return `${hour}:${minute}`;
 }
 
 /** Rendez-vous en toutes lettres : « mercredi 10 septembre · 18:30 ». */
 export function appointment(iso: string): string {
-  const date = new Date(iso);
-  return `${date.toLocaleDateString('fr-FR', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  })} · ${timeOfDay(iso)}`;
+  return `${words(iso, { weekday: 'long', day: 'numeric', month: 'long' })} · ${timeOfDay(iso)}`;
 }

@@ -16,6 +16,8 @@ import {
   type Subscription,
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { EVENT } from '../mail/event.templates';
+import { MailService } from '../mail/mail.service';
 import {
   PAYMENT_DRIVER,
   type DriverSubscription,
@@ -168,6 +170,7 @@ export class SubscriptionService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     @Inject(PAYMENT_DRIVER) private readonly driver: PaymentDriver,
+    private readonly mail: MailService,
   ) {}
 
   // ---------------------------------------------------------------- Lectures
@@ -686,6 +689,15 @@ export class SubscriptionService {
           failedAt: new Date(),
           failureReason: readFailureReason(invoice) ?? 'Paiement refusé.',
         },
+      });
+
+      // Le propriétaire l'apprend de nous, pas seulement de sa banque : c'est
+      // sa diffusion qui est en jeu à terme, et lui seul peut corriger son
+      // moyen de paiement. Une seule fois par échéance.
+      await this.mail.enqueue({
+        template: EVENT.subscriptionPaymentFailed,
+        userId: subscription.ownerId,
+        subjectRef: payment.id,
       });
     }
 

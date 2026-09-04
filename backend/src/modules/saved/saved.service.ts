@@ -1,6 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma, PropertyStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { EVENT } from '../mail/event.templates';
+import { MailService } from '../mail/mail.service';
 import { StorageService } from '../storage/storage.service';
 
 /**
@@ -34,9 +36,12 @@ const OPEN_STATUSES: PropertyStatus[] = [
 
 @Injectable()
 export class SavedService {
+  private readonly logger = new Logger(SavedService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    private readonly mail: MailService,
   ) {}
 
   /**
@@ -46,10 +51,12 @@ export class SavedService {
    * publiquement, et répondre autre chose que 404 confirmerait son existence à
    * qui devine une référence.
    */
-  private async savableOrFail(reference: string): Promise<{ id: string }> {
+  private async savableOrFail(
+    reference: string,
+  ): Promise<{ id: string; rentCents: number; chargesCents: number }> {
     const property = await this.prisma.property.findFirst({
       where: { reference, publishedAt: { not: null } },
-      select: { id: true },
+      select: { id: true, rentCents: true, chargesCents: true },
     });
     if (!property) throw new NotFoundException('Ce bien n’existe pas.');
     return property;
@@ -61,7 +68,13 @@ export class SavedService {
 
     try {
       await this.prisma.savedProperty.create({
-        data: { tenantId, propertyId: property.id },
+        data: {
+          tenantId,
+          propertyId: property.id,
+          // Le loyer d'aujourd'hui devient le point de comparaison d'une
+          // éventuelle baisse : c'est ce prix-là que cette personne a vu.
+          rentCentsAtSave: property.rentCents + property.chargesCents,
+        },
       });
     } catch (error) {
       // La contrainte d'unicité fait le travail : un double clic, ou deux
@@ -128,6 +141,87 @@ export class SavedService {
       available: OPEN_STATUSES.includes(property.status),
       savedAt: createdAt.toISOString(),
     }));
+  }
+
+  /**
+   * Locataires à prévenir d'un événement sur un bien qu'ils suivent.
+   *
+   * Ceux qui ont candidaté sur ce bien en sont exclus : ils reçoivent déjà les
+   * messages de leur candidature, et l'événement leur y est annoncé sous
+   * l'angle qui les concerne. Leur écrire une seconde fois à propos du même
+   * fait ferait de la notification un bruit plutôt qu'une information.
+   */
+  private async followersToNotify(propertyId: string, where: Prisma.SavedPropertyWhereInput) {
+    const candidats = await this.prisma.application.findMany({
+      where: { propertyId },
+      select: { tenantId: true },
+    });
+    const dejaEnCours = candidats.map((candidat) => candidat.tenantId);
+
+    return this.prisma.savedProperty.findMany({
+      where: { ...where, propertyId, tenantId: { notIn: dejaEnCours } },
+      select: { tenantId: true, rentCentsAtSave: true },
+    });
+  }
+
+  /**
+   * Signale une baisse de loyer à ceux qui suivent le bien.
+   *
+   * Appelée à la (re)publication : un bien en ligne ne se modifie pas, il
+   * repasse en brouillon, est corrigé, puis repasse au contrôle. C'est donc au
+   * moment où il redevient visible que la baisse devient réelle.
+   *
+   * Seuls sont prévenus ceux dont le loyer de référence est plus élevé que le
+   * loyer courant. Une hausse ne se notifie pas : personne n'a demandé à être
+   * prévenu qu'un logement s'éloignait de lui.
+   */
+  async notifyPriceDrop(propertyId: string): Promise<number> {
+    const property = await this.prisma.property.findUnique({
+      where: { id: propertyId },
+      select: { rentCents: true, chargesCents: true },
+    });
+    if (!property) return 0;
+
+    const actuel = property.rentCents + property.chargesCents;
+    const suiveurs = await this.followersToNotify(propertyId, {
+      rentCentsAtSave: { gt: actuel },
+    });
+
+    for (const suiveur of suiveurs) {
+      await this.mail.enqueue({
+        template: EVENT.savedPropertyPriceDrop,
+        userId: suiveur.tenantId,
+        subjectRef: propertyId,
+        // Une baisse par palier de prix : si le loyer rebaisse plus tard, la
+        // clé change et le message repart. S'il repasse deux fois par le même
+        // prix, il ne se redit pas.
+        dedupeKey: `${EVENT.savedPropertyPriceDrop}:${propertyId}:${actuel}:${suiveur.tenantId}`,
+      });
+    }
+
+    if (suiveurs.length > 0) {
+      this.logger.log(`Baisse de loyer signalée à ${suiveurs.length} locataire(s).`);
+    }
+    return suiveurs.length;
+  }
+
+  /** Signale que le bien suivi est loué. Une fois, définitivement. */
+  async notifyRented(propertyId: string): Promise<number> {
+    const suiveurs = await this.followersToNotify(propertyId, {});
+
+    for (const suiveur of suiveurs) {
+      await this.mail.enqueue({
+        template: EVENT.savedPropertyRented,
+        userId: suiveur.tenantId,
+        subjectRef: propertyId,
+        dedupeKey: `${EVENT.savedPropertyRented}:${propertyId}:${suiveur.tenantId}`,
+      });
+    }
+
+    if (suiveurs.length > 0) {
+      this.logger.log(`Bien loué signalé à ${suiveurs.length} locataire(s).`);
+    }
+    return suiveurs.length;
   }
 
   /**

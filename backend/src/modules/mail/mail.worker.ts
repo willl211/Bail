@@ -21,6 +21,16 @@ const MAX_ATTEMPTS = 5;
 const backoffMs = (attempts: number) => 60_000 * 5 ** (attempts - 1);
 
 /**
+ * Délai pendant lequel un message pris en charge est invisible aux autres.
+ *
+ * C'est ce qui remplace un verrou : un message réservé est repoussé dans le
+ * temps, et une instance qui tomberait en plein envoi le rendrait d'elle-même
+ * au bout de ce délai. Assez long pour couvrir un envoi lent, assez court pour
+ * qu'un incident ne bloque pas la file une demi-journée.
+ */
+const CLAIM_MINUTES = 5;
+
+/**
  * Vide la file des notifications.
  *
  * Un intervalle plutôt qu'un `cron` : la cadence compte, l'heure non. Et une
@@ -28,7 +38,21 @@ const backoffMs = (attempts: number) => 60_000 * 5 ** (attempts - 1);
  * pilote ne la justifie pas, et une dépendance de plus se paie en exploitation.
  * Le jour où elle se justifiera, seule cette classe changera : le reste du code
  * ne connaît que `MailService.enqueue`.
+ *
+ * Les messages sont **réservés** avant d'être traités, pas seulement lus : deux
+ * instances d'API ne peuvent donc pas envoyer le même message deux fois. Le
+ * garde en mémoire (`running`) ne protège que d'un chevauchement dans le même
+ * processus — il ne dit rien de ce que fait la machine d'à côté.
  */
+/** Message réservé, tel que la requête de prise en charge le rend. */
+interface ClaimedMessage {
+  id: string;
+  template: string;
+  subjectRef: string | null;
+  recipientId: string | null;
+  attempts: number;
+}
+
 @Injectable()
 export class MailWorker {
   private readonly logger = new Logger(MailWorker.name);
@@ -46,24 +70,7 @@ export class MailWorker {
     if (this.running) return;
     this.running = true;
     try {
-      const due = await this.prisma.emailMessage.findMany({
-        where: {
-          status: EmailStatus.PENDING,
-          subjectRef: { not: null },
-          OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: new Date() } }],
-        },
-        orderBy: { createdAt: 'asc' },
-        take: BATCH_SIZE,
-        select: {
-          id: true,
-          template: true,
-          subjectRef: true,
-          recipientId: true,
-          attempts: true,
-        },
-      });
-
-      for (const message of due) {
+      for (const message of await this.claim()) {
         await this.deliver(message);
       }
     } catch (error) {
@@ -71,6 +78,35 @@ export class MailWorker {
     } finally {
       this.running = false;
     }
+  }
+
+  /**
+   * Prend en charge un lot de messages, de façon atomique.
+   *
+   * `FOR UPDATE SKIP LOCKED` fait qu'une seconde instance passe au message
+   * suivant plutôt que d'attendre le même, et repousser `nextAttemptAt` le rend
+   * invisible le temps de l'envoi. C'est ce qui remplace un verrou global : deux
+   * instances d'API travaillent en parallèle sans jamais se marcher dessus.
+   *
+   * Aucun état « en cours » n'est ajouté au schéma. Une instance qui tombe en
+   * plein envoi rend son message d'elle-même au bout du délai — exactement ce
+   * qu'on veut, et sans rien à nettoyer.
+   */
+  async claim(): Promise<ClaimedMessage[]> {
+    return this.prisma.$queryRaw<ClaimedMessage[]>`
+      UPDATE email_messages
+      SET "nextAttemptAt" = now() + make_interval(mins => ${CLAIM_MINUTES}::int)
+      WHERE id IN (
+        SELECT id FROM email_messages
+        WHERE status = 'PENDING'
+          AND "subjectRef" IS NOT NULL
+          AND ("nextAttemptAt" IS NULL OR "nextAttemptAt" <= now())
+        ORDER BY "createdAt" ASC
+        LIMIT ${BATCH_SIZE}
+        FOR UPDATE SKIP LOCKED
+      )
+      RETURNING id, template, "subjectRef", "recipientId", attempts
+    `;
   }
 
   private async deliver(message: {

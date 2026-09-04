@@ -68,7 +68,7 @@ prestataire. Sans Mailpit démarré, l'API le signale au lancement et les envois
 ## Tests
 
 ```bash
-npm test          # tout : 280 tests
+npm test          # tout : 336 tests
 ```
 
 Deux campagnes, séparées par ce qu'elles exigent pour tourner.
@@ -110,8 +110,10 @@ un jeton à usage unique qui ne doit pas être consommé par une faute de frappe
 un motif de refus qui ne doit pas suivre l'agent d'un onglet à l'autre — il part
 au locataire d'un côté, au propriétaire de l'autre —, un bouton qui ne doit pas
 promettre une décision que l'API refusera, un quartier inventé qui doit être
-refusé plutôt que silencieusement ignoré. Les écrans purement présentatifs n'y
-figurent pas : les tester reviendrait à recopier leur JSX dans une assertion.
+refusé plutôt que silencieusement ignoré, un créneau de visite qui n'accepte pas
+le type choisi, un champ de bail resté vide qui doit se voir au lieu de
+disparaître. Les écrans purement présentatifs n'y figurent pas : les tester
+reviendrait à recopier leur JSX dans une assertion.
 
 ## Environnements
 
@@ -214,7 +216,21 @@ Ces contraintes sont dans le schéma et dans le code, pas seulement dans la doc.
     au propriétaire du bien et au back-office, en **agrégat** : ni l'un ni
     l'autre ne voit *qui* a sauvegardé, comme aucun d'eux ne voit les pièces
     d'un dossier.
-16. **Le journal du back-office ne raconte que du vrai.** Il est reconstitué à
+16. **Un e-mail ne part jamais deux fois.** La file réserve ses messages avant
+    de les traiter (`UPDATE … FOR UPDATE SKIP LOCKED`, échéance repoussée le
+    temps de l'envoi) : deux instances d'API travaillent en parallèle sans
+    jamais prendre le même. Un garde en mémoire ne protégerait que d'un
+    chevauchement dans le même processus. Rien n'est écrit comme « en cours » :
+    une instance qui tombe rend son message d'elle-même, sans rien à nettoyer.
+    La purge des enregistrements, elle, est idempotente et n'a besoin d'aucun
+    verrou — supprimer un fichier déjà absent n'est pas une erreur.
+17. **Les dates s'affichent en heure de Paris, pas en heure du serveur.** Le
+    pilote est messin ; le rendu Next tourne en UTC en production. Sans fuseau
+    épinglé (`lib/format.ts`), un rendez-vous de 16 h s'afficherait à 14 h à
+    l'écran alors que l'e-mail de confirmation, lui, dit déjà l'heure de Paris —
+    deux heures pour le même rendez-vous, c'est quelqu'un qui arrive quand
+    l'agent est reparti.
+18. **Le journal du back-office ne raconte que du vrai.** Il est reconstitué à
     partir d'horodatages réels — publications, candidatures, pièces contrôlées,
     visites, baux. Rien n'y est ajouté pour remplir la page : un journal qui
     mentirait sur ce qui s'est passé n'aurait aucune valeur d'audit. De même,
@@ -280,10 +296,6 @@ hors dépôt.
   concrète à la racine npm y installait un React 18 qui masquait le 19 du front.
   Next et Testing Library chargeaient alors deux React différents. À revoir en
   même temps que la montée de version de Next.
-- Les tests de composants ne couvrent qu'une poignée d'écrans. Les parcours de
-  candidature, de visite et de bail n'ont pas encore d'équivalent : leur logique
-  est surtout côté API, déjà testée, mais un blocage mal affiché y passerait
-  inaperçu.
 - Les tests d'intégration démarrent l'application entière : **Nest 12 est
   distribué en ESM pur**, que le runtime CommonJS de Jest ne sait pas charger,
   d'où `--experimental-vm-modules` et `useESM` sur cette seule campagne. Un
@@ -291,8 +303,6 @@ hors dépôt.
   conséquence.
 - `prisma` CLI tire `deepmerge-ts` signalé par `npm audit` (chaîne de
   développement uniquement, pas dans le runtime de l'API).
-- Prisma signale que `package.json#prisma` sera retiré en Prisma 7 : à migrer
-  vers `prisma.config.ts` lors du passage à Prisma 7.
 - Stripe : le module de paiement est complet (abonnement, résiliation, reprise,
   webhook à signature vérifiée), mais aucun compte n'est branché.
   `PAYMENT_DRIVER=mock` reste la valeur par défaut ; passer en réel se réduit à
@@ -335,18 +345,22 @@ hors dépôt.
   volontaires : le barème est `isLegallyApproved = false`, aucun prestataire de
   paiement n'est branché, et le règlement suppose un bail signé — qui ne peut pas
   l'être non plus. L'écran l'annonce point par point.
+- **Une notification reste à écrire : « honoraires réglés ».** Elle n'a aucun
+  point d'appel : le règlement s'ouvre (`PENDING`, intention de paiement créée)
+  mais rien ne le fait passer à « payé », faute de webhook de paiement branché.
+  L'écrire aujourd'hui serait écrire pour un parcours qui n'existe pas.
+- **L'envoi d'un bail en signature reste inatteignable, par construction.** Pas
+  seulement à cause du réglage `lease.generationEnabled` : le champ verrouillé
+  `clausesLegalesTexteValide` est laissé vide par le service tant que le texte
+  de l'avocat n'est pas fourni, et le contrôle de cohérence refuse alors
+  l'envoi. Les gabarits « bail prêt à signer » et « bail signé » sont écrits et
+  testés au niveau de leur reconstruction ; ils partiront le jour où le texte
+  existera, sans rien changer.
 - **Aucun formulaire de carte bancaire n'a été construit**, contrairement à la
   maquette. Les coordonnées bancaires ne doivent jamais transiter par Bail :
   c'est le prestataire qui les collecte, dans son propre cadre, ce qui nous tient
   hors du périmètre PCI-DSS. Reproduire le formulaire de la maquette aurait été
   une faute.
-- **Quatre notifications restent à écrire**, faute de parcours atteignable :
-  bail prêt à signer, bail signé, honoraires réglés, échec de prélèvement
-  d'abonnement. Les trois premières supposent un modèle de bail validé
-  juridiquement, la dernière un compte Stripe.
-- Les tâches planifiées (file d'envoi, purge des enregistrements) supposent
-  **une seule instance d'API**, ce qui est le cas du pilote. Avec plusieurs, il
-  faudra les verrouiller pour qu'elles ne tournent pas en double.
 - **Le classement des biens par popularité n'est pas implémenté**, et c'est un
   choix. Avec huit annonces, trier par sauvegardes ne changerait pratiquement
   rien à ce que voit un visiteur, et un classement fondé sur les likes
@@ -362,9 +376,6 @@ hors dépôt.
   (300 annonces), le tri cède la place à la récence. Sans conséquence sur le
   pilote messin ; à revoir si le portefeuille change d'ordre de grandeur, en
   exprimant le barème en SQL — au prix d'une seconde définition de la règle.
-- **Aucune notification sur un bien sauvegardé.** Baisse de loyer, changement
-  de disponibilité, bien loué : le canal e-mail et sa file existent, il ne
-  manque que les gabarits et les points d'appel.
 - **Aucun prestataire d'envoi n'est retenu.** `MAIL_DRIVER=smtp` pointe sur
   Mailpit en local ; passer en réel ne demande que les variables `SMTP_*` d'un
   hébergeur de messagerie. Viser un prestataire européen (Brevo, Mailjet) pour

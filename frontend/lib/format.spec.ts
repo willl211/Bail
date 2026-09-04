@@ -96,27 +96,51 @@ describe('ancienneté', () => {
   });
 });
 
+/**
+ * Dates.
+ *
+ * Les instants sont écrits en UTC (« Z ») et attendus en heure de Paris : c'est
+ * ce que l'API renvoie, et c'est la seule façon de vérifier le fuseau plutôt
+ * que de le supposer. Des dates sans fuseau se seraient contentées de relire ce
+ * que la machine de test avait déjà interprété — le test aurait passé partout
+ * en ne prouvant rien.
+ */
 describe('dates', () => {
   it('écrit « 1er » pour le premier du mois', () => {
     // Le seul jour du mois qui prend une forme ordinale en français.
-    expect(fmt.longDate('2026-10-01T00:00:00')).toBe('1er octobre 2026');
-    expect(fmt.longDate('2026-10-02T00:00:00')).toBe('2 octobre 2026');
+    expect(fmt.longDate('2026-10-01T08:00:00Z')).toBe('1er octobre 2026');
+    expect(fmt.longDate('2026-10-02T08:00:00Z')).toBe('2 octobre 2026');
   });
 
   it('compose un horodatage de journal', () => {
-    expect(fmt.logStamp('2026-09-02T09:14:00')).toBe('02.09 · 09:14');
+    // 07:14 UTC = 09:14 à Paris, heure d'été.
+    expect(fmt.logStamp('2026-09-02T07:14:00Z')).toBe('02.09 · 09:14');
   });
 
   it('compose un en-tête de colonne de calendrier', () => {
     // Le 8 septembre 2026 est un mardi ; l'abréviation perd son point.
-    expect(fmt.dayHeading('2026-09-08T10:00:00')).toBe('mar 08.09');
+    expect(fmt.dayHeading('2026-09-08T08:00:00Z')).toBe('mar 08.09');
   });
 
   it('compose un rendez-vous en toutes lettres', () => {
-    expect(fmt.appointment('2026-09-10T18:30:00')).toBe('jeudi 10 septembre · 18:30');
+    expect(fmt.appointment('2026-09-10T16:30:00Z')).toBe('jeudi 10 septembre · 18:30');
   });
 
   it('complète les heures et minutes sur deux chiffres', () => {
-    expect(fmt.timeOfDay('2026-09-10T09:05:00')).toBe('09:05');
+    expect(fmt.timeOfDay('2026-09-10T07:05:00Z')).toBe('09:05');
+  });
+
+  it('rend l’heure de Paris, pas celle de la machine', () => {
+    // Le rendu Next tourne en UTC en production. Sans fuseau épinglé, ce
+    // rendez-vous s'afficherait « 22:30 » à l'écran et « 00:30 » dans l'e-mail
+    // de confirmation, qui épingle Paris depuis toujours.
+    expect(fmt.timeOfDay('2026-07-15T22:30:00Z')).toBe('00:30');
+    // Et il tombe le lendemain : la date change avec l'heure.
+    expect(fmt.appointment('2026-07-15T22:30:00Z')).toBe('jeudi 16 juillet · 00:30');
+  });
+
+  it('suit l’heure d’hiver', () => {
+    // Décembre : Paris est à UTC+1, pas +2. Un décalage fixe se tromperait ici.
+    expect(fmt.timeOfDay('2026-12-15T09:00:00Z')).toBe('10:00');
   });
 });

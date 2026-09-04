@@ -1,11 +1,31 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ApplicationStatus, DocumentType, VisitStatus } from '@prisma/client';
+import {
+  ApplicationStatus,
+  DocumentType,
+  LeaseStatus,
+  PaymentStatus,
+  PropertyStatus,
+  VisitStatus,
+} from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ATTRIBUTION_REASON, ATTRIBUTION_VISIT_REASON } from '../applications/attribution';
+import { SIGNATURE_VALIDITY_DAYS } from '../lease/signature.validity';
 import * as tpl from './event.templates';
 import { EVENT } from './event.templates';
 import type { RenderedTemplate } from './mail.templates';
+
+/** Le bail attend encore une ou deux signatures. */
+const AWAITING_SIGNATURE: LeaseStatus[] = [
+  LeaseStatus.SENT_FOR_SIGNATURE,
+  LeaseStatus.PARTIALLY_SIGNED,
+];
+
+/** Statuts pour lesquels une annonce est encore visible et candidatable. */
+const VISIBLE: PropertyStatus[] = [
+  PropertyStatus.ONLINE,
+  PropertyStatus.VISITS_IN_PROGRESS,
+];
 
 /** Libellés des pièces, tels qu'affichés au locataire. */
 const DOCUMENT_LABELS: Partial<Record<DocumentType, string>> = {
@@ -69,7 +89,12 @@ export class EventResolver {
     // survivre à la fermeture du compte qu'elle concerne.
     if (!recipient || !recipient.isActive) return null;
 
-    const message = await this.render(template, subjectRef, recipient.firstName);
+    const message = await this.render(
+      template,
+      subjectRef,
+      recipient.firstName,
+      recipientId,
+    );
     return message ? { to: recipient.email, message } : null;
   }
 
@@ -77,8 +102,17 @@ export class EventResolver {
     template: string,
     ref: string,
     firstName: string,
+    recipientId: string | null,
   ): Promise<RenderedTemplate | null> {
     switch (template) {
+      case EVENT.savedPropertyPriceDrop:
+      case EVENT.savedPropertyRented:
+        // Ces deux-là se lisent au croisement d'un bien et d'une personne : le
+        // loyer de référence est celui de *sa* sauvegarde, pas du bien.
+        return recipientId
+          ? this.savedProperty(template, ref, firstName, recipientId)
+          : null;
+
       case EVENT.applicationReceived:
       case EVENT.applicationShortlisted:
       case EVENT.applicationRejected:
@@ -87,6 +121,13 @@ export class EventResolver {
 
       case EVENT.applicationClosedByAttribution:
         return this.applicationClosedByAttribution(ref, firstName);
+
+      case EVENT.leaseReadyToSign:
+      case EVENT.leaseSigned:
+        return this.lease(template, ref, firstName);
+
+      case EVENT.subscriptionPaymentFailed:
+        return this.subscriptionPaymentFailed(ref, firstName);
 
       case EVENT.documentRejected:
         return this.documentRejected(ref, firstName);
@@ -155,6 +196,137 @@ export class EventResolver {
       propertyTitle: application.property.title,
       visitCancelled: application.visits.length > 0,
       url: `${this.site}/recherche`,
+    });
+  }
+
+  /**
+   * Événement sur un bien mis de côté.
+   *
+   * Reconstruit au moment de l'envoi comme les autres, avec trois raisons
+   * d'abandonner : le bien n'a plus été retiré de la liste entre-temps, la
+   * situation annoncée a cessé d'être vraie, ou — pour une baisse — le loyer
+   * est remonté avant que le message ne parte. Annoncer un prix qui n'a plus
+   * cours ferait venir quelqu'un pour rien.
+   */
+  private async savedProperty(
+    template: string,
+    propertyId: string,
+    firstName: string,
+    tenantId: string,
+  ): Promise<RenderedTemplate | null> {
+    const saved = await this.prisma.savedProperty.findUnique({
+      where: { tenantId_propertyId: { tenantId, propertyId } },
+      select: {
+        rentCentsAtSave: true,
+        property: {
+          select: {
+            reference: true,
+            title: true,
+            status: true,
+            rentCents: true,
+            chargesCents: true,
+          },
+        },
+      },
+    });
+    // Le bien a été retiré de la liste : la personne a dit qu'il ne
+    // l'intéressait plus.
+    if (!saved) return null;
+
+    const { reference, title, status } = saved.property;
+
+    if (template === EVENT.savedPropertyRented) {
+      if (status !== PropertyStatus.RENTED) return null;
+      return tpl.savedPropertyRented({
+        tenantFirstName: firstName,
+        propertyReference: reference,
+        propertyTitle: title,
+        url: `${this.site}/recherche`,
+      });
+    }
+
+    const actuel = saved.property.rentCents + saved.property.chargesCents;
+    // Une annonce hors ligne, ou dont le loyer est remonté, n'a plus de baisse
+    // à annoncer.
+    if (!VISIBLE.includes(status) || saved.rentCentsAtSave <= actuel) return null;
+
+    return tpl.savedPropertyPriceDrop({
+      tenantFirstName: firstName,
+      propertyReference: reference,
+      propertyTitle: title,
+      previousRentCents: saved.rentCentsAtSave,
+      currentRentCents: actuel,
+      url: `${this.site}/biens/${encodeURIComponent(reference)}`,
+    });
+  }
+
+  /**
+   * Bail parti en signature, ou signé.
+   *
+   * Abandonné si le bail a quitté l'état annoncé : un acte refusé ou annulé
+   * entre-temps ne s'annonce pas « prêt à signer ».
+   */
+  private async lease(
+    template: string,
+    leaseId: string,
+    firstName: string,
+  ): Promise<RenderedTemplate | null> {
+    const lease = await this.prisma.lease.findUnique({
+      where: { id: leaseId },
+      select: {
+        reference: true,
+        status: true,
+        startDate: true,
+        property: { select: { reference: true } },
+      },
+    });
+    if (!lease) return null;
+
+    if (template === EVENT.leaseSigned) {
+      if (lease.status !== LeaseStatus.SIGNED) return null;
+      return tpl.leaseSigned({
+        firstName,
+        leaseReference: lease.reference,
+        propertyReference: lease.property.reference,
+        startDate: lease.startDate,
+        url: `${this.site}/baux/${encodeURIComponent(lease.reference)}`,
+      });
+    }
+
+    // Entre la mise en file et l'envoi, l'acte a pu être signé, refusé ou
+    // annulé : « prêt à signer » ne vaut que tant qu'il attend.
+    if (!AWAITING_SIGNATURE.includes(lease.status)) return null;
+
+    return tpl.leaseReadyToSign({
+      firstName,
+      leaseReference: lease.reference,
+      propertyReference: lease.property.reference,
+      validityDays: SIGNATURE_VALIDITY_DAYS,
+      url: `${this.site}/baux/${encodeURIComponent(lease.reference)}`,
+    });
+  }
+
+  /**
+   * Échéance d'abonnement refusée.
+   *
+   * Abandonnée si le règlement a finalement abouti : le prestataire relance de
+   * lui-même, et annoncer un refus rattrapé ferait s'inquiéter pour rien.
+   */
+  private async subscriptionPaymentFailed(
+    paymentId: string,
+    firstName: string,
+  ): Promise<RenderedTemplate | null> {
+    const payment = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+      select: { status: true, amountCents: true, failureReason: true },
+    });
+    if (!payment || payment.status !== PaymentStatus.FAILED) return null;
+
+    return tpl.subscriptionPaymentFailed({
+      ownerFirstName: firstName,
+      amountCents: payment.amountCents,
+      reason: payment.failureReason,
+      url: `${this.site}/proprietaires/abonnement`,
     });
   }
 

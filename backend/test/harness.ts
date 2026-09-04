@@ -28,7 +28,12 @@ export interface Harness {
 export async function createHarness(): Promise<Harness> {
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
 
-  const app = moduleRef.createNestApplication(new ExpressAdapter());
+  const app = moduleRef.createNestApplication(new ExpressAdapter(), {
+    // Comme en production : la signature d'un webhook se vérifie octet pour
+    // octet, et le JSON reparsé puis re-sérialisé ne redonne pas les mêmes
+    // octets. Sans ce réglage, aucun webhook n'était atteignable en test.
+    rawBody: true,
+  });
   app.setGlobalPrefix('api/v1');
   app.use(cookieParser());
   app.useGlobalPipes(

@@ -58,9 +58,14 @@ Ce que la donnée permet, au-delà du classement :
    Actionnable, contrairement à un compteur de vues (fait).
 3. Un indicateur au back-office : un bien à zéro sauvegarde après plusieurs
    jours en ligne est un bien à retravailler avec son propriétaire (fait).
-4. Des notifications sur un bien mis de côté — baisse de loyer, bien loué (à
-   faire).
-5. Le classement des biens en avant (à faire, avec normalisation).
+4. Des notifications sur un bien mis de côté — baisse de loyer, bien loué
+   (fait). La baisse se mesure par rapport au loyer **au moment où cette
+   personne-là** a mis le bien de côté, pas à un précédent prix global : c'est
+   le seul point de comparaison qui ait un sens pour elle. Ceux qui ont déjà
+   candidaté n'en reçoivent pas — ils suivent leur dossier, et l'événement leur
+   est annoncé sous l'angle qui les concerne.
+5. Le classement des biens en avant par popularité (à faire, avec
+   normalisation).
 6. La **matière première d'une recommandation par profil** : les sauvegardes
    enregistrent des préférences réelles. Les likes ne s'opposent pas à cette
    piste, ils la préparent.

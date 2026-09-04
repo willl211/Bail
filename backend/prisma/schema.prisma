@@ -714,6 +714,15 @@ model SavedProperty {
   propertyId String
   property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
+  /// Loyer charges comprises au moment de la mise de côté.
+  ///
+  /// Sert de point de comparaison pour signaler une baisse : « moins cher
+  /// qu'à votre passage » se mesure par rapport à ce que **cette personne-là**
+  /// a vu, pas à un précédent prix global. Aucun historique de loyer n'existe
+  /// par ailleurs, et en tenir un pour ce seul usage coûterait plus qu'il ne
+  /// rapporte.
+  rentCentsAtSave Int
+
   createdAt DateTime @default(now())
 
   /// Sauvegarder deux fois le même bien n'a pas de sens : la contrainte rend

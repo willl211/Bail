@@ -1,0 +1,6 @@
+# Prisma empreinte le contenu de chaque fichier de migration et compare cette
+# somme à ce qu'il a enregistré en base. Une conversion de fins de ligne au
+# passage par Git suffit à la changer, et toute migration suivante échoue alors
+# sur « modified after it was applied ». Ces fichiers restent donc en LF, quelle
+# que soit la machine.
+*.sql text eol=lf

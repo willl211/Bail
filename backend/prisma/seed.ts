@@ -14,6 +14,7 @@
  *    (CLAUDE.md règle 2).
  */
 import { hash } from 'bcrypt';
+import { LEASE_FIELD_SCHEMA } from '../src/modules/lease/lease.fields';
 import { createHash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -529,26 +530,6 @@ const LEASE_TEMPLATE_SKELETON = [
   '     il attend le modèle fourni par l\'avocat en droit immobilier. -->',
 ].join('\n');
 
-const LEASE_FIELD_SCHEMA = {
-  titreContrat: { type: 'string', required: true },
-  bailleurNomComplet: { type: 'string', required: true },
-  bailleurAdresse: { type: 'string', required: true },
-  locataireNomComplet: { type: 'string', required: true },
-  logementAdresse: { type: 'string', required: true },
-  logementTypeHabitat: { type: 'enum', values: ['immeuble collectif', 'immeuble individuel'], required: true },
-  logementSurfaceM2: { type: 'number', required: true, min: 9 },
-  logementNombrePieces: { type: 'integer', required: true, min: 1 },
-  bailDateDebut: { type: 'date', required: true },
-  bailDureeMois: { type: 'integer', required: true },
-  loyerMensuel: { type: 'money', required: true },
-  provisionCharges: { type: 'money', required: true },
-  depotGarantie: { type: 'money', required: true },
-  travauxMention: { type: 'string', required: false },
-  garantiesMention: { type: 'string', required: false },
-  clausesLegalesTexteValide: { type: 'locked', required: true },
-  honorairesMention: { type: 'string', required: true },
-  listeAnnexes: { type: 'string', required: true },
-} as const;
 
 const checksum = (body: string) => createHash('sha256').update(body, 'utf8').digest('hex');
 
@@ -1114,7 +1095,7 @@ async function main() {
   for (const [reference, handles] of Object.entries(SAVED)) {
     const property = await prisma.property.findUnique({
       where: { reference },
-      select: { id: true },
+      select: { id: true, rentCents: true, chargesCents: true },
     });
     if (!property) continue;
 
@@ -1130,7 +1111,13 @@ async function main() {
           tenantId_propertyId: { tenantId: tenant.id, propertyId: property.id },
         },
         update: {},
-        create: { tenantId: tenant.id, propertyId: property.id },
+        create: {
+          tenantId: tenant.id,
+          propertyId: property.id,
+          // Loyer au moment de la mise de côté : c'est ce prix-là qui sert de
+          // référence pour signaler une baisse à cette personne.
+          rentCentsAtSave: property.rentCents + property.chargesCents,
+        },
       });
       savedCount += 1;
     }

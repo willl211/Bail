@@ -12,6 +12,7 @@ import {
 } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { createHash } from 'node:crypto';
+import { LEASE_FIELD_SCHEMA } from '../src/modules/lease/lease.fields';
 
 /**
  * Jeux de données minimaux pour les tests d'intégration.
@@ -134,21 +135,33 @@ export async function createVerifiedFile(prisma: PrismaClient, tenantId: string)
  * Le seed en pose deux, mais `resetDatabase` vide tout : sans ce modèle,
  * accepter un candidat échoue en 400 avant d'atteindre ce que le test vise.
  *
- * Volontairement réduit — quelques champs, aucune clause. Le texte de l'avocat
- * n'existe pas encore (CLAUDE.md règle 2), et recopier ici le schéma complet du
- * seed ferait dépendre ces suites d'un détail qu'elles ne vérifient pas. Il
- * reste `isActive: false`, comme en base : un bail ne s'envoie pas en signature.
+ * Le corps est réduit — quelques lignes, aucune clause : le texte de l'avocat
+ * n'existe pas encore (CLAUDE.md règle 2). Le **schéma de champs**, lui, est
+ * celui du produit : le service refuse d'injecter un champ hors schéma, et un
+ * schéma tronqué ferait échouer l'envoi en signature sur un décor incomplet
+ * plutôt que sur ce que le test cherche à vérifier.
+ *
+ * Il reste `isActive: false`, comme en base : un bail ne part pas en signature
+ * tant que le modèle n'est pas publié. Les suites qui ont besoin de l'envoi le
+ * publient elles-mêmes, et le disent.
  */
 export async function createLeaseTemplate(
   prisma: PrismaClient,
   type: LeaseType = LeaseType.NU,
 ) {
   const body = [
-    'CONTRAT DE LOCATION',
+    '{{titreContrat}}',
     'Bailleur : {{bailleurNomComplet}}, {{bailleurAdresse}}',
     'Locataire : {{locataireNomComplet}}',
-    'Logement : {{logementAdresse}}',
-    'Loyer mensuel : {{loyerMensuel}}',
+    'Logement : {{logementAdresse}}, {{logementSurfaceM2}}, {{logementNombrePieces}}',
+    'Type d’habitat : {{logementTypeHabitat}}',
+    'Prise d’effet : {{bailDateDebut}} pour {{bailDureeMois}}',
+    'Loyer : {{loyerMensuel}} · charges {{provisionCharges}} · dépôt {{depotGarantie}}',
+    'Travaux : {{travauxMention}}',
+    'Garanties : {{garantiesMention}}',
+    'Honoraires : {{honorairesMention}}',
+    'Annexes : {{listeAnnexes}}',
+    '{{clausesLegalesTexteValide}}',
   ].join('\n\n');
 
   return prisma.leaseTemplate.upsert({
@@ -160,13 +173,7 @@ export async function createLeaseTemplate(
       label: 'Squelette de test',
       type,
       body,
-      fieldSchema: {
-        bailleurNomComplet: { type: 'string', required: true },
-        bailleurAdresse: { type: 'string', required: true },
-        locataireNomComplet: { type: 'string', required: true },
-        logementAdresse: { type: 'string', required: true },
-        loyerMensuel: { type: 'money', required: true },
-      },
+      fieldSchema: LEASE_FIELD_SCHEMA as unknown as object,
       checksum: createHash('sha256').update(body, 'utf8').digest('hex'),
       legalReference: 'Loi n° 89-462 du 6 juillet 1989',
       isActive: false,

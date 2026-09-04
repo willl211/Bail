@@ -495,6 +495,13 @@ export class BackofficeService {
         subjectRef: property.id,
         dedupeKey: `${EVENT.propertyPublished}:${property.id}:${Date.now()}`,
       });
+
+      // Un bien en ligne ne se modifie pas : il repasse en brouillon, est
+      // corrigé, puis revient au contrôle. C'est donc ici, au moment où il
+      // redevient visible, qu'une baisse de loyer devient réelle pour ceux qui
+      // l'avaient mis de côté.
+      await this.saved.notifyPriceDrop(property.id);
+
       this.logger.log(`Annonce ${reference} publiée.`);
     } else {
       if (!reason?.trim()) throw new BadRequestException('Un refus doit être motivé.');

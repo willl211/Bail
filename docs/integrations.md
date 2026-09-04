@@ -235,20 +235,36 @@ La seconde referme une dette ouverte depuis l'écran 5 : `recordingExpiresAt`
 était posée à l'ouverture de la salle, mais rien ne la balayait. Une durée de
 conservation qu'aucune tâche n'applique n'est pas une durée de conservation.
 
-Ces tâches supposent **une seule instance d'API**, ce qui est le cas du pilote.
-Le jour où il y en aura plusieurs, il faudra les verrouiller pour qu'elles ne
-tournent pas en double.
+Ces tâches **supportent plusieurs instances d'API**, sans verrou global. Le
+vidage de la file réserve ses messages avant de les traiter — `UPDATE … FOR
+UPDATE SKIP LOCKED`, échéance repoussée le temps de l'envoi — de sorte que deux
+instances travaillent en parallèle sans jamais prendre le même message ; une
+instance qui tombe en plein envoi le rend d'elle-même au bout de cinq minutes,
+sans rien à nettoyer. La purge, elle, est idempotente : supprimer un fichier
+déjà absent n'est pas une erreur, et la ligne est marquée purgée dans tous les
+cas.
 
 ### État au 4 septembre 2026
 
 Trois gabarits liés au compte (confirmation d'adresse, réinitialisation, mot de
-passe modifié) et onze notifications d'événements : candidature reçue, retenue,
-écartée, acceptée ; pièce refusée ; dossier vérifié ou refusé ; annonce publiée
-ou renvoyée ; visite réservée ou annulée.
+passe modifié) et **dix-sept** notifications d'événements : candidature reçue,
+retenue, écartée, acceptée, fermée par l'attribution du logement ; pièce
+refusée ; dossier vérifié ou refusé ; annonce publiée ou renvoyée ; visite
+réservée ou annulée ; bien mis de côté dont le loyer baisse ou qui est loué ;
+bail prêt à signer, bail signé ; échéance d'abonnement refusée.
 
-Restent à écrire, faute de parcours atteignable aujourd'hui : bail prêt à
-signer, bail signé, honoraires réglés, échec de prélèvement d'abonnement. Les
-trois premiers supposent un modèle de bail validé, le dernier un compte Stripe.
+**Un seul reste à écrire : « honoraires réglés »**, et il n'a aucun point
+d'appel. Le règlement s'ouvre — statut `PENDING`, intention de paiement créée —
+mais rien ne le fait passer à « payé », faute de webhook de paiement branché.
+L'écrire aujourd'hui serait écrire pour un parcours qui n'existe pas.
+
+Deux précisions sur les gabarits de bail. Ils sont écrits et testés au niveau de
+leur reconstruction, mais **l'envoi en signature reste inatteignable par
+construction** : le champ verrouillé `clausesLegalesTexteValide` est laissé vide
+par le service tant que le texte de l'avocat n'existe pas, et le contrôle de
+cohérence refuse alors l'envoi. Et le **lien de signature ne transite pas par la
+file** : il vient du prestataire, dans son propre message — la file d'envoi ne
+porte aucun secret.
 
 ## Stockage objet — précision du 4 septembre 2026
 

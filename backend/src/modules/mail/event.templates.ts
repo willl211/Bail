@@ -31,12 +31,25 @@ export const EVENT = {
   propertyReturned: 'property-returned',
   visitBooked: 'visit-booked',
   visitCancelled: 'visit-cancelled',
+  savedPropertyPriceDrop: 'saved-property-price-drop',
+  savedPropertyRented: 'saved-property-rented',
+  leaseReadyToSign: 'lease-ready-to-sign',
+  leaseSigned: 'lease-signed',
+  subscriptionPaymentFailed: 'subscription-payment-failed',
 } as const;
 
 export type EventKey = (typeof EVENT)[keyof typeof EVENT];
 
 const euros = (cents: number) =>
   `${(cents / 100).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} €`;
+
+const shortDate = (date: Date) =>
+  date.toLocaleDateString('fr-FR', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'Europe/Paris',
+  });
 
 const appointment = (date: Date) =>
   date.toLocaleString('fr-FR', {
@@ -143,6 +156,132 @@ export function visitCancelled(p: {
       `La visite de ${p.propertyReference} prévue ${appointment(p.scheduledAt)} est annulée. Le créneau redevient disponible.`,
     ],
     action: { label: 'Voir les créneaux', url: p.url },
+  });
+}
+
+// ------------------------------------------------------------------ Bail
+
+/**
+ * Le bail est parti en signature.
+ *
+ * Adressé aux deux parties : le lien de signature vient du prestataire, il ne
+ * transite pas par ce message — la file d'envoi ne porte aucun secret.
+ */
+export function leaseReadyToSign(p: {
+  firstName: string;
+  leaseReference: string;
+  propertyReference: string;
+  validityDays: number;
+  url: string;
+}): RenderedTemplate {
+  return build(`Bail à signer — ${p.leaseReference}`, {
+    heading: 'Votre bail est prêt à signer',
+    paragraphs: [
+      `Bonjour ${p.firstName},`,
+      `Le bail ${p.leaseReference} du logement ${p.propertyReference} vous attend. Le prestataire de signature vous envoie le lien par un message séparé.`,
+      `Il reste valable ${p.validityDays} jours.`,
+    ],
+    action: { label: 'Voir le bail', url: p.url },
+  });
+}
+
+/** Le bail est signé des deux côtés. */
+export function leaseSigned(p: {
+  firstName: string;
+  leaseReference: string;
+  propertyReference: string;
+  startDate: Date;
+  url: string;
+}): RenderedTemplate {
+  return build(`Bail signé — ${p.leaseReference}`, {
+    heading: 'Le bail est signé',
+    paragraphs: [
+      `Bonjour ${p.firstName},`,
+      `Le bail ${p.leaseReference} du logement ${p.propertyReference} est signé par les deux parties. La location prend effet le ${shortDate(p.startDate)}.`,
+      'Le document signé reste consultable depuis votre espace.',
+    ],
+    action: { label: 'Voir le bail signé', url: p.url },
+  });
+}
+
+// -------------------------------------------------------------- Abonnement
+
+/**
+ * Une échéance d'abonnement a été refusée.
+ *
+ * L'annonce est faite sans dramatiser : le prestataire relance de lui-même, et
+ * l'annonce reste en ligne. Couper la diffusion au premier refus serait
+ * disproportionné — le message le dit, pour que personne ne retire son bien
+ * par précaution.
+ */
+export function subscriptionPaymentFailed(p: {
+  ownerFirstName: string;
+  amountCents: number;
+  reason: string | null;
+  url: string;
+}): RenderedTemplate {
+  return build('Échéance d’abonnement refusée', {
+    heading: 'Votre échéance n’a pas pu être prélevée',
+    paragraphs: [
+      `Bonjour ${p.ownerFirstName},`,
+      `Le prélèvement de ${euros(p.amountCents)} a été refusé.`,
+      ...(p.reason ? [`Motif indiqué par la banque : ${p.reason}`] : []),
+      'Vos annonces restent en ligne : une nouvelle tentative est faite automatiquement. Mettez à jour votre moyen de paiement pour éviter une interruption.',
+    ],
+    action: { label: 'Mettre à jour mon paiement', url: p.url },
+  });
+}
+
+// --------------------------------------------------- Biens mis de côté
+
+/**
+ * Le loyer d'un bien sauvegardé a baissé.
+ *
+ * La seule notification du produit qui apporte une nouvelle sans qu'on ait
+ * rien demandé. Elle vaut donc d'être rare et exacte : la baisse est mesurée
+ * par rapport au loyer **au moment où cette personne-là a mis le bien de
+ * côté**, pas à un précédent prix affiché ailleurs.
+ */
+export function savedPropertyPriceDrop(p: {
+  tenantFirstName: string;
+  propertyReference: string;
+  propertyTitle: string;
+  previousRentCents: number;
+  currentRentCents: number;
+  url: string;
+}): RenderedTemplate {
+  const ecart = p.previousRentCents - p.currentRentCents;
+  return build(`Baisse de loyer — ${p.propertyReference}`, {
+    heading: 'Un bien que vous suivez a baissé',
+    paragraphs: [
+      `Bonjour ${p.tenantFirstName},`,
+      `${p.propertyReference} — ${p.propertyTitle} est repassé en ligne à ${euros(p.currentRentCents)} charges comprises, soit ${euros(ecart)} de moins qu'à votre passage.`,
+      'Votre dossier part en un clic si le bien vous convient toujours.',
+    ],
+    action: { label: 'Revoir l’annonce', url: p.url },
+  });
+}
+
+/**
+ * Un bien sauvegardé a trouvé preneur.
+ *
+ * Le bien reste dans la liste, avec sa mention : le faire disparaître
+ * laisserait croire à un défaut. Le message dit la même chose que l'écran.
+ */
+export function savedPropertyRented(p: {
+  tenantFirstName: string;
+  propertyReference: string;
+  propertyTitle: string;
+  url: string;
+}): RenderedTemplate {
+  return build(`Bien loué — ${p.propertyReference}`, {
+    heading: 'Un bien que vous suiviez est loué',
+    paragraphs: [
+      `Bonjour ${p.tenantFirstName},`,
+      `${p.propertyReference} — ${p.propertyTitle} vient d’être loué. Il reste dans vos biens mis de côté, signalé comme tel.`,
+      'D’autres logements comparables sont en ligne à Metz.',
+    ],
+    action: { label: 'Voir les biens disponibles', url: p.url },
   });
 }
 

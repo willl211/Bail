@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { LeaseController, LeaseSignatureWebhookController } from './lease.controller';
 import { LeaseService } from './lease.service';
+import { SavedModule } from '../saved/saved.module';
 
 /**
  * Bail et signature — écran 6.
@@ -9,6 +10,9 @@ import { LeaseService } from './lease.service';
  * intégrations.
  */
 @Module({
+  // L'attribution retire le bien de la diffusion : ceux qui l'avaient mis de
+  // côté doivent l'apprendre.
+  imports: [SavedModule],
   controllers: [LeaseController, LeaseSignatureWebhookController],
   providers: [LeaseService],
   exports: [LeaseService],
