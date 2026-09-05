@@ -53,6 +53,35 @@ Rien de tout cela ne peut être fait depuis le dépôt.
    cette liste qui n'est pas bloquant** : les quatre autres se vérifient
    ensemble sans lui, voir la section suivante.
 
+## Préparer l'instance
+
+Une fois la machine créée chez l'hébergeur, un script la met en état. Il ne
+demande aucune valeur et n'écrit aucun secret :
+
+```bash
+scp deploy/provision.sh root@ADRESSE-IP:/tmp/
+ssh root@ADRESSE-IP 'bash /tmp/provision.sh'
+```
+
+Il installe Docker depuis le dépôt officiel — celui des distributions livre une
+version âgée, parfois sans le greffon Compose v2 —, crée un utilisateur `bail`
+non privilégié en lui recopiant votre clé SSH, n'ouvre le pare-feu que sur SSH,
+active les mises à jour de sécurité automatiques, et ajoute deux gigaoctets
+d'échange si la machine en manque.
+
+Cette dernière étape n'est pas cosmétique : **la compilation de l'image du front
+est le moment le plus gourmand du déploiement**, et une machine à 4 Go peut s'y
+faire tuer par le noyau. Si l'échange ne peut pas être créé, le script le dit et
+continue — la parade est alors de construire l'image ailleurs.
+
+Puis se reconnecter en `bail` : l'appartenance au groupe `docker` ne prend effet
+qu'à l'ouverture de session suivante.
+
+```bash
+ssh bail@ADRESSE-IP
+docker run --rm hello-world
+```
+
 ## Avant d'avoir choisi le nom de domaine
 
 Le domaine n'est pas sur le chemin critique. Ce qui réserve les mauvaises
@@ -90,9 +119,21 @@ l'hôte qui l'a posé. Les cookies ignorant le port, celui que dépose l'API sur
 
 ### Ce que ce mode n'est pas
 
-Il sert en **HTTP, sans chiffrement**. Il n'a donc pas à être joignable depuis
-Internet : restreindre les deux ports à vos adresses IP au pare-feu de
-l'instance, ou n'ouvrir que SSH et passer par un tunnel.
+Il sert en **HTTP, sans chiffrement**. Les deux ports sont donc publiés sur
+`127.0.0.1` et non sur toutes les interfaces : rien n'est joignable depuis
+Internet, et on y accède par un tunnel SSH depuis son poste.
+
+```bash
+ssh -L 3000:localhost:3000 -L 4000:localhost:4000 bail@ADRESSE-IP
+```
+
+Puis, dans le navigateur du poste : `http://localhost:3000`.
+
+**Un pare-feu ne suffirait pas**, et c'est le piège à connaître : Docker écrit
+ses propres règles de routage et court-circuite UFW. Un port publié sur toutes
+les interfaces reste joignable depuis Internet alors que `ufw status` affiche un
+refus. La liaison à `127.0.0.1` ferme la question au lieu de la confier à une
+règle qui ne s'applique pas.
 
 Et **aucune pièce d'identité réelle** ne doit y être déposée. Une carte
 d'identité qui transite en clair est une fuite, quel que soit le nombre de

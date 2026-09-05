@@ -13,14 +13,24 @@
 # l'endpoint du stockage, la chaîne de connexion à la base, l'authentification
 # SMTP.
 #
-# ATTENTION — ce mode sert en **HTTP, sans chiffrement**. Il n'a pas à être
-# joignable depuis Internet :
+# ATTENTION — ce mode sert en **HTTP, sans chiffrement**.
 #
-#   - restreindre les ports 3000 et 4000 à vos adresses IP au pare-feu de
-#     l'instance, ou n'ouvrir que SSH et passer par un tunnel ;
-#   - n'y déposer **aucune pièce d'identité réelle**. Une carte d'identité qui
-#     transite en clair est une fuite, quel que soit le nombre de personnes au
-#     courant de l'adresse.
+# Les ports sont donc publiés sur `127.0.0.1` et non sur toutes les interfaces :
+# rien n'est joignable depuis Internet, on y accède par un tunnel SSH.
+#
+#   ssh -L 3000:localhost:3000 -L 4000:localhost:4000 utilisateur@instance
+#
+# Puis dans un navigateur, sur votre poste : http://localhost:3000
+#
+# Ce n'est pas de la prudence excessive. **Un pare-feu ne suffirait pas** :
+# Docker écrit ses propres règles de routage et court-circuite UFW, si bien
+# qu'un port publié reste joignable depuis Internet alors que le pare-feu
+# semble le refuser. La liaison à `127.0.0.1` ferme la question au lieu de la
+# confier à une règle qui ne s'applique pas.
+#
+# Et n'y déposer **aucune pièce d'identité réelle** : une carte d'identité qui
+# transite en clair est une fuite, quel que soit le nombre de personnes au
+# courant de l'adresse.
 #
 # Ce que ce mode ne prouve pas, et qu'il faudra revérifier avec le domaine :
 # les certificats, la redirection HTTP → HTTPS, et le cookie de session, qui
@@ -29,8 +39,8 @@
 services:
   api:
     ports:
-      - '4000:4000'
+      - '127.0.0.1:4000:4000'
 
   web:
     ports:
-      - '3000:3000'
+      - '127.0.0.1:3000:3000'
