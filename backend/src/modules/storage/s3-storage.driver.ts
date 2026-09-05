@@ -142,7 +142,15 @@ export class S3StorageDriver implements StorageDriver {
     }
     // Repli sur l'endpoint : utilisable, mais on préférera l'URL du CDN quand
     // il y en aura un devant.
+    //
+    // Le style d'adressage doit être respecté ici aussi. Les régions 3-AZ d'OVH
+    // n'acceptent **que** l'hôte virtuel : une URL en chemin (`endpoint/seau/clé`)
+    // y répond « Not S3 request », et les photos d'annonces ne s'afficheraient
+    // nulle part.
     const base = (this.options.endpoint ?? '').replace(/\/+$/, '');
-    return `${base}/${this.options.publicBucket}/${key}`;
+    if (this.options.forcePathStyle) {
+      return `${base}/${this.options.publicBucket}/${key}`;
+    }
+    return base.replace(/^(https?:\/\/)/, `$1${this.options.publicBucket}.`) + `/${key}`;
   }
 }
