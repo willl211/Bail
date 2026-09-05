@@ -229,6 +229,30 @@ Les migrations passent avant le redémarrage de l'API. Une migration qui échoue
 arrête le déploiement au lieu de le laisser passer à moitié — l'ancienne version
 continue de tourner.
 
+### Faire le ménage
+
+À faire après chaque déploiement, ou l'espace disque finit par manquer :
+
+```bash
+docker image prune -af
+docker buildx prune -f --filter until=168h
+```
+
+Ce n'est pas une précaution de principe. Les images du projet pèsent environ
+1,5 Go à elles deux, mais **le cache de construction atteint près de 19 Go après
+quelques compilations** — mesuré, pas estimé. Sur un disque de 40 Go dont
+le système occupe déjà 5, quelques mois de redéploiements suffisent à le remplir.
+Et un disque plein, c'est une base qui n'écrit plus et un dépôt de pièce qui
+échoue.
+
+Le filtre `until=168h` garde une semaine de cache : les redéploiements restent
+rapides, seul le vieux part. Purger tout ferait recommencer chaque `npm ci`
+depuis zéro, plusieurs minutes à chaque fois.
+
+Ne jamais y ajouter `--volumes` : le volume de Caddy porte les certificats, et
+les redemander à chaque déploiement ferait tomber sur les limites de Let's
+Encrypt en quelques jours.
+
 Il y a une **interruption de quelques secondes** au redémarrage. C'est acceptable
 pour un pilote ; l'éviter demanderait deux instances et un basculement, ce que le
 volume ne justifie pas encore. La file d'envoi, elle, supporte déjà plusieurs
