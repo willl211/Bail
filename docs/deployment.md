@@ -31,9 +31,24 @@ donc pas, il faut une machine qui exécute Node.
 
 Rien de tout cela ne peut être fait depuis le dépôt.
 
-1. **Une instance** (VPS ou équivalent) sous Linux, avec Docker et le plugin
-   Compose. Deux cœurs et 4 Go suffisent largement pour le pilote messin — la
-   compilation de l'image du front est le moment le plus gourmand.
+1. **Une instance** (VPS ou équivalent) sous Debian ou Ubuntu. Deux cœurs et
+   4 Go suffisent largement pour le pilote messin — la compilation de l'image du
+   front est le moment le plus gourmand.
+
+   Prendre la **LTS la plus récente que propose l'hébergeur** : la machine va
+   rester allumée des années, et chaque cycle sauté est deux ans de correctifs
+   de sécurité gagnés. Une seule condition, que le script de préparation impose
+   sans le dire : Docker doit publier un dépôt pour le nom de code de cette
+   version. Ça se vérifie en une commande, avant de commander quoi que ce soit :
+
+   ```bash
+   curl -s https://download.docker.com/linux/ubuntu/dists/ | grep NOM_DE_CODE
+   ```
+
+   Rien dans le projet ne dépend de la version de l'hôte : les images sont
+   construites sur `node:22-slim`, qui est une base Debian indépendante de la
+   machine. Se tromper ici ne coûte qu'une réinstallation depuis l'espace
+   client, quelques minutes tant que rien ne tourne encore.
 2. **Une base PostgreSQL 16 managée**, avec sauvegardes automatiques. C'est le
    seul poste sur lequel je vous déconseille d'économiser : la base porte les
    dossiers locataires, et la question n'est pas la performance mais qui fait
