@@ -113,10 +113,16 @@ services:
     ports:
       - '80:80'
       - '443:443'
+    # Sans garde `:?` sur ces trois-là, et c'est délibéré : le mode recette
+    # (`docker-compose.recette.yml`) tourne **sans** ce service, avant même
+    # qu'un nom de domaine soit choisi, et un garde ici ferait échouer la
+    # lecture du manifeste entier. Caddy refuse de démarrer sur une adresse
+    # vide : une erreur de configuration en production échoue toujours, un cran
+    # plus tard et avec un message plus clair que le nôtre.
     environment:
-      SITE_DOMAIN: ${SITE_DOMAIN:?nom de domaine du site requis}
-      API_DOMAIN: ${API_DOMAIN:?nom de domaine de l API requis}
-      TLS_EMAIL: ${TLS_EMAIL:?adresse de contact pour les certificats requise}
+      SITE_DOMAIN: ${SITE_DOMAIN:-}
+      API_DOMAIN: ${API_DOMAIN:-}
+      TLS_EMAIL: ${TLS_EMAIL:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       # Les certificats survivent au redémarrage : sans ce volume, chaque

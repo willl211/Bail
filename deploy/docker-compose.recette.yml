@@ -1,0 +1,36 @@
+# Recette privée — déploiement **avant** d'avoir un nom de domaine.
+#
+#   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.recette.yml \
+#     --env-file deploy/.env up -d --build migrate api web
+#
+# Noter les trois services nommés en fin de commande : le proxy n'est pas
+# démarré. Sans nom de domaine il n'a rien à router et ne pourrait obtenir aucun
+# certificat.
+#
+# À quoi ça sert : vérifier que l'instance, la base managée, le stockage objet
+# et le SMTP fonctionnent ensemble, sans attendre le choix du nom. C'est la
+# moitié du chemin, et c'est celle qui réserve les mauvaises surprises —
+# l'endpoint du stockage, la chaîne de connexion à la base, l'authentification
+# SMTP.
+#
+# ATTENTION — ce mode sert en **HTTP, sans chiffrement**. Il n'a pas à être
+# joignable depuis Internet :
+#
+#   - restreindre les ports 3000 et 4000 à vos adresses IP au pare-feu de
+#     l'instance, ou n'ouvrir que SSH et passer par un tunnel ;
+#   - n'y déposer **aucune pièce d'identité réelle**. Une carte d'identité qui
+#     transite en clair est une fuite, quel que soit le nombre de personnes au
+#     courant de l'adresse.
+#
+# Ce que ce mode ne prouve pas, et qu'il faudra revérifier avec le domaine :
+# les certificats, la redirection HTTP → HTTPS, et le cookie de session, qui
+# porte ici sur un hôte unique et portera ensuite sur deux sous-domaines.
+
+services:
+  api:
+    ports:
+      - '4000:4000'
+
+  web:
+    ports:
+      - '3000:3000'

@@ -43,10 +43,71 @@ Rien de tout cela ne peut être fait depuis le dépôt.
    bulletins de salaire, il doit rester fermé sans exception à prévoir. Un
    préfixe se contourne par une règle d'accès trop large ; deux conteneurs se
    configurent séparément.
-4. **Un domaine**, et deux entrées DNS de type A vers l'adresse IP de
-   l'instance : `votre-domaine` et `api.votre-domaine`.
-5. **Un compte SMTP** chez un hébergeur de messagerie européen (Brevo, Mailjet
-   — voir [`integrations.md`](integrations.md)).
+4. **Un compte SMTP** chez un hébergeur de messagerie européen (Brevo, Mailjet
+   — voir [`integrations.md`](integrations.md)). Le plus sous-estimé de la
+   liste : sans lui, une adresse ne peut pas être confirmée, et une adresse non
+   confirmée bloque aussi bien la mise en ligne d'une annonce que le dépôt
+   d'une candidature. Le site serait en ligne et inutilisable.
+5. **Un domaine**, et deux entrées DNS de type A vers l'adresse IP de
+   l'instance : `votre-domaine` et `api.votre-domaine`. **Le seul point de
+   cette liste qui n'est pas bloquant** : les quatre autres se vérifient
+   ensemble sans lui, voir la section suivante.
+
+## Avant d'avoir choisi le nom de domaine
+
+Le domaine n'est pas sur le chemin critique. Ce qui réserve les mauvaises
+surprises, c'est l'assemblage : l'endpoint exact du stockage objet, la chaîne de
+connexion à la base managée, l'authentification SMTP. Tout cela se vérifie sans
+lui, et il vaut mieux le découvrir avant que le nom soit acheté.
+
+```bash
+docker compose \
+  -f deploy/docker-compose.yml \
+  -f deploy/docker-compose.recette.yml \
+  --env-file deploy/.env \
+  up -d --build migrate api web
+```
+
+Les trois services sont nommés en fin de commande : **le proxy ne démarre pas**.
+Sans domaine il n'a rien à router et ne pourrait obtenir aucun certificat. L'API
+et le front sont alors publiés directement sur les ports 4000 et 3000.
+
+Six variables changent par rapport au modèle de production. En remplaçant
+`ADRESSE-IP` par celle de l'instance :
+
+```
+CORS_ORIGINS=http://ADRESSE-IP:3000
+PUBLIC_SITE_URL=http://ADRESSE-IP:3000
+SESSION_COOKIE_SECURE=false
+SESSION_COOKIE_DOMAIN=
+NEXT_PUBLIC_SITE_URL=http://ADRESSE-IP:3000
+NEXT_PUBLIC_API_URL=http://ADRESSE-IP:4000/api/v1
+```
+
+`SESSION_COOKIE_DOMAIN` est laissé **vide** : le cookie se rattache alors à
+l'hôte qui l'a posé. Les cookies ignorant le port, celui que dépose l'API sur
+`4000` est bien renvoyé au front sur `3000` — c'est le même site.
+
+### Ce que ce mode n'est pas
+
+Il sert en **HTTP, sans chiffrement**. Il n'a donc pas à être joignable depuis
+Internet : restreindre les deux ports à vos adresses IP au pare-feu de
+l'instance, ou n'ouvrir que SSH et passer par un tunnel.
+
+Et **aucune pièce d'identité réelle** ne doit y être déposée. Une carte
+d'identité qui transite en clair est une fuite, quel que soit le nombre de
+personnes au courant de l'adresse. Ce mode sert à vérifier que l'infrastructure
+tient, pas à recevoir des dossiers.
+
+### Ce qu'il reste à revérifier une fois le domaine acquis
+
+Trois choses que ce mode ne peut pas prouver : l'obtention des certificats, la
+redirection HTTP vers HTTPS, et le cookie de session — il porte ici sur un hôte
+unique, il portera ensuite sur deux sous-domaines.
+
+Il faudra aussi **reconstruire l'image du front** : les variables
+`NEXT_PUBLIC_*` sont figées dans le bundle à la compilation, l'image de recette
+continuerait de viser l'adresse IP. C'est ce que fait `--build`.
 
 ## Premier déploiement
 
