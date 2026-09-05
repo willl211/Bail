@@ -4,3 +4,9 @@
 # sur « modified after it was applied ». Ces fichiers restent donc en LF, quelle
 # que soit la machine.
 *.sql text eol=lf
+
+# Un script shell livré avec des fins de ligne Windows est refusé par Linux :
+# « bad interpreter: /usr/bin/env bash^M ». La documentation demande justement
+# de copier `provision.sh` par `scp` depuis un poste de travail — sans cette
+# règle, la toute première commande passée sur l'instance échouerait.
+*.sh text eol=lf
