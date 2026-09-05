@@ -108,14 +108,62 @@ if ! id -u "$UTILISATEUR" >/dev/null 2>&1; then
       "$SOURCE_CLES" "/home/${UTILISATEUR}/.ssh/authorized_keys"
     echo "    clé SSH reprise de ${SOURCE_CLES}"
   else
-    echo "    !! aucune clé SSH trouvée. Déposez-en une dans"
-    echo "       /home/${UTILISATEUR}/.ssh/authorized_keys avant de fermer cette"
-    echo "       session, sinon le compte sera inutilisable."
+    echo "    !! AUCUNE CLÉ SSH TROUVÉE."
+    echo
+    echo "       Cela arrive quand aucune clé n'a été choisie à la commande :"
+    echo "       l'hébergeur envoie alors un mot de passe temporaire, et la"
+    echo "       machine n'a aucune clé à recopier."
+    echo
+    echo "       Le compte ${UTILISATEUR} vient d'être créé sans clé : il est"
+    echo "       pour l'instant inutilisable en SSH. Depuis votre poste :"
+    echo
+    echo "         type \$env:USERPROFILE\\.ssh\\id_ed25519.pub | ssh ${SUDO_USER:-root}@<adresse> \\"
+    echo "           \"sudo install -d -m700 -o ${UTILISATEUR} -g ${UTILISATEUR} /home/${UTILISATEUR}/.ssh &&\\"
+    echo "            sudo tee -a /home/${UTILISATEUR}/.ssh/authorized_keys >/dev/null &&\\"
+    echo "            sudo chown ${UTILISATEUR}: /home/${UTILISATEUR}/.ssh/authorized_keys &&\\"
+    echo "            sudo chmod 600 /home/${UTILISATEUR}/.ssh/authorized_keys\""
+    echo
+    echo "       Puis relancez ce script : il reprendra là où il en est."
   fi
 else
   echo "    déjà présent"
 fi
 usermod -aG docker "$UTILISATEUR"
+
+echo "==> Authentification SSH"
+# Le mot de passe est coupé **uniquement** si une clé est en place et
+# fonctionne. Une machine exposée avec authentification par mot de passe est
+# scannée et attaquée dans les minutes qui suivent sa mise en ligne ; celle-ci
+# portera les identifiants de la base et du stockage objet.
+#
+# La condition n'est pas de la prudence de façade : couper le mot de passe sans
+# clé installée fermerait la machine à tout le monde. Et même dans ce cas, la
+# console KVM de l'espace client reste une porte de retour — mais mieux vaut ne
+# pas avoir à l'utiliser.
+#
+# Un fichier à part dans `sshd_config.d`, numéroté haut : les images cloud y
+# déposent leurs propres réglages, et modifier `sshd_config` se ferait écraser
+# par un fichier lu après lui.
+if [[ -s "/home/${UTILISATEUR}/.ssh/authorized_keys" ]]; then
+  cat > /etc/ssh/sshd_config.d/99-bail.conf <<'CONF'
+# Posé par deploy/provision.sh. Pour revenir en arrière : supprimer ce fichier
+# et relancer `systemctl reload ssh`.
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin prohibit-password
+CONF
+  # Vérifié avant d'être appliqué : une configuration invalide empêcherait le
+  # service de redémarrer, et donc toute reconnexion.
+  if sshd -t 2>/dev/null; then
+    systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
+    echo "    mot de passe désactivé, clé seule (annuler : rm /etc/ssh/sshd_config.d/99-bail.conf)"
+  else
+    rm -f /etc/ssh/sshd_config.d/99-bail.conf
+    echo "    !! configuration SSH refusée par sshd -t, rien n'a été changé"
+  fi
+else
+  echo "    laissée telle quelle : pas de clé installée, la couper fermerait la machine"
+fi
 
 echo "==> Pare-feu"
 # SSH **avant** d'activer : l'ordre inverse coupe la session en cours et rend

@@ -78,6 +78,32 @@ scp deploy/provision.sh ubuntu@ADRESSE-IP:/tmp/
 ssh ubuntu@ADRESSE-IP 'sudo bash /tmp/provision.sh'
 ```
 
+### Si aucune clé SSH n'a été choisie à la commande
+
+C'est un cas fréquent : le formulaire ne l'impose pas. L'hébergeur envoie alors
+un **mot de passe temporaire** par lien sécurisé dans l'e-mail de livraison. À
+la première connexion il faut le changer, et la session se ferme aussitôt —
+c'est le comportement normal, on se reconnecte.
+
+Mais la machine n'a alors **aucune clé**, et le script créerait le compte
+applicatif sans clé : inutilisable en SSH. Déposez-la avant de le lancer, depuis
+votre poste :
+
+```powershell
+type $env:USERPROFILE\.ssh\id_ed25519.pub | ssh ubuntu@ADRESSE-IP "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
+```
+
+Vérifiez qu'elle fonctionne — `ssh ubuntu@ADRESSE-IP` ne doit plus rien demander
+— **avant** de lancer le script. Il coupe l'authentification par mot de passe
+quand il trouve une clé, et une clé qui ne marche pas fermerait la machine. (Pas
+définitivement : la console KVM de l'espace client reste une porte de retour.
+Mais autant ne pas avoir à s'en servir.)
+
+Le script ne coupe rien s'il ne trouve aucune clé — il le dit et laisse le mot
+de passe actif.
+
+### Le compte de connexion
+
 `ubuntu` et non `root` : c'est le compte livré par OVH sur une image Ubuntu, et
 la connexion SSH en root y est fermée. Le script cherche donc la clé chez le
 compte qui l'invoque avant de regarder chez root — sans quoi le compte
