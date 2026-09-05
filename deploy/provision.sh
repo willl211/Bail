@@ -2,8 +2,12 @@
 #
 # Prépare une instance Debian/Ubuntu vierge à recevoir Bail.
 #
-#   scp deploy/provision.sh root@ADRESSE-IP:/tmp/
-#   ssh root@ADRESSE-IP 'bash /tmp/provision.sh'
+#   scp deploy/provision.sh ubuntu@ADRESSE-IP:/tmp/
+#   ssh ubuntu@ADRESSE-IP 'sudo bash /tmp/provision.sh'
+#
+# `ubuntu` et non `root` : c'est le compte livré par OVH sur une image Ubuntu,
+# et la connexion SSH en root y est fermée. Sur un hébergeur qui l'ouvrirait,
+# les deux commandes marchent aussi en root, sans `sudo`.
 #
 # À exécuter **une seule fois**, sur une machine neuve. Il est cependant
 # idempotent : le relancer ne casse rien, il constate ce qui est déjà en place.
@@ -84,16 +88,29 @@ echo "==> Utilisateur applicatif : ${UTILISATEUR}"
 # évite au moins de travailler en root au quotidien.
 if ! id -u "$UTILISATEUR" >/dev/null 2>&1; then
   adduser --disabled-password --gecos "" "$UTILISATEUR"
-  # La clé SSH de root est recopiée : sans elle, le nouveau compte serait
-  # inaccessible et il faudrait repasser par root pour tout.
-  if [[ -f /root/.ssh/authorized_keys ]]; then
+  # La clé SSH est recopiée : sans elle, le nouveau compte serait inaccessible.
+  #
+  # Elle est cherchée à deux endroits, et l'ordre compte. Chez OVH, un VPS
+  # Ubuntu n'ouvre pas de session root : la clé déposée à la commande atterrit
+  # chez l'utilisateur `ubuntu`, et le script s'exécute par `sudo` depuis ce
+  # compte. Ne regarder que `/root` laisserait le compte applicatif sans aucune
+  # clé — verrouillé dès sa création.
+  SOURCE_CLES=""
+  if [[ -n "${SUDO_USER:-}" && -f "/home/${SUDO_USER}/.ssh/authorized_keys" ]]; then
+    SOURCE_CLES="/home/${SUDO_USER}/.ssh/authorized_keys"
+  elif [[ -f /root/.ssh/authorized_keys ]]; then
+    SOURCE_CLES="/root/.ssh/authorized_keys"
+  fi
+
+  if [[ -n "$SOURCE_CLES" ]]; then
     install -d -m 700 -o "$UTILISATEUR" -g "$UTILISATEUR" "/home/${UTILISATEUR}/.ssh"
     install -m 600 -o "$UTILISATEUR" -g "$UTILISATEUR" \
-      /root/.ssh/authorized_keys "/home/${UTILISATEUR}/.ssh/authorized_keys"
+      "$SOURCE_CLES" "/home/${UTILISATEUR}/.ssh/authorized_keys"
+    echo "    clé SSH reprise de ${SOURCE_CLES}"
   else
-    echo "    !! aucune clé SSH dans /root/.ssh/authorized_keys :"
-    echo "       déposez-en une dans /home/${UTILISATEUR}/.ssh/authorized_keys"
-    echo "       avant de fermer cette session, sinon le compte sera inutilisable."
+    echo "    !! aucune clé SSH trouvée. Déposez-en une dans"
+    echo "       /home/${UTILISATEUR}/.ssh/authorized_keys avant de fermer cette"
+    echo "       session, sinon le compte sera inutilisable."
   fi
 else
   echo "    déjà présent"

@@ -59,9 +59,15 @@ Une fois la machine créée chez l'hébergeur, un script la met en état. Il ne
 demande aucune valeur et n'écrit aucun secret :
 
 ```bash
-scp deploy/provision.sh root@ADRESSE-IP:/tmp/
-ssh root@ADRESSE-IP 'bash /tmp/provision.sh'
+scp deploy/provision.sh ubuntu@ADRESSE-IP:/tmp/
+ssh ubuntu@ADRESSE-IP 'sudo bash /tmp/provision.sh'
 ```
+
+`ubuntu` et non `root` : c'est le compte livré par OVH sur une image Ubuntu, et
+la connexion SSH en root y est fermée. Le script cherche donc la clé chez le
+compte qui l'invoque avant de regarder chez root — sans quoi le compte
+applicatif naîtrait sans aucune clé, verrouillé sur une machine où plus personne
+n'aurait de raison de revenir.
 
 Il installe Docker depuis le dépôt officiel — celui des distributions livre une
 version âgée, parfois sans le greffon Compose v2 —, crée un utilisateur `bail`
