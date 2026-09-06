@@ -32,7 +32,7 @@ Non figés — dépendent du marché, à définir. Le module de facturation doit
 Quand un locataire candidate, la **synthèse vérifiée** de son dossier est
 transmise au propriétaire : identité, revenus nets, situation professionnelle,
 taux d'effort, état du garant. Ses **documents** (pièce d'identité, bulletins de
-salaire, avis d'imposition) ne le sont jamais — ils restent chez Bail.
+salaire, avis d'imposition) ne le sont jamais — ils restent chez whoma.
 
 Le fondement de ce traitement est l'**exécution du contrat**, pas le
 consentement. Candidater *est* la demande de transmettre : sans cette
@@ -64,7 +64,7 @@ n'est pas validé juridiquement, aucun prestataire de paiement n'est branché, e
 le bail ne peut pas être signé. L'écran énonce les trois.
 
 **Aucun formulaire de carte n'a été construit**, contrairement à la maquette.
-Les coordonnées bancaires ne transitent jamais par Bail : le prestataire les
+Les coordonnées bancaires ne transitent jamais par whoma : le prestataire les
 collecte dans son propre cadre, ce qui nous tient hors du périmètre PCI-DSS.
 L'API n'ouvre qu'une intention de paiement et renvoie de quoi la confirmer.
 

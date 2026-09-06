@@ -202,7 +202,7 @@ export class ApplicationsService {
     if (file.submittedAt === null) {
       blockers.push('Transmettez d’abord votre dossier depuis « Mon dossier ».');
     } else if (file.status === 'REJECTED') {
-      blockers.push('Votre dossier a été refusé par Bail. Contactez le support pour candidater.');
+      blockers.push('Votre dossier a été refusé par whoma. Contactez le support pour candidater.');
     }
 
     if (property.acceptedContractTypes.length > 0) {
@@ -240,7 +240,7 @@ export class ApplicationsService {
     }
 
     if (file.submittedAt !== null && !file.incomeVerified) {
-      warnings.push('Vos revenus ne sont pas encore vérifiés par Bail.');
+      warnings.push('Vos revenus ne sont pas encore vérifiés par whoma.');
     }
 
     return { blockers, warnings };

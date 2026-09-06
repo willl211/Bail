@@ -78,7 +78,7 @@ export default async function OwnerVisitSlotsPage({ params }: Params) {
                   il faut annuler le rendez-vous, ce qui prévient le locataire.
                 </p>
                 <p className="field__hint mt-10">
-                  Un agent Bail est affecté avant le rendez-vous. Vous n’avez pas
+                  Un agent whoma est affecté avant le rendez-vous. Vous n’avez pas
                   à être présent.
                 </p>
               </div>

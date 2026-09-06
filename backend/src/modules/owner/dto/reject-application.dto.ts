@@ -9,7 +9,7 @@ export class RejectApplicationDto {
    * Motif du refus, facultatif mais transmis au candidat.
    *
    * Un dossier écarté sans un mot est ce que le marché fait déjà de pire ; le
-   * champ existe pour que Bail puisse faire autrement.
+   * champ existe pour que whoma puisse faire autrement.
    */
   @IsOptional()
   @Transform(trim)

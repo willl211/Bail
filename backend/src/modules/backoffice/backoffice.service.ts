@@ -319,7 +319,7 @@ export class BackofficeService {
           ? {
               status: DocumentStatus.VERIFIED,
               verifiedAt: new Date(),
-              verificationNote: 'Contrôle manuel par un agent Bail',
+              verificationNote: 'Contrôle manuel par un agent whoma',
               rejectionReason: null,
             }
           : {

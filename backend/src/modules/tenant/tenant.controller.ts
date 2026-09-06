@@ -50,7 +50,7 @@ export class TenantController {
     return this.tenant.updateFile(user.id, dto);
   }
 
-  /** Transmet le dossier au contrôle de Bail. */
+  /** Transmet le dossier au contrôle de whoma. */
   @Post('submit')
   submit(@CurrentUser() user: PublicUser) {
     return this.tenant.submit(user.id);

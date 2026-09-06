@@ -81,7 +81,7 @@ export function renderHtml(body: EmailBody): string {
   <tr><td align="center">
     <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" bgcolor="${SURFACE}" style="width:100%;max-width:560px;background:${SURFACE};border:1px solid ${LINE};">
       <tr><td style="padding:22px 32px;border-bottom:1px solid ${LINE};">
-        <span style="font-family:${FONT};font-size:17px;font-weight:700;letter-spacing:0.22em;color:${INK};">BAIL</span>
+        <span style="font-family:${FONT};font-size:17px;font-weight:700;letter-spacing:0.22em;color:${INK};">WHOMA</span>
       </td></tr>
       <tr><td style="padding:30px 32px 34px;font-family:${FONT};">
         <h1 style="margin:0 0 16px;font-size:21px;line-height:1.3;font-weight:600;color:${INK};">${escape(body.heading)}</h1>
@@ -90,7 +90,7 @@ export function renderHtml(body: EmailBody): string {
         ${footnotes}
       </td></tr>
       <tr><td style="padding:18px 32px;border-top:1px solid ${LINE};font-family:${MONO};font-size:10.5px;letter-spacing:0.08em;color:${INK_SOFT};">
-        BAIL · LOCATION LONGUE DURÉE EN DIRECT · METZ<br>
+        WHOMA · LOCATION LONGUE DURÉE EN DIRECT · METZ<br>
         <span style="color:${INK_SOFT};">Message automatique — cette adresse ne reçoit pas de réponse.</span>
       </td></tr>
     </table>
@@ -108,7 +108,7 @@ export function renderText(body: EmailBody): string {
     ...(body.action ? [`${body.action.label} :`, body.action.url, ''] : []),
     ...(body.footnotes ?? []).flatMap((note) => [note, '']),
     '—',
-    'Bail · location longue durée en direct · Metz',
+    'whoma · location longue durée en direct · Metz',
     'Message automatique — cette adresse ne reçoit pas de réponse.',
   ];
   return blocks.join('\n');

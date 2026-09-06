@@ -44,7 +44,7 @@ import { SmtpMailDriver } from './smtp-mail.driver';
             secure: config.get<boolean>('mail.smtp.secure', false),
             user: config.get<string | undefined>('mail.smtp.user'),
             password: config.get<string | undefined>('mail.smtp.password'),
-            from: config.get<string>('mail.from', 'Bail <ne-pas-repondre@bail.local>'),
+            from: config.get<string>('mail.from', 'whoma <ne-pas-repondre@whoma.local>'),
             replyTo: config.get<string | undefined>('mail.replyTo'),
           });
           // Vérification non bloquante : une API qui refuserait de démarrer

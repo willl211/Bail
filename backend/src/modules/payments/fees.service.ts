@@ -245,7 +245,7 @@ export class FeesService {
    *
    * Ne prélève rien : crée l'intention de paiement chez le prestataire et
    * renvoie de quoi la confirmer. **Les coordonnées bancaires ne transitent
-   * jamais par Bail** — c'est le prestataire qui les collecte, ce qui nous
+   * jamais par whoma** — c'est le prestataire qui les collecte, ce qui nous
    * tient hors du périmètre PCI-DSS. La maquette montrait un formulaire de
    * carte ; le reproduire aurait été une faute.
    */
@@ -275,7 +275,7 @@ export class FeesService {
     const intent = await this.payment.createPaymentIntent({
       amountCents: view.totalCents,
       currency: 'EUR',
-      description: `Bail — honoraires locataire ${lease.reference}`,
+      description: `whoma — honoraires locataire ${lease.reference}`,
       metadata: { leaseReference: lease.reference },
     });
 

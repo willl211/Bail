@@ -29,8 +29,8 @@ const ibmPlexMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: 'Bail — location longue durée en direct à Metz',
-    template: '%s · Bail',
+    default: 'whoma — location longue durée en direct à Metz',
+    template: '%s · whoma',
   },
   description:
     "Louer sans agence à Metz : les propriétaires publient avec un abonnement mensuel, sans commission. Les locataires déposent un dossier vérifié une seule fois, puis candidatent en un clic.",

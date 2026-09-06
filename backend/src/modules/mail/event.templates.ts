@@ -83,7 +83,7 @@ export function applicationReceived(p: {
     // Le nom du candidat n'apparaît pas : il figure sur l'écran, derrière la
     // session. Un objet d'e-mail se lit par-dessus l'épaule.
     footnotes: [
-      'Les pièces du dossier restent chez Bail : vous voyez le résultat des contrôles — revenus vérifiés, taux d’effort, garant — jamais les documents.',
+      'Les pièces du dossier restent chez whoma : vous voyez le résultat des contrôles — revenus vérifiés, taux d’effort, garant — jamais les documents.',
     ],
   });
 }
@@ -98,7 +98,7 @@ export function propertyPublished(p: {
     heading: 'Votre annonce est en ligne',
     paragraphs: [
       `Bonjour ${p.ownerFirstName},`,
-      `${p.propertyReference} — ${p.propertyTitle} a passé le contrôle de Bail et est désormais visible des locataires.`,
+      `${p.propertyReference} — ${p.propertyTitle} a passé le contrôle de whoma et est désormais visible des locataires.`,
       'Ouvrez des créneaux de visite pour que les candidats retenus puissent réserver.',
     ],
     action: { label: 'Voir mon annonce', url: p.url },
@@ -137,7 +137,7 @@ export function visitBooked(p: {
       `${p.propertyReference} sera visité ${appointment(p.scheduledAt)}${
         p.isVideo ? ', en visio' : ', sur place'
       }.`,
-      'Un agent Bail accompagne la visite : vous n’avez pas à vous déplacer.',
+      'Un agent whoma accompagne la visite : vous n’avez pas à vous déplacer.',
     ],
     action: { label: 'Voir mes visites', url: p.url },
   });
@@ -404,7 +404,7 @@ export function fileVerified(p: {
     heading: 'Votre dossier est vérifié',
     paragraphs: [
       `Bonjour ${p.tenantFirstName},`,
-      `Toutes les pièces de votre dossier ${p.fileReference} ont été contrôlées par Bail. Il part désormais complet à chaque candidature.`,
+      `Toutes les pièces de votre dossier ${p.fileReference} ont été contrôlées par whoma. Il part désormais complet à chaque candidature.`,
       'C’est ce qui vous fait passer devant : le propriétaire n’a plus rien à vérifier lui-même.',
     ],
     action: { label: 'Candidater à un bien', url: p.url },

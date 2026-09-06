@@ -38,7 +38,7 @@ export interface ApplicationTile {
  * Ce que le propriétaire voit s'arrête au résultat des vérifications : le
  * revenu vérifié, le taux d'effort, l'état du garant. Les **pièces**
  * (bulletins de salaire, pièce d'identité, avis d'imposition) restent chez
- * Bail — elles ne sont ni exposées ici, ni téléchargeables. C'est la promesse
+ * whoma — elles ne sont ni exposées ici, ni téléchargeables. C'est la promesse
  * faite au locataire, et elle vaut mieux que les habitudes du marché.
  */
 export interface OwnerApplication {
@@ -108,7 +108,7 @@ const initialsOf = (firstName: string, lastName: string) =>
 /** Pourquoi un bien ne reçoit pas de candidature. */
 const CLOSED_HINT: Partial<Record<PropertyStatus, string>> = {
   [PropertyStatus.DRAFT]: 'brouillon, non publié',
-  [PropertyStatus.PENDING_REVIEW]: 'au contrôle Bail',
+  [PropertyStatus.PENDING_REVIEW]: 'au contrôle whoma',
   [PropertyStatus.RENTED]: 'loué',
   [PropertyStatus.ARCHIVED]: 'archivé',
 };

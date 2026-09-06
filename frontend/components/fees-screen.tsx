@@ -42,7 +42,7 @@ function FeeComparison({ benchmark }: { benchmark: FeeBenchmark }) {
     ...(benchmark.agencyCents !== benchmark.legalCapCents
       ? [{ key: 'agency', label: 'Agence classique', cents: benchmark.agencyCents }]
       : []),
-    { key: 'bail', label: 'Bail', cents: benchmark.platformCents, us: true },
+    { key: 'bail', label: 'whoma', cents: benchmark.platformCents, us: true },
   ];
   const ceiling = Math.max(...rows.map((row) => row.cents), 1);
 
@@ -78,7 +78,7 @@ function FeeComparison({ benchmark }: { benchmark: FeeBenchmark }) {
  * Règlement des honoraires — écran 7.
  *
  * Aucun champ de carte bancaire, contrairement à la maquette : les coordonnées
- * bancaires ne doivent jamais transiter par Bail. C'est le prestataire qui les
+ * bancaires ne doivent jamais transiter par whoma. C'est le prestataire qui les
  * collecte, dans son propre cadre — ce qui nous tient hors du périmètre
  * PCI-DSS. Reproduire le formulaire de la maquette aurait été une faute.
  */
@@ -183,14 +183,14 @@ export function FeesScreen({ initial }: { initial: FeesView }) {
               <div>
                 <div className="h-sm">Carte bancaire</div>
                 <div className="doc__m">
-                  Saisie chez le prestataire de paiement, jamais sur Bail
+                  Saisie chez le prestataire de paiement, jamais sur whoma
                 </div>
               </div>
             </div>
             <p className="p-sm mt-12">
               Vos coordonnées bancaires ne transitent pas par nos serveurs : elles
               sont collectées par le prestataire, dans son propre formulaire
-              sécurisé. Bail ne les voit ni ne les conserve.
+              sécurisé. whoma ne les voit ni ne les conserve.
             </p>
             {fees.paymentDriver === 'mock' ? (
               <p className="field__hint mt-10">

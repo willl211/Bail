@@ -29,7 +29,7 @@ export function CostComparison({ benchmark }: { benchmark: SubscriptionBenchmark
   const rows = [
     { key: 'agency', label: 'Agence classique', cents: benchmark.agencyYearlyCents },
     { key: 'mandate', label: 'Mandat de gestion', cents: benchmark.mandateYearlyCents },
-    { key: 'bail', label: 'Bail', cents: benchmark.platformYearlyCents, us: true },
+    { key: 'bail', label: 'whoma', cents: benchmark.platformYearlyCents, us: true },
   ];
 
   // L'échelle est relative au poste le plus cher : c'est l'écart qui se lit,

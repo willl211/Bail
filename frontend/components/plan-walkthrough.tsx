@@ -64,7 +64,7 @@ const STATIONS: Station[] = [
     room: null,
     n: '',
     t: 'Chaque pièce, une étape',
-    s: 'Parcours Bail · 6 stations',
+    s: 'Parcours whoma · 6 stations',
     d: 'De l’annonce aux clés. Cliquez une pièce pour ouvrir l’écran correspondant.',
     k: ['Sans agence', 'Dossier vérifié', 'Bail en ligne'],
   },
@@ -479,7 +479,7 @@ export function PlanWalkthrough() {
   };
 
   return (
-    <section className={isStatic ? 'plan plan--static' : 'plan'} aria-label="Le parcours Bail">
+    <section className={isStatic ? 'plan plan--static' : 'plan'} aria-label="Le parcours whoma">
       <div className="plan__runway" ref={runwayRef}>
         <div className="plan__pin">
           <canvas
@@ -491,7 +491,7 @@ export function PlanWalkthrough() {
 
           <div className="plan__hud">
             <div className="plan__meta">
-              <span className="label label--accent">Le parcours Bail, pièce par pièce</span>
+              <span className="label label--accent">Le parcours whoma, pièce par pièce</span>
               <span className="label">Cliquez une pièce pour ouvrir l’écran</span>
             </div>
             <span className="label plan__count" ref={countRef}>

@@ -72,7 +72,7 @@ async function bootstrap() {
   await app.listen(port);
 
   Logger.log(
-    `Bail API [${config.get('appEnv')}] écoute sur http://localhost:${port}/${prefix}`,
+    `whoma API [${config.get('appEnv')}] écoute sur http://localhost:${port}/${prefix}`,
     'Bootstrap',
   );
 }

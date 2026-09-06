@@ -66,7 +66,7 @@ export default () => ({
   mail: {
     driver: process.env.MAIL_DRIVER ?? 'mock',
     /** Expéditeur affiché. Une adresse sans boîte de réception. */
-    from: process.env.MAIL_FROM ?? 'Bail <ne-pas-repondre@bail.local>',
+    from: process.env.MAIL_FROM ?? 'whoma <ne-pas-repondre@whoma.local>',
     /** Adresse de réponse, quand elle diffère de l'expéditeur. */
     replyTo: process.env.MAIL_REPLY_TO || undefined,
     smtp: {

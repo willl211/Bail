@@ -1,10 +1,10 @@
-# Contexte du projet — Bail, plateforme de location longue durée (MVP v0, pilote Metz)
+# Contexte du projet — whoma, plateforme de location longue durée (MVP v0, pilote Metz)
 
 Ce fichier est le point d'entrée. Lis-le en premier, avant tout autre document du dossier `docs/`. Si tu perds le fil pendant le développement, reviens ici.
 
 ## Ce que le projet est
 
-**Bail** est une plateforme qui digitalise la location longue durée résidentielle, sur le modèle d'Airbnb mais pour des baux d'habitation classiques (pas de la courte durée). Trois profils d'utilisateurs :
+**whoma** est une plateforme qui digitalise la location longue durée résidentielle, sur le modèle d'Airbnb mais pour des baux d'habitation classiques (pas de la courte durée). Trois profils d'utilisateurs :
 
 - **Propriétaires** : mettent leur bien en location en payant un abonnement à la plateforme, plutôt que de passer par une agence traditionnelle.
 - **Locataires** : cherchent un bien, déposent un dossier numérique (identité, revenus, garant), candidatent, visitent, signent le bail et paient des honoraires (moins chers qu'une agence classique).
@@ -42,7 +42,7 @@ Voir `docs/product-brief.md` pour le détail du périmètre fonctionnel et `docs
 1. **Pas de visite autonome par boîtier connecté dans le MVP v0.** C'est un point tranché, pas une option à réévaluer.
 2. **Le bail est généré à partir d'un modèle légal verrouillé.** Pas de rédaction libre par l'IA — elle vérifie la cohérence des champs, elle n'invente pas de clauses. Voir `docs/legal-context.md`.
 3. **Web responsive uniquement.** Pas d'app mobile native pour le MVP — décision réexaminée et confirmée en cours de route.
-4. **`maquette_interface/bail/bail.html` est la référence visuelle et fonctionnelle du projet.** Elle couvre les 15 écrans du parcours (recherche, fiche annonce, espace propriétaire, dossier locataire, candidature, visite, bail, honoraires, back-office) pour les 3 profils. Reproduis-la fidèlement — couleurs, typographie, composants, textes, comportements — plutôt que de réinterpréter ou d'improviser un style générique. Le nom du produit est **Bail**, l'accent est le **vert forêt** défini dans la maquette (pas le bordeaux d'une ancienne exploration). Si un écran ou un état n'y figure pas, reste cohérent avec les principes de `docs/design-system.md` et avec les composants déjà posés dans la maquette plutôt que d'inventer un style nouveau.
+4. **`maquette_interface/bail/bail.html` est la référence visuelle et fonctionnelle du projet.** Elle couvre les 15 écrans du parcours (recherche, fiche annonce, espace propriétaire, dossier locataire, candidature, visite, bail, honoraires, back-office) pour les 3 profils. Reproduis-la fidèlement — couleurs, typographie, composants, textes, comportements — plutôt que de réinterpréter ou d'improviser un style générique. Le nom du produit est **whoma**, tranché le 5 septembre 2026 — la maquette porte encore « Bail », nom retenu jusque-là, et le dossier `maquette_interface/bail/` garde ce chemin. Seul le nom change : l'accent reste le **vert forêt** de la maquette (pas le bordeaux d'une ancienne exploration). Attention, « bail » est aussi le nom commun du contrat, omniprésent dans le produit : ne jamais renommer à l'aveugle. Si un écran ou un état n'y figure pas, reste cohérent avec les principes de `docs/design-system.md` et avec les composants déjà posés dans la maquette plutôt que d'inventer un style nouveau.
 5. **Les intégrations tierces réglementées (KYC, signature, paiement) tournent en mode sandbox/test pendant tout le développement.** Elles ne bloquent pas l'avancement — voir `docs/integrations.md`.
 
 ## Si tu es perdu

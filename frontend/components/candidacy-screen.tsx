@@ -235,7 +235,7 @@ export function CandidacyScreen({
                       l'apparence d'un consentement sans en avoir la valeur. */}
                   <p className="p-sm">
                     En envoyant, la synthèse ci-dessus est transmise au propriétaire
-                    de ce bien. Vos documents, eux, restent chez Bail.
+                    de ce bien. Vos documents, eux, restent chez whoma.
                   </p>
 
                   <label className="field mt-16">

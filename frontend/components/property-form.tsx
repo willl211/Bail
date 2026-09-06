@@ -335,7 +335,7 @@ export function PropertyForm({
                 disabled={readOnly}
               />
               <span className="field__hint">
-                Le contrôle Bail vérifie la cohérence avec les diagnostics.
+                Le contrôle whoma vérifie la cohérence avec les diagnostics.
               </span>
             </label>
           </div>

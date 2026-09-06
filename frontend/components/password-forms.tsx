@@ -10,7 +10,7 @@ import { forgotPassword, resetPassword, type AuthFailure } from '@/lib/auth-clie
  * L'écran de confirmation est **le même quelle que soit l'adresse saisie**, y
  * compris pour une adresse sans compte. C'est délibéré et cela doit le rester :
  * un message différent ferait de ce formulaire public un moyen de savoir qui
- * est client de Bail. Le texte est donc rédigé au conditionnel — « si un compte
+ * est client de whoma. Le texte est donc rédigé au conditionnel — « si un compte
  * existe » — pour ne pas mentir non plus.
  */
 export function ForgotPasswordForm() {

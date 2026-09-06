@@ -1,6 +1,6 @@
 # Mise en ligne
 
-Ce document décrit comment Bail passe d'un poste de développement à une machine
+Ce document décrit comment whoma passe d'un poste de développement à une machine
 accessible au public. Il est écrit pour être suivi ligne à ligne le jour où le
 compte d'hébergement et le domaine existent.
 

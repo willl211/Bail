@@ -78,7 +78,7 @@ function journalOf(tile: ApplicationTile, applications: OwnerApplication[]) {
     title: `${application.tenantName} a candidaté`,
     note:
       application.verifiedDocumentCount === application.documentCount
-        ? 'Dossier complet, vérifié par Bail'
+        ? 'Dossier complet, vérifié par whoma'
         : `${application.documentCount - application.verifiedDocumentCount} pièce${
             application.documentCount - application.verifiedDocumentCount > 1 ? 's' : ''
           } en cours de vérification`,
@@ -89,7 +89,7 @@ function journalOf(tile: ApplicationTile, applications: OwnerApplication[]) {
       at: tile.publishedAt,
       tone: 'ok',
       title: 'Annonce mise en ligne',
-      note: 'Contrôle Bail validé',
+      note: 'Contrôle whoma validé',
     });
   }
 
@@ -320,7 +320,7 @@ export default async function OwnerApplicationsPage({
                     </div>
                     <p className="field__hint mt-10">
                       Loyer charges comprises rapporté aux revenus nets vérifiés. Les
-                      pièces justificatives restent chez Bail : vous voyez le résultat des
+                      pièces justificatives restent chez whoma : vous voyez le résultat des
                       contrôles, pas les documents.
                     </p>
                   </>

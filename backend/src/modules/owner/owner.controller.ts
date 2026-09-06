@@ -149,7 +149,7 @@ export class OwnerController {
   }
 
   /**
-   * Soumet le brouillon au contrôle de Bail. La mise en ligne effective est
+   * Soumet le brouillon au contrôle de whoma. La mise en ligne effective est
    * décidée par le back-office, pas par le propriétaire.
    */
   @Post('properties/:reference/submit')

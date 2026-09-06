@@ -30,7 +30,7 @@ export interface CompatibilityProperty {
 
 export interface CompatibilityFile {
   netMonthlyIncomeCents: number | null;
-  /** Dossier vérifié par Bail, ou seulement transmis. */
+  /** Dossier vérifié par whoma, ou seulement transmis. */
   verified: boolean;
   submitted: boolean;
   contractType: EmploymentContractType | null;

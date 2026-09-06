@@ -4,7 +4,7 @@ export function SiteFooter() {
   return (
     <footer className="site-footer">
       <span className="site-footer__mark">
-        Bail · location longue durée en direct · Metz 2026
+        whoma · location longue durée en direct · Metz 2026
       </span>
       <span className="site-footer__links">
         <Link href="/proprietaires">Propriétaires</Link>

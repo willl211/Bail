@@ -54,7 +54,7 @@ export class MockVerificationDriver implements VerificationDriver {
       this.logger.log(`[mock] ${request.type} → revue manuelle (${request.documentId})`);
       return {
         status: 'manual',
-        note: 'Lecture automatique impossible sur ce type de pièce · contrôle par un agent Bail',
+        note: 'Lecture automatique impossible sur ce type de pièce · contrôle par un agent whoma',
       };
     }
 
@@ -67,7 +67,7 @@ export class MockVerificationDriver implements VerificationDriver {
       );
       return {
         status: 'manual',
-        note: 'Type de pièce non reconnu · contrôle par un agent Bail',
+        note: 'Type de pièce non reconnu · contrôle par un agent whoma',
       };
     }
 

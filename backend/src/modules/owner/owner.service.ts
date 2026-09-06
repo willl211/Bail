@@ -60,7 +60,7 @@ export interface OwnerPropertyItem {
   savedCount: number;
   publishedAt: string | null;
   /**
-   * Motif du dernier renvoi par le contrôle de Bail. Le propriétaire doit le
+   * Motif du dernier renvoi par le contrôle de whoma. Le propriétaire doit le
    * lire là où il corrige : sans lui, son annonce serait repassée en brouillon
    * sans explication.
    */
@@ -118,7 +118,7 @@ export interface OwnerSummary {
   /** Biens diffusés, donc facturés. */
   onlineCount: number;
   draftCount: number;
-  /** Soumis au contrôle Bail : ni brouillon, ni encore diffusé. */
+  /** Soumis au contrôle whoma : ni brouillon, ni encore diffusé. */
   pendingReviewCount: number;
   /** Tous statuts confondus — sinon un bien au contrôle n'apparaît nulle part. */
   totalCount: number;
@@ -642,7 +642,7 @@ export class OwnerService {
   }
 
   /**
-   * Soumet le brouillon au contrôle de Bail (`DRAFT → PENDING_REVIEW`).
+   * Soumet le brouillon au contrôle de whoma (`DRAFT → PENDING_REVIEW`).
    *
    * La publication effective appartient au back-office (écran 14) : un
    * propriétaire ne met pas son annonce en ligne lui-même, elle est contrôlée

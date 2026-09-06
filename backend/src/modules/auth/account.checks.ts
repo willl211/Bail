@@ -6,7 +6,7 @@
  * ligne, et le motif ne change pas selon le profil — d'où une fonction unique,
  * partagée, plutôt que deux messages qui finiraient par diverger.
  *
- * Pourquoi bloquer : l'adresse est le seul canal par lequel Bail prévient
+ * Pourquoi bloquer : l'adresse est le seul canal par lequel whoma prévient
  * quelqu'un. Un dossier locataire ou une annonce accrochés à une adresse jamais
  * confirmée ne valent rien — le candidat ne saurait pas qu'il est retenu, le
  * propriétaire pas qu'il a reçu une candidature. Et une adresse non confirmée

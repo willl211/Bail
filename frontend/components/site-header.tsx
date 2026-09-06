@@ -82,7 +82,7 @@ export async function SiteHeader() {
     <header className={profile.internal ? 'site-header site-header--internal' : 'site-header'}>
       <div className="site-header__inner">
         <Link href="/" className="site-header__brand">
-          <span className="site-header__wordmark">BAIL</span>
+          <span className="site-header__wordmark">WHOMA</span>
           {profile.internal ? (
             <span className="site-header__tag">Accès interne</span>
           ) : (

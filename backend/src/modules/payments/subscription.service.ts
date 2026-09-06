@@ -107,7 +107,7 @@ export interface SubscriptionInvoice {
  *
  * Calculée sur le portefeuille réel, avec des taux de marché rangés dans
  * `platform_settings` : ce sont des ordres de grandeur, et ils doivent pouvoir
- * être corrigés sans redéploiement. Rien ici n'est un tarif Bail.
+ * être corrigés sans redéploiement. Rien ici n'est un tarif whoma.
  */
 export interface SubscriptionBenchmark {
   monthlyRentCents: number;
@@ -389,7 +389,7 @@ export class SubscriptionService {
       // Sans barème actif il n'existe aucun montant légitime à facturer, et on
       // n'en invente pas (README, règle 3).
       throw new BadRequestException(
-        'Aucun barème actif ne définit le montant de l’abonnement. Contactez Bail.',
+        'Aucun barème actif ne définit le montant de l’abonnement. Contactez whoma.',
       );
     }
 
@@ -418,7 +418,7 @@ export class SubscriptionService {
       unitAmountCents: feeSchedule.ownerSubscriptionMonthlyCents,
       quantity,
       currency: 'EUR',
-      label: 'Bail — abonnement propriétaire, par bien diffusé',
+      label: 'whoma — abonnement propriétaire, par bien diffusé',
     });
 
     await this.prisma.$transaction(async (tx) => {

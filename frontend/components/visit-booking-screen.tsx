@@ -348,7 +348,7 @@ export function VisitBookingScreen({
                     </button>
                   ) : (
                     <p className="field__hint mt-10">
-                      Le délai d’annulation en ligne est passé. Contactez Bail.
+                      Le délai d’annulation en ligne est passé. Contactez whoma.
                     </p>
                   )}
                 </>

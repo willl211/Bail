@@ -42,12 +42,12 @@ export function emailVerification(params: {
     heading: 'Confirmez votre adresse',
     paragraphs: [
       `Bonjour ${params.firstName},`,
-      'Une dernière étape avant d’utiliser votre compte Bail : confirmer que cette adresse est bien la vôtre. C’est par elle que passeront les décisions qui vous concernent — candidature retenue, pièce à corriger, rendez-vous de visite.',
+      'Une dernière étape avant d’utiliser votre compte whoma : confirmer que cette adresse est bien la vôtre. C’est par elle que passeront les décisions qui vous concernent — candidature retenue, pièce à corriger, rendez-vous de visite.',
     ],
     action: { label: 'Confirmer mon adresse', url: params.url },
     footnotes: [
       `Ce lien est valable ${params.validHours} heures et ne fonctionne qu’une fois.`,
-      'Si vous n’avez pas créé de compte sur Bail, ignorez ce message : sans confirmation, aucun compte n’est utilisable avec cette adresse.',
+      'Si vous n’avez pas créé de compte sur whoma, ignorez ce message : sans confirmation, aucun compte n’est utilisable avec cette adresse.',
     ],
   });
 }
@@ -87,7 +87,7 @@ export function passwordChanged(params: {
     heading: 'Votre mot de passe a été modifié',
     paragraphs: [
       `Bonjour ${params.firstName},`,
-      `Le mot de passe de votre compte Bail a été changé le ${stamp}.`,
+      `Le mot de passe de votre compte whoma a été changé le ${stamp}.`,
       params.revokedSessions > 0
         ? `Par précaution, vos autres sessions ont été fermées : il faudra vous reconnecter sur vos autres appareils (${params.revokedSessions} déconnectée${params.revokedSessions > 1 ? 's' : ''}).`
         : 'Aucune autre session n’était ouverte sur votre compte.',

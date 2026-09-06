@@ -1,4 +1,4 @@
-# Bail — plateforme de location longue durée (MVP v0, pilote Metz)
+# whoma — plateforme de location longue durée (MVP v0, pilote Metz)
 
 [![Vérification](https://github.com/willl211/Bail/actions/workflows/verification.yml/badge.svg)](https://github.com/willl211/Bail/actions/workflows/verification.yml)
 
@@ -358,7 +358,7 @@ hors dépôt.
   testés au niveau de leur reconstruction ; ils partiront le jour où le texte
   existera, sans rien changer.
 - **Aucun formulaire de carte bancaire n'a été construit**, contrairement à la
-  maquette. Les coordonnées bancaires ne doivent jamais transiter par Bail :
+  maquette. Les coordonnées bancaires ne doivent jamais transiter par whoma :
   c'est le prestataire qui les collecte, dans son propre cadre, ce qui nous tient
   hors du périmètre PCI-DSS. Reproduire le formulaire de la maquette aurait été
   une faute.

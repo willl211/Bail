@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
   title: 'Mon dossier',
   description:
-    'Déposez vos pièces une seule fois. Bail les vérifie, puis chaque candidature part en un clic — vos documents ne quittent jamais la plateforme.',
+    'Déposez vos pièces une seule fois. whoma les vérifie, puis chaque candidature part en un clic — vos documents ne quittent jamais la plateforme.',
 };
 
 const STEPS = [
@@ -87,7 +87,7 @@ export default async function TenantFilePage({
               ? 'Créez votre dossier ou connectez-vous : ce bien sera mis de côté, et vous le retrouverez ici.'
               : returnTo
                 ? 'Créez votre dossier ou connectez-vous pour reprendre votre candidature.'
-                : 'Vos pièces une seule fois, vérifiées par Bail. Ensuite, chaque candidature part en un clic.'}
+                : 'Vos pièces une seule fois, vérifiées par whoma. Ensuite, chaque candidature part en un clic.'}
           </p>
 
           <TenantAuthForm redirectTo={returnTo ?? undefined} />

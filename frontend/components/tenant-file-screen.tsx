@@ -14,11 +14,11 @@ import { TenantProfileForm } from './tenant-profile-form';
 const FILE_STATUS: Record<string, { label: string; note: string }> = {
   DRAFT: {
     label: 'À compléter',
-    note: 'Déposez vos pièces, puis transmettez votre dossier à Bail.',
+    note: 'Déposez vos pièces, puis transmettez votre dossier à whoma.',
   },
   SUBMITTED: {
     label: 'Transmis',
-    note: 'Bail contrôle vos pièces. Vous pouvez déjà candidater.',
+    note: 'whoma contrôle vos pièces. Vous pouvez déjà candidater.',
   },
   UNDER_REVIEW: {
     label: 'Contrôle en cours',
@@ -34,7 +34,7 @@ const FILE_STATUS: Record<string, { label: string; note: string }> = {
   },
   REJECTED: {
     label: 'Refusé',
-    note: 'Contactez Bail : une pièce n’a pas pu être validée.',
+    note: 'Contactez whoma : une pièce n’a pas pu être validée.',
   },
 };
 
@@ -212,7 +212,7 @@ export function TenantFileScreen({
 
               <div className="drop drop--wide mt-20">
                 <div className="drop__mark">+</div>
-                <div className="h-sm">Vos pièces restent chez Bail</div>
+                <div className="h-sm">Vos pièces restent chez whoma</div>
                 <p className="p-sm mt-6">
                   PDF, JPG ou PNG · 10 Mo maximum par fichier. Les propriétaires
                   ne reçoivent jamais vos documents, seulement la synthèse de
@@ -304,7 +304,7 @@ export function TenantFileScreen({
                     </div>
                   </div>
                   <p className="field__hint mt-10">
-                    Vos documents ne quittent jamais Bail. Seule cette synthèse
+                    Vos documents ne quittent jamais whoma. Seule cette synthèse
                     accompagne vos candidatures.
                   </p>
                 </div>
@@ -349,7 +349,7 @@ export function TenantFileScreen({
 
               {file.status === 'DRAFT' ? (
                 <div className="panel pad mt-16">
-                  <span className="label label--ink">Transmettre à Bail</span>
+                  <span className="label label--ink">Transmettre à whoma</span>
                   <p className="p-sm mt-8">
                     Le contrôle prend moins de 24 h. Vous pourrez continuer à
                     modifier vos pièces ensuite.

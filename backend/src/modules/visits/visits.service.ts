@@ -479,7 +479,7 @@ export class VisitsService {
       await this.openPreauthorization(visitId, tenantId, property.id, policy);
     }
 
-    // Le propriétaire n'a rien à faire pour la visite — un agent Bail
+    // Le propriétaire n'a rien à faire pour la visite — un agent whoma
     // l'accompagne — mais il doit savoir que son bien est visité.
     await this.mail.enqueue({
       template: EVENT.visitBooked,
@@ -546,7 +546,7 @@ export class VisitsService {
       const intent = await this.payment.createPaymentIntent({
         amountCents: policy.preauthorizationAmountCents,
         currency: 'EUR',
-        description: 'Bail — pré-autorisation avant visite',
+        description: 'whoma — pré-autorisation avant visite',
         metadata: { visitId },
       });
 
@@ -610,7 +610,7 @@ export class VisitsService {
       visit.scheduledAt.getTime() - policy.cancellationDeadlineHours * 3600 * 1000;
     if (Date.now() >= deadline) {
       throw new ConflictException(
-        `Un rendez-vous s’annule jusqu’à ${policy.cancellationDeadlineHours} heures avant. Contactez Bail.`,
+        `Un rendez-vous s’annule jusqu’à ${policy.cancellationDeadlineHours} heures avant. Contactez whoma.`,
       );
     }
 

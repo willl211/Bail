@@ -131,7 +131,7 @@ export function BackofficeScreen({
     <div className="page" style={{ paddingBottom: 0 }}>
       <div className="page__head">
         <div>
-          <span className="label label--accent">Back-office · agence Bail Metz</span>
+          <span className="label label--accent">Back-office · agence whoma Metz</span>
           <h1 className="d3 mt-8">Registre</h1>
         </div>
 

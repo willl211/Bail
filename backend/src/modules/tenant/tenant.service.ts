@@ -230,7 +230,7 @@ export class TenantService {
   private static assertEditable(file: TenantFile): void {
     if (file.status === TenantFileStatus.UNDER_REVIEW) {
       throw new ConflictException(
-        'Votre dossier est en cours de contrôle. Attendez le retour de Bail pour le modifier.',
+        'Votre dossier est en cours de contrôle. Attendez le retour de whoma pour le modifier.',
       );
     }
   }
@@ -409,7 +409,7 @@ export class TenantService {
     } catch {
       data = {
         status: DocumentStatus.PENDING,
-        verificationNote: 'Contrôle indisponible · la pièce sera revue par un agent Bail',
+        verificationNote: 'Contrôle indisponible · la pièce sera revue par un agent whoma',
       };
     }
 
@@ -521,7 +521,7 @@ export class TenantService {
 
   // ---------------------------------------------------------------- Dépôt
 
-  /** Soumet le dossier au contrôle de Bail. */
+  /** Soumet le dossier au contrôle de whoma. */
   async submit(tenantId: string): Promise<TenantFileView> {
     const file = await this.fileOf(tenantId);
 
