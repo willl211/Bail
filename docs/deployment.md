@@ -260,7 +260,7 @@ continuerait de viser l'adresse IP. C'est ce que fait `--build`.
 ## Premier déploiement
 
 ```bash
-git clone <dépôt> bail && cd bail
+git clone <dépôt> whoma && cd whoma
 
 cp env/production.env.example deploy/.env
 # Renseigner les valeurs réelles, puis ajouter les quatre variables

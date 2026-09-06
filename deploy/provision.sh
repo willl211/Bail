@@ -13,7 +13,7 @@
 # idempotent : le relancer ne casse rien, il constate ce qui est déjà en place.
 #
 # Ce qu'il fait, et rien d'autre :
-#   - installe Docker depuis le dépôt officiel ;
+#   - installe Docker depuis le dépôt officiel, et git ;
 #   - crée un utilisateur non privilégié pour faire tourner l'application ;
 #   - ouvre le pare-feu sur SSH seul ;
 #   - ajoute de la mémoire d'échange si la machine en manque pour compiler ;
@@ -41,8 +41,12 @@ fi
 export DEBIAN_FRONTEND=noninteractive
 
 echo "==> Paquets de base"
+# `git` sert à récupérer le code sur la machine : le déploiement construit ses
+# images à partir du dépôt cloné, il n'y a pas de registre d'où les tirer. Son
+# absence ne se voyait qu'au moment du premier `git clone`, une fois tout le
+# reste en place.
 apt-get update -qq
-apt-get install -y -qq ca-certificates curl gnupg ufw unattended-upgrades
+apt-get install -y -qq ca-certificates curl git gnupg ufw unattended-upgrades
 
 echo "==> Docker"
 # Le dépôt officiel plutôt que celui de la distribution : Debian et Ubuntu
