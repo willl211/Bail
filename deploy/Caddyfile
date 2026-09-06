@@ -31,6 +31,21 @@
 	}
 }
 
+# `www` renvoie sur le domaine nu.
+#
+# Les gens le tapent par réflexe, et l'hébergeur crée l'entrée DNS par défaut :
+# la laisser sans réponse donnerait une erreur de certificat à qui l'utilise.
+# Une redirection permanente plutôt qu'un second site, pour n'avoir qu'une seule
+# adresse canonique — deux adresses servant le même contenu divisent le
+# référencement et brouillent le cookie de session.
+#
+# ATTENTION : ce bloc suppose que `www` pointe bien sur cette machine. Sans
+# l'entrée DNS correspondante, Caddy réclamerait un certificat en boucle sans
+# jamais l'obtenir.
+www.{$SITE_DOMAIN} {
+	redir https://{$SITE_DOMAIN}{uri} permanent
+}
+
 # L'API.
 {$API_DOMAIN} {
 	encode zstd gzip

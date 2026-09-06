@@ -99,10 +99,22 @@ Les trois contrôles qui valident l'ensemble, depuis l'extérieur :
 
 Le dernier est le plus important : ce conteneur porte les pièces d'identité.
 
-5. **Un domaine**, et deux entrées DNS de type A vers l'adresse IP de
-   l'instance : `votre-domaine` et `api.votre-domaine`. **Le seul point de
-   cette liste qui n'est pas bloquant** : les quatre autres se vérifient
-   ensemble sans lui, voir la section suivante.
+5. **Un domaine**, et trois entrées DNS de type A vers l'adresse IP de
+   l'instance : le domaine nu, `api.` et `www.`. **Le seul point de cette liste
+   qui n'est pas bloquant** : les quatre autres se vérifient ensemble sans lui,
+   voir la section suivante.
+
+   L'hébergeur crée une zone DNS par défaut qui pointe **vers son propre serveur
+   de parking**. Ce sont donc des entrées à **modifier**, pas à ajouter — en
+   créer de nouvelles à côté laisserait deux réponses contradictoires pour le
+   même nom.
+
+   Un piège s'y cache : la zone contient déjà un enregistrement **SPF** qui
+   autorise les serveurs de messagerie de l'hébergeur, et **uniquement** eux
+   (`-all`). Tant qu'il est là, les e-mails expédiés par votre prestataire SMTP
+   seront rejetés ou classés indésirables — et une adresse non confirmée bloque
+   la mise en ligne d'une annonce comme le dépôt d'une candidature. Il faut le
+   remplacer par celui que le prestataire fournit.
 
 ## Préparer l'instance
 
