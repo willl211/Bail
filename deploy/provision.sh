@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Prépare une instance Debian/Ubuntu vierge à recevoir Bail.
+# Prépare une instance Debian/Ubuntu vierge à recevoir whoma.
 #
 #   scp deploy/provision.sh ubuntu@ADRESSE-IP:/tmp/
 #   ssh ubuntu@ADRESSE-IP 'sudo bash /tmp/provision.sh'
@@ -19,7 +19,7 @@
 #   - ajoute de la mémoire d'échange si la machine en manque pour compiler ;
 #   - active les mises à jour de sécurité automatiques.
 #
-# Ce qu'il ne fait pas : installer Bail, écrire des secrets, toucher au DNS.
+# Ce qu'il ne fait pas : installer whoma, écrire des secrets, toucher au DNS.
 # Ces étapes demandent des valeurs qui n'ont pas à traverser un script.
 
 set -euo pipefail
@@ -86,6 +86,12 @@ echo "==> Utilisateur applicatif : ${UTILISATEUR}"
 # L'application ne tourne pas en root. Le compte reçoit l'accès à Docker, ce
 # qui équivaut de fait à root sur la machine — c'est assumé et connu, mais ça
 # évite au moins de travailler en root au quotidien.
+#
+# Il n'est **pas** ajouté au groupe `sudo`, et c'est délibéré : les deux rôles
+# restent distincts. Le compte livré par l'hébergeur (`ubuntu`, `debian`…) sert
+# à administrer la machine — pare-feu, mises à jour, paquets ; celui-ci sert à
+# faire tourner l'application. Une commande d'administration lancée en
+# `${UTILISATEUR}` échoue donc, et c'est le comportement attendu.
 if ! id -u "$UTILISATEUR" >/dev/null 2>&1; then
   adduser --disabled-password --gecos "" "$UTILISATEUR"
   # La clé SSH est recopiée : sans elle, le nouveau compte serait inaccessible.
@@ -225,5 +231,9 @@ echo "  1. se reconnecter en ${UTILISATEUR} (le groupe docker n'est actif qu'à"
 echo "     l'ouverture de session suivante) :"
 echo "         ssh ${UTILISATEUR}@<adresse>"
 echo "  2. cloner le dépôt, puis suivre docs/deployment.md"
+echo
+echo "Deux comptes, deux rôles :"
+echo "  ${UTILISATEUR}  fait tourner l'application (Docker), sans droits d'administration"
+echo "  ${SUDO_USER:-root}  administre la machine (pare-feu, paquets, mises à jour)"
 echo
 echo "Vérification rapide, en ${UTILISATEUR} : docker run --rm hello-world"

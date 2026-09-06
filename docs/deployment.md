@@ -169,6 +169,18 @@ est le moment le plus gourmand du déploiement**, et une machine à 4 Go peut s'
 faire tuer par le noyau. Si l'échange ne peut pas être créé, le script le dit et
 continue — la parade est alors de construire l'image ailleurs.
 
+### Deux comptes, deux rôles
+
+Le script laisse la machine avec deux comptes, et il ne faut pas les confondre :
+
+| Compte | Rôle | Exemple |
+|---|---|---|
+| `ubuntu` *(livré par l'hébergeur)* | **administrer** la machine | `sudo ufw allow 80/tcp` |
+| `bail` *(créé par le script)* | **faire tourner** l'application | `docker compose … up -d` |
+
+`bail` n'est volontairement pas dans le groupe `sudo` : une commande
+d'administration lancée sous ce compte échoue, et c'est le comportement attendu.
+
 Puis se reconnecter en `bail` : l'appartenance au groupe `docker` ne prend effet
 qu'à l'ouverture de session suivante.
 
