@@ -100,9 +100,20 @@ export class S3StorageDriver implements StorageDriver {
         Key: key,
         Body: body,
         ContentType: mimeType,
-        // Aucune ACL n'est posée par objet : le régime d'accès est celui du
-        // conteneur. Une ACL par objet serait une seconde source de vérité, et
-        // c'est toujours celle qu'on oublie de mettre à jour.
+        // Lecture anonyme posée **objet par objet** sur le conteneur public.
+        //
+        // On préférerait la régler une fois pour toutes sur le conteneur, pour
+        // n'avoir qu'une seule source de vérité. Ce n'est pas possible :
+        // `PutBucketPolicy` répond `NotImplemented` chez OVH (vérifié sur
+        // eu-west-par, septembre 2026), et une ACL de conteneur `public-read`
+        // n'ouvre que le **listage**, pas la lecture des objets — mesuré aussi.
+        // L'ACL par objet est donc le seul levier qui existe.
+        //
+        // Rien n'est posé sur le conteneur privé : ses fichiers — pièces
+        // d'identité, bulletins de salaire, enregistrements de visite — ne
+        // doivent être lisibles que par l'API, et un `undefined` explicite vaut
+        // mieux qu'une valeur qu'on pourrait croire héritée d'ailleurs.
+        ACL: scope === 'public' ? 'public-read' : undefined,
       }),
     );
   }

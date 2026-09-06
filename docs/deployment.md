@@ -63,6 +63,42 @@ Rien de tout cela ne peut être fait depuis le dépôt.
    liste : sans lui, une adresse ne peut pas être confirmée, et une adresse non
    confirmée bloque aussi bien la mise en ligne d'une annonce que le dépôt
    d'une candidature. Le site serait en ligne et inutilisable.
+### Le stockage objet, en pratique
+
+Deux points ont coûté du temps à découvrir. Ils sont propres à OVH et ne se
+devinent pas.
+
+**Les régions 3-AZ n'acceptent que l'adressage par hôte virtuel.** Une adresse
+en chemin — `endpoint/seau/clé` — y répond `InvalidRequest — Not S3 request`.
+D'où `S3_FORCE_PATH_STYLE=false` dans les modèles de production, alors que MinIO,
+en développement, exige l'inverse.
+
+**Les politiques de seau ne sont pas implémentées.** `PutBucketPolicy` répond
+`NotImplemented`. Et une ACL de conteneur `public-read` n'ouvre que le
+**listage**, pas la lecture des objets — les deux verrous sont distincts, et
+c'est le second qu'on veut.
+
+La seule voie est donc l'**ACL par objet**, que l'API pose maintenant
+elle-même à chaque dépôt dans le conteneur public. Rien à configurer côté
+OVH pour les fichiers à venir.
+
+Il reste un geste manuel, une fois, pour refermer le listage ouvert par erreur
+si vous avez essayé `--acl public-read` sur le conteneur :
+
+```bash
+docker run --rm   -e AWS_ACCESS_KEY_ID=VOTRE_ACCESS_KEY   -e AWS_SECRET_ACCESS_KEY=VOTRE_SECRET_KEY   amazon/aws-cli --endpoint-url https://s3.eu-west-par.io.cloud.ovh.net --region eu-west-par   s3api put-bucket-acl --bucket whoma-prod-public --acl private
+```
+
+Les trois contrôles qui valident l'ensemble, depuis l'extérieur :
+
+| Adresse | Attendu |
+|---|---|
+| un objet du conteneur public | **200** |
+| la racine du conteneur public (listage) | **403** |
+| un objet du conteneur privé | **403** |
+
+Le dernier est le plus important : ce conteneur porte les pièces d'identité.
+
 5. **Un domaine**, et deux entrées DNS de type A vers l'adresse IP de
    l'instance : `votre-domaine` et `api.votre-domaine`. **Le seul point de
    cette liste qui n'est pas bloquant** : les quatre autres se vérifient
