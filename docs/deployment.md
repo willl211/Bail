@@ -297,6 +297,35 @@ recherche doit répondre. Si la page se charge mais reste vide, l'API n'est pas
 jointe depuis le conteneur du front — c'est `API_INTERNAL_URL` qu'il faut
 regarder, pas le DNS public.
 
+### Créer les premiers comptes
+
+Une instance neuve n'a **aucun compte**, et deux obstacles se présentent au
+moment de vouloir la tester.
+
+Le rôle d'agent n'a **pas de formulaire d'inscription** — c'est voulu : personne
+ne se déclare agent du back-office. Il se pose donc en base.
+
+Et l'inscription exige une adresse confirmée, alors qu'aucun message ne part
+tant que `MAIL_DRIVER=mock`. Deux façons de s'en sortir :
+
+- **relire le message sur disque** : le driver `mock` écrit chaque envoi dans
+  `/app/storage/private/mails` du conteneur de l'API, en `.html` et en `.txt`.
+  Le lien de confirmation y figure.
+
+  ```bash
+  docker compose -f deploy/docker-compose.yml --env-file deploy/.env     exec api ls -t /app/storage/private/mails | head
+  ```
+
+- **confirmer en base**, plus direct pour une mise en service :
+
+  ```sql
+  UPDATE users SET "emailVerifiedAt" = now() WHERE "emailVerifiedAt" IS NULL;
+  UPDATE users SET role = 'AGENT' WHERE email = 'adresse@exemple.fr';
+  ```
+
+Les deux sont des contournements le temps que la messagerie soit branchée.
+L'inscription reprend son cours normal dès que `MAIL_DRIVER=smtp` fonctionne.
+
 ### Peupler
 
 Le seed est un **jeu de démonstration** : huit annonces, quatre locataires

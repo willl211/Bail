@@ -80,9 +80,17 @@ COPY backend/prisma.config.ts ./backend/prisma.config.ts
 COPY backend/package.json ./backend/package.json
 COPY package.json ./package.json
 
-# L'image de base fournit un utilisateur `node` non privilégié. L'API n'écrit
-# rien sur son disque en production — les fichiers vont au stockage objet — et
-# n'a donc aucune raison de tourner en root.
+# Un seul dossier inscriptible, et il appartient au compte non privilégié.
+#
+# En production l'API n'écrit rien sur son disque : les fichiers vont au
+# stockage objet. Sauf dans un cas — `MAIL_DRIVER=mock`, qui écrit les messages
+# sur disque au lieu de les envoyer. C'est l'état d'une instance en attente de
+# son compte de messagerie, et sans ce dossier elle échouerait à créer le sien,
+# rendant les messages illisibles au moment précis où on a besoin de les lire.
+RUN install -d -o node -g node /app/storage/private/mails
+
+# L'image de base fournit un utilisateur `node` non privilégié. Rien ici n'a de
+# raison de tourner en root.
 USER node
 
 EXPOSE 4000
