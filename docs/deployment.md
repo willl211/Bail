@@ -103,7 +103,12 @@ Il reste un geste manuel, une fois, pour refermer le listage ouvert par erreur
 si vous avez essayé `--acl public-read` sur le conteneur :
 
 ```bash
-docker run --rm \n  -e AWS_ACCESS_KEY_ID=VOTRE_ACCESS_KEY \n  -e AWS_SECRET_ACCESS_KEY=VOTRE_SECRET_KEY \n  amazon/aws-cli --endpoint-url https://s3.eu-west-par.io.cloud.ovh.net --region eu-west-par \n  s3api put-bucket-acl --bucket whoma-prod-public --acl private
+docker run --rm \
+  -e AWS_ACCESS_KEY_ID=VOTRE_ACCESS_KEY \
+  -e AWS_SECRET_ACCESS_KEY=VOTRE_SECRET_KEY \
+  amazon/aws-cli \
+  --endpoint-url https://s3.eu-west-par.io.cloud.ovh.net --region eu-west-par \
+  s3api put-bucket-acl --bucket whoma-prod-public --acl private
 ```
 
 Les trois contrôles qui valident l'ensemble, depuis l'extérieur :
@@ -139,7 +144,8 @@ de refuser de démarrer : un canal accessoire indisponible ne doit pas rendre
 tout le site inaccessible. Le message dit exactement ce qui coince.
 
 ```bash
-docker compose -f deploy/docker-compose.yml --env-file deploy/.env \n  logs api --tail 40 | grep -i smtp
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env \
+  logs api --tail 40 | grep -i smtp
 ```
 
 ## Préparer l'instance
@@ -339,7 +345,8 @@ tant que `MAIL_DRIVER=mock`. Deux façons de s'en sortir :
   Le lien de confirmation y figure.
 
   ```bash
-  docker compose -f deploy/docker-compose.yml --env-file deploy/.env     exec api ls -t /app/storage/private/mails | head
+  docker compose -f deploy/docker-compose.yml --env-file deploy/.env \
+    exec api ls -t /app/storage/private/mails | head
   ```
 
 - **confirmer en base**, plus direct pour une mise en service :
