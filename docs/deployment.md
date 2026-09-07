@@ -63,6 +63,23 @@ Rien de tout cela ne peut être fait depuis le dépôt.
    liste : sans lui, une adresse ne peut pas être confirmée, et une adresse non
    confirmée bloque aussi bien la mise en ligne d'une annonce que le dépôt
    d'une candidature. Le site serait en ligne et inutilisable.
+5. **Un domaine**, et trois entrées DNS de type A vers l'adresse IP de
+   l'instance : le domaine nu, `api.` et `www.`. **Le seul point de cette liste
+   qui n'est pas bloquant** : les quatre autres se vérifient ensemble sans lui,
+   voir la section suivante.
+
+   L'hébergeur crée une zone DNS par défaut qui pointe **vers son propre serveur
+   de parking**. Ce sont donc des entrées à **modifier**, pas à ajouter — en
+   créer de nouvelles à côté laisserait deux réponses contradictoires pour le
+   même nom.
+
+   Un piège s'y cache : la zone contient déjà un enregistrement **SPF** qui
+   autorise les serveurs de messagerie de l'hébergeur, et **uniquement** eux
+   (`-all`). Tant qu'il est là, les e-mails expédiés par votre prestataire SMTP
+   seront rejetés ou classés indésirables — et une adresse non confirmée bloque
+   la mise en ligne d'une annonce comme le dépôt d'une candidature. Il faut le
+   remplacer par celui que le prestataire fournit.
+
 ### Le stockage objet, en pratique
 
 Deux points ont coûté du temps à découvrir. Ils sont propres à OVH et ne se
@@ -86,7 +103,7 @@ Il reste un geste manuel, une fois, pour refermer le listage ouvert par erreur
 si vous avez essayé `--acl public-read` sur le conteneur :
 
 ```bash
-docker run --rm   -e AWS_ACCESS_KEY_ID=VOTRE_ACCESS_KEY   -e AWS_SECRET_ACCESS_KEY=VOTRE_SECRET_KEY   amazon/aws-cli --endpoint-url https://s3.eu-west-par.io.cloud.ovh.net --region eu-west-par   s3api put-bucket-acl --bucket whoma-prod-public --acl private
+docker run --rm \n  -e AWS_ACCESS_KEY_ID=VOTRE_ACCESS_KEY \n  -e AWS_SECRET_ACCESS_KEY=VOTRE_SECRET_KEY \n  amazon/aws-cli --endpoint-url https://s3.eu-west-par.io.cloud.ovh.net --region eu-west-par \n  s3api put-bucket-acl --bucket whoma-prod-public --acl private
 ```
 
 Les trois contrôles qui valident l'ensemble, depuis l'extérieur :
@@ -122,25 +139,8 @@ de refuser de démarrer : un canal accessoire indisponible ne doit pas rendre
 tout le site inaccessible. Le message dit exactement ce qui coince.
 
 ```bash
-docker compose -f deploy/docker-compose.yml --env-file deploy/.env   logs api --tail 40 | grep -i smtp
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env \n  logs api --tail 40 | grep -i smtp
 ```
-
-5. **Un domaine**, et trois entrées DNS de type A vers l'adresse IP de
-   l'instance : le domaine nu, `api.` et `www.`. **Le seul point de cette liste
-   qui n'est pas bloquant** : les quatre autres se vérifient ensemble sans lui,
-   voir la section suivante.
-
-   L'hébergeur crée une zone DNS par défaut qui pointe **vers son propre serveur
-   de parking**. Ce sont donc des entrées à **modifier**, pas à ajouter — en
-   créer de nouvelles à côté laisserait deux réponses contradictoires pour le
-   même nom.
-
-   Un piège s'y cache : la zone contient déjà un enregistrement **SPF** qui
-   autorise les serveurs de messagerie de l'hébergeur, et **uniquement** eux
-   (`-all`). Tant qu'il est là, les e-mails expédiés par votre prestataire SMTP
-   seront rejetés ou classés indésirables — et une adresse non confirmée bloque
-   la mise en ligne d'une annonce comme le dépôt d'une candidature. Il faut le
-   remplacer par celui que le prestataire fournit.
 
 ## Préparer l'instance
 
