@@ -99,6 +99,32 @@ Les trois contrôles qui valident l'ensemble, depuis l'extérieur :
 
 Le dernier est le plus important : ce conteneur porte les pièces d'identité.
 
+### La messagerie, en pratique
+
+Les paramètres sont dans `env/production.env.example`, déjà renseignés pour la
+messagerie d'OVH — vous n'aurez que le mot de passe et, éventuellement,
+l'adresse de la boîte à changer. Trois choses ont coûté du temps à découvrir :
+
+**Le serveur s'écrit `ssl0.ovh.net`** : s-s-**L**-**zéro**, « ssl » suivi du
+chiffre. Le `l` et le `1` se ressemblent dans la plupart des polices de
+terminal, et l'erreur — `getaddrinfo ENOTFOUND` — n'aide pas à la voir.
+
+**Le port 465 va avec `SMTP_SECURE=true`**, le 587 avec `false`. Les deux
+fonctionnent ; `false` ne signifie pas « sans chiffrement » mais STARTTLS,
+négocié après l'ouverture de la connexion.
+
+**`MAIL_FROM` doit porter la même adresse que `SMTP_USER`.** OVH refuse
+d'expédier depuis une boîte qui n'est pas celle authentifiée — un
+`ne-pas-repondre@` qui n'existe pas comme boîte échouerait.
+
+L'API se contente d'un avertissement si le serveur est injoignable, plutôt que
+de refuser de démarrer : un canal accessoire indisponible ne doit pas rendre
+tout le site inaccessible. Le message dit exactement ce qui coince.
+
+```bash
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env   logs api --tail 40 | grep -i smtp
+```
+
 5. **Un domaine**, et trois entrées DNS de type A vers l'adresse IP de
    l'instance : le domaine nu, `api.` et `www.`. **Le seul point de cette liste
    qui n'est pas bloquant** : les quatre autres se vérifient ensemble sans lui,
