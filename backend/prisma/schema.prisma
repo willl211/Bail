@@ -142,6 +142,7 @@ model Session {
 
 enum AuthTokenPurpose {
   EMAIL_VERIFICATION
+  EMAIL_CHANGE
   PASSWORD_RESET
 }
 
@@ -158,6 +159,8 @@ model AuthToken {
   /// Empreinte SHA-256 du secret présent dans le lien. Jamais le secret lui-même.
   tokenHash String           @unique
   purpose   AuthTokenPurpose
+  targetEmail String?
+  sourceEmail String?
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -254,6 +257,12 @@ enum PropertyStatus {
   ARCHIVED
 }
 
+/// Nature du logement, indépendante de son ameublement.
+enum PropertyType {
+  APARTMENT
+  HOUSE
+}
+
 /// Type de bail applicable. Conditionne le modèle légal utilisé pour la
 /// génération du bail (docs/legal-context.md).
 enum LeaseType {
@@ -297,6 +306,7 @@ model Property {
   longitude   Float?
 
   // Caractéristiques
+  propertyType     PropertyType? // null = type non renseigné pour les anciennes annonces
   surfaceM2        Float
   rooms            Int
   bedrooms         Int?

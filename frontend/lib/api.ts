@@ -5,42 +5,61 @@
  * `NEXT_PUBLIC_API_URL` en local, différente une fois conteneurisé).
  */
 import { cookies } from 'next/headers';
+import { setTimeout as wait } from 'node:timers/promises';
 
 const API_URL =
-  process.env.API_INTERNAL_URL ??
-  process.env.NEXT_PUBLIC_API_URL ??
-  'http://localhost:4000/api/v1';
+  process.env.API_INTERNAL_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
+
+const NETWORK_RETRY_DELAYS_MS = [500, 1_000, 2_000];
 
 export class ApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
     readonly url: string,
+    options?: ErrorOptions,
   ) {
-    super(message);
+    super(message, options);
     this.name = 'ApiError';
+  }
+}
+
+async function fetchApiResponse(url: string, init?: RequestInit): Promise<Response> {
+  const method = (init?.method ?? 'GET').toUpperCase();
+  // Un signal désactive la mémoïsation React de fetch : chaque nouvelle
+  // tentative doit réellement joindre l'API, sans réutiliser l'échec précédent.
+  const signal = init?.signal ?? new AbortController().signal;
+
+  for (let attempt = 0; ; attempt += 1) {
+    signal.throwIfAborted();
+    try {
+      return await fetch(url, {
+        ...init,
+        headers: { Accept: 'application/json', ...init?.headers },
+        signal,
+        // Les annonces changent au fil des dépôts propriétaires : on ne met pas
+        // en cache tant qu'il n'y a pas d'invalidation côté back-office.
+        cache: 'no-store',
+      });
+    } catch (error) {
+      signal.throwIfAborted();
+      // Une courte coupure réseau peut accompagner un redémarrage du backend.
+      // Seules les lectures sont rejouées : une écriture a pu aboutir malgré
+      // la perte de sa réponse. Les réponses HTTP sont traitées sans nouvel essai.
+      const delay = method === 'GET' ? NETWORK_RETRY_DELAYS_MS[attempt] : undefined;
+      if (delay === undefined) {
+        throw new ApiError(`API injoignable (${url}). Le backend est-il démarré ?`, 0, url, {
+          cause: error,
+        });
+      }
+      await wait(delay, undefined, { signal });
+    }
   }
 }
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const url = `${API_URL}${path}`;
-
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      ...init,
-      headers: { Accept: 'application/json', ...init?.headers },
-      // Les annonces changent au fil des dépôts propriétaires : on ne met pas
-      // en cache tant qu'il n'y a pas d'invalidation côté back-office.
-      cache: 'no-store',
-    });
-  } catch {
-    throw new ApiError(
-      `API injoignable (${url}). Le backend est-il démarré ?`,
-      0,
-      url,
-    );
-  }
+  const response = await fetchApiResponse(url, init);
 
   if (response.status === 404) {
     throw new ApiError('Ressource introuvable', 404, url);
@@ -245,6 +264,7 @@ export type PropertyStatus =
   | 'ARCHIVED';
 
 export interface OwnerProperty {
+  photoUrl: string | null;
   reference: string;
   title: string;
   district: string;
@@ -286,6 +306,7 @@ export interface OwnerSummary {
 
 /** Bien complet, tel que le formulaire de dépôt le repeuple. */
 export interface OwnerPropertyDetail extends Omit<OwnerProperty, 'district'> {
+  propertyType: 'APARTMENT' | 'HOUSE' | null;
   description: string;
   districtSlug: string;
   district: string;
@@ -469,6 +490,8 @@ export type TenantFileStatus =
   | 'REJECTED';
 
 export interface ApplicationTile {
+  addressLine: string;
+  photoUrl: string | null;
   reference: string;
   title: string;
   district: string;

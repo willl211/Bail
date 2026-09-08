@@ -8,6 +8,7 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import {
   ChangePasswordDto,
+  ChangeEmailDto,
   ForgotPasswordDto,
   ResetPasswordDto,
   VerifyEmailDto,
@@ -149,6 +150,21 @@ export class AuthController {
   }
 
   // --------------------------------------------------- Mot de passe oublié
+
+  @Post('email/change')
+  @HttpCode(204)
+  requestEmailChange(@CurrentUser() user: PublicUser, @Body() dto: ChangeEmailDto) {
+    return this.account.requestEmailChange(user.id, dto.email, dto.currentPassword);
+  }
+
+  @Public()
+  @Post('email/change/confirm')
+  @HttpCode(200)
+  async confirmEmailChange(@Body() dto: VerifyEmailDto, @Res({ passthrough: true }) response: Response) {
+    const result = await this.account.confirmEmailChange(dto.token);
+    response.clearCookie(this.config.get<string>('auth.cookieName', 'bail_session'), this.cookieOptions());
+    return result;
+  }
 
   /**
    * Demande de réinitialisation.

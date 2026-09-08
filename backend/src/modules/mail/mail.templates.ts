@@ -27,11 +27,30 @@ function build(subject: string, body: EmailBody): RenderedTemplate {
 /** Clés de gabarit, journalisées telles quelles dans `email_messages.template`. */
 export const TEMPLATE = {
   emailVerification: 'email-verification',
+  emailChange: 'email-change',
+  emailChanged: 'email-changed',
   passwordReset: 'password-reset',
   passwordChanged: 'password-changed',
 } as const;
 
 export type TemplateKey = (typeof TEMPLATE)[keyof typeof TEMPLATE];
+
+export function emailChange(params: { firstName: string; url: string }): RenderedTemplate {
+  return build('Confirmez votre nouvelle adresse e-mail', {
+    heading: 'Votre nouvelle adresse',
+    paragraphs: [`Bonjour ${params.firstName},`, 'Vous avez demandé à utiliser cette adresse pour votre compte whoma. Confirmez-la pour terminer le changement. Votre ancienne adresse reste active jusque-là.'],
+    action: { label: 'Confirmer cette adresse', url: params.url },
+    footnotes: ['Ce lien est valable 24 heures et ne fonctionne qu’une fois.', 'Si vous n’avez pas demandé ce changement, ignorez ce message.'],
+  });
+}
+
+export function emailChanged(): RenderedTemplate {
+  return build('L’adresse de votre compte whoma a changé', {
+    heading: 'Adresse e-mail modifiée',
+    paragraphs: ['Une nouvelle adresse e-mail vient d’être confirmée pour votre compte whoma. Les sessions ont été fermées ; reconnectez-vous avec la nouvelle adresse et votre mot de passe habituel.'],
+    footnotes: ['Si vous n’êtes pas à l’origine de ce changement, contactez l’assistance depuis le site whoma.'],
+  });
+}
 
 export function emailVerification(params: {
   firstName: string;

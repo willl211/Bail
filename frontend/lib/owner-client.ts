@@ -52,6 +52,7 @@ async function send<T>(method: string, path: string, payload?: unknown): Promise
 
 /** Champs modifiables d'une annonce. Les montants sont en centimes. */
 export interface PropertyDraft {
+  propertyType?: 'APARTMENT' | 'HOUSE';
   title?: string;
   description?: string;
   addressLine?: string;

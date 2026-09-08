@@ -1,17 +1,15 @@
-'use client';
+﻿'use client';
 
 import { useState } from 'react';
 import type { GuarantorKind, TenantFileView } from '@/lib/api';
-import * as fmt from '@/lib/format';
 import { deleteGuarantor, saveGuarantor, type TenantFailure } from '@/lib/tenant-client';
 
-/** « 4 100 » → 410000 centimes. */
-function toCents(input: string): number | null {
-  const cleaned = input.replace(/[^\d,.]/g, '').replace(',', '.');
-  if (cleaned === '') return null;
-  const euros = Number(cleaned);
-  return Number.isFinite(euros) ? Math.round(euros * 100) : null;
-}
+type Choice = GuarantorKind | 'NONE';
+const CHOICES = [
+  ['INDIVIDUAL', 'Une personne', 'Parent, proche, employeur'],
+  ['ORGANISATION', 'Un organisme', 'Visale, caution bancaire'],
+  ['NONE', 'Aucun garant', 'Continuer sans garant'],
+] as const;
 
 export function TenantGuarantorForm({
   file,
@@ -23,53 +21,87 @@ export function TenantGuarantorForm({
   onChange: (view: TenantFileView) => void;
 }) {
   const guarantor = file.guarantor;
-  const [open, setOpen] = useState(guarantor !== null);
-  const [kind, setKind] = useState<GuarantorKind>(guarantor?.kind ?? 'INDIVIDUAL');
-  const [form, setForm] = useState({
+  const [kind, setKind] = useState<Choice>(guarantor?.kind ?? 'NONE');
+  const values = () => ({
     firstName: guarantor?.firstName ?? '',
     lastName: guarantor?.lastName ?? '',
     organisationName: guarantor?.organisationName ?? '',
     relationship: guarantor?.relationship ?? '',
     income:
-      guarantor?.netMonthlyIncomeCents === null ||
-      guarantor?.netMonthlyIncomeCents === undefined
+      guarantor?.netMonthlyIncomeCents == null
         ? ''
-        : String(Math.round(guarantor.netMonthlyIncomeCents / 100)),
+        : String(guarantor.netMonthlyIncomeCents / 100),
   });
+  const [form, setForm] = useState(values);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<TenantFailure | null>(null);
-
-  const set = (field: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement>) =>
+  const [saved, setSaved] = useState(false);
+  const set = (field: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement>) => {
     setForm((current) => ({ ...current, [field]: event.target.value }));
+    setSaved(false);
+  };
+  const reset = () => {
+    setKind(guarantor?.kind ?? 'NONE');
+    setForm(values());
+    setError(null);
+    setSaved(false);
+  };
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (pending || readOnly || kind === 'NONE') return;
     setPending(true);
     setError(null);
+    setSaved(false);
+    const income = form.income.trim()
+      ? Number(form.income.replace(/\s/g, '').replace(',', '.'))
+      : undefined;
+    if (
+      kind === 'INDIVIDUAL' &&
+      income !== undefined &&
+      (!Number.isFinite(income) || income < 0)
+    ) {
+      setError({ message: 'Indiquez des revenus valides en euros.' });
+      setPending(false);
+      return;
+    }
     try {
-      onChange(
-        await saveGuarantor({
-          kind,
-          firstName: form.firstName || undefined,
-          lastName: form.lastName || undefined,
-          organisationName: form.organisationName || undefined,
-          relationship: form.relationship || undefined,
-          netMonthlyIncomeCents: toCents(form.income) ?? undefined,
-        }),
+      const next = await saveGuarantor(
+        kind === 'ORGANISATION'
+          ? { kind, organisationName: form.organisationName.trim() }
+          : {
+              kind,
+              firstName: form.firstName.trim(),
+              lastName: form.lastName.trim(),
+              relationship: form.relationship || undefined,
+              netMonthlyIncomeCents:
+                income === undefined ? undefined : Math.round(income * 100),
+            },
       );
+      onChange(next);
+      setSaved(true);
     } catch (failure) {
       setError(failure as TenantFailure);
     } finally {
       setPending(false);
     }
   };
-
   const remove = async () => {
+    if (pending || readOnly || !guarantor) return;
     setPending(true);
     setError(null);
+    setSaved(false);
     try {
       onChange(await deleteGuarantor());
-      setOpen(false);
+      setKind('NONE');
+      setForm({
+        firstName: '',
+        lastName: '',
+        organisationName: '',
+        relationship: '',
+        income: '',
+      });
+      setSaved(true);
     } catch (failure) {
       setError(failure as TenantFailure);
     } finally {
@@ -77,145 +109,155 @@ export function TenantGuarantorForm({
     }
   };
 
-  if (!open) {
-    return (
-      <div className="panel pad">
-        <p className="p-sm">
-          La plupart des propriétaires à Metz en exigent un. Sans garant, votre
-          dossier reste valable, mais il ne passera pas sur les biens qui en
-          demandent un.
-        </p>
-        {readOnly ? null : (
-          <button
-            type="button"
-            className="btn btn--ghost btn-sm mt-12"
-            onClick={() => setOpen(true)}
-          >
-            Déclarer un garant
-          </button>
-        )}
-      </div>
-    );
-  }
-
   return (
-    <div className="panel pad">
-      <form className="form form--2" onSubmit={submit} noValidate>
-        <label className="field form__full">
-          <span className="label label--ink">Type de garant</span>
-          <select
-            className="field__box"
-            value={kind}
-            disabled={readOnly}
-            onChange={(event) => setKind(event.target.value as GuarantorKind)}
-          >
-            <option value="INDIVIDUAL">Une personne (parent, proche, employeur)</option>
-            <option value="ORGANISATION">
-              Un organisme (Visale, caution bancaire)
-            </option>
-          </select>
-        </label>
-
-        {kind === 'INDIVIDUAL' ? (
-          <>
-            <label className="field">
-              <span className="label label--ink">Prénom</span>
-              <input
-                className="field__box"
-                required
-                value={form.firstName}
-                disabled={readOnly}
-                onChange={set('firstName')}
-              />
-            </label>
-            <label className="field">
-              <span className="label label--ink">Nom</span>
-              <input
-                className="field__box"
-                required
-                value={form.lastName}
-                disabled={readOnly}
-                onChange={set('lastName')}
-              />
-            </label>
-            <label className="field">
-              <span className="label label--ink">Lien avec vous</span>
-              <input
-                className="field__box"
-                placeholder="Mère, employeur, ami·e"
-                value={form.relationship}
-                disabled={readOnly}
-                onChange={set('relationship')}
-              />
-            </label>
-            <label className="field">
-              <span className="label label--ink">Revenus nets mensuels</span>
-              <input
-                className="field__box"
-                inputMode="numeric"
-                placeholder="4 100"
-                value={form.income}
-                disabled={readOnly}
-                onChange={set('income')}
-              />
-            </label>
-          </>
-        ) : (
-          <label className="field form__full">
-            <span className="label label--ink">Nom de l’organisme</span>
+    <div className="tenant-guarantor">
+      <fieldset className="tenant-guarantor-choices" disabled={readOnly || pending}>
+        <legend>Qui se porte garant pour vous ?</legend>
+        {CHOICES.map(([value, label, hint]) => (
+          <label className={kind === value ? 'is-selected' : ''} key={value}>
             <input
-              className="field__box"
-              required
-              placeholder="Visale — Action Logement"
-              value={form.organisationName}
-              disabled={readOnly}
-              onChange={set('organisationName')}
+              type="radio"
+              name="guarantor-kind"
+              value={value}
+              checked={kind === value}
+              onChange={() => {
+                setKind(value);
+                setSaved(false);
+                setError(null);
+              }}
             />
-            <span className="field__hint">
-              Un organisme n’a pas de revenus à déclarer : seule son attestation
-              de garantie est demandée.
+            <span>
+              <strong>{label}</strong>
+              <small>{hint}</small>
             </span>
           </label>
-        )}
-
-        {error ? (
-          <p className="form__full auth__error" role="alert">
-            {error.message}
-          </p>
-        ) : null}
-
-        {readOnly ? null : (
-          <div className="form__full flex gap-12 wrap ai-c">
-            <button type="submit" className="btn btn-sm" disabled={pending}>
-              {pending ? 'Enregistrement…' : guarantor ? 'Mettre à jour' : 'Enregistrer'}
-            </button>
-            {guarantor ? (
-              <button
-                type="button"
-                className="link"
-                onClick={remove}
-                disabled={pending}
-              >
-                Retirer le garant
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="link"
-                onClick={() => setOpen(false)}
-                disabled={pending}
-              >
-                Annuler
-              </button>
-            )}
-          </div>
-        )}
-      </form>
-
-      {guarantor?.kind === 'INDIVIDUAL' && guarantor.netMonthlyIncomeCents !== null ? (
-        <p className="field__hint mt-12">
-          Revenus du garant enregistrés :{' '}
-          {fmt.euros(guarantor.netMonthlyIncomeCents)} nets par mois.
+        ))}
+      </fieldset>
+      {kind === 'NONE' ? (
+        <div className="tenant-guarantor-none">
+          {guarantor ? (
+            <>
+              <h3>Retirer le garant enregistré ?</h3>
+              <p>
+                Son identité et ses justificatifs seront retirés du dossier. Le garant actuel
+                reste enregistré tant que vous ne confirmez pas.
+              </p>
+              {readOnly ? null : (
+                <div className="flex gap-12 wrap mt-16">
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn-sm"
+                    onClick={remove}
+                    disabled={pending}
+                  >
+                    {pending ? 'Retrait…' : 'Confirmer le retrait du garant'}
+                  </button>
+                  <button type="button" className="link" onClick={reset} disabled={pending}>
+                    Conserver mon garant
+                  </button>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <h3>Vous continuez sans garant</h3>
+              <p>
+                Votre dossier peut être préparé sans garant. Certaines annonces en demandent un
+                : vous pourrez l’ajouter ici avant de candidater.
+              </p>
+            </>
+          )}
+        </div>
+      ) : (
+        <form className="form form--2 tenant-form-panel" onSubmit={submit}>
+          {kind === 'INDIVIDUAL' ? (
+            <>
+              <label className="field">
+                <span className="label label--ink">Prénom</span>
+                <input
+                  className="field__box"
+                  required
+                  value={form.firstName}
+                  disabled={readOnly || pending}
+                  onChange={set('firstName')}
+                />
+              </label>
+              <label className="field">
+                <span className="label label--ink">Nom</span>
+                <input
+                  className="field__box"
+                  required
+                  value={form.lastName}
+                  disabled={readOnly || pending}
+                  onChange={set('lastName')}
+                />
+              </label>
+              <label className="field">
+                <span className="label label--ink">Lien avec vous</span>
+                <input
+                  className="field__box"
+                  value={form.relationship}
+                  placeholder="Parent, proche, employeur…"
+                  disabled={readOnly || pending}
+                  onChange={set('relationship')}
+                />
+              </label>
+              <label className="field">
+                <span className="label label--ink">Revenus nets mensuels</span>
+                <input
+                  className="field__box"
+                  inputMode="decimal"
+                  value={form.income}
+                  disabled={readOnly || pending}
+                  onChange={set('income')}
+                />
+                <span className="field__hint">Montant en euros.</span>
+              </label>
+            </>
+          ) : (
+            <label className="field form__full">
+              <span className="label label--ink">Nom de l’organisme</span>
+              <input
+                className="field__box"
+                required
+                value={form.organisationName}
+                placeholder="Visale — Action Logement"
+                disabled={readOnly || pending}
+                onChange={set('organisationName')}
+              />
+              <span className="field__hint">
+                Seule l’attestation de garantie sera demandée.
+              </span>
+            </label>
+          )}
+          {readOnly ? null : (
+            <>
+              <p className="form__full tenant-edit-note">
+                L’enregistrement du garant relance le contrôle si votre dossier était déjà
+                vérifié.
+              </p>
+              <div className="form__full flex gap-12 wrap">
+                <button className="btn btn-sm" disabled={pending}>
+                  {pending ? 'Enregistrement…' : 'Enregistrer mon garant'}
+                </button>
+                <button type="button" className="link" disabled={pending} onClick={reset}>
+                  Annuler
+                </button>
+              </div>
+            </>
+          )}
+        </form>
+      )}
+      {error ? (
+        <p className="auth__error mt-16" role="alert">
+          {error.message}
+        </p>
+      ) : null}
+      {saved ? (
+        <p className="field__hint mt-16" role="status">
+          {guarantor
+            ? 'Les informations du garant sont enregistrées.'
+            : 'Vous continuez sans garant.'}
         </p>
       ) : null}
     </div>

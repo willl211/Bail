@@ -162,7 +162,7 @@ export function ResetPasswordForm({ token }: { token: string | null }) {
             et le cache du routeur Next servirait la mise en page telle qu'elle
             était avant — en-tête d'un compte connecté sur une page qui ne l'est
             plus. */}
-        <a href="/dossier" className="btn mt-20">
+        <a href="/connexion" className="btn mt-20">
           Se connecter
         </a>
       </div>

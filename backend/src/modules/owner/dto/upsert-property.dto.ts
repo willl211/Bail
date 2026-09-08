@@ -10,7 +10,7 @@ import {
   Max,
   Min,
 } from 'class-validator';
-import { EnergyRating, GuarantorRequirement } from '@prisma/client';
+import { EnergyRating, GuarantorRequirement, PropertyType } from '@prisma/client';
 
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
@@ -39,6 +39,9 @@ export enum AcceptedContract {
  * Les montants circulent en CENTIMES, comme partout dans le schéma.
  */
 export class UpsertPropertyDto {
+  @IsOptional() @IsEnum(PropertyType)
+  propertyType?: PropertyType;
+
   @IsOptional() @Transform(trim) @IsString() @Length(3, 140)
   title?: string;
 

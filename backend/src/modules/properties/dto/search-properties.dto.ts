@@ -1,4 +1,5 @@
 import { Transform, Type } from 'class-transformer';
+import { PropertyType } from '@prisma/client';
 import { IsArray, IsBoolean, IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 /**
@@ -31,13 +32,27 @@ const toStringArray = ({ value }: { value: unknown }): string[] => {
 };
 
 export class SearchPropertiesDto {
-  /** Loyer maximum charges comprises, en euros (curseur 400 → 1 600 côté UI). */
+  /** Budget maximum en euros ; inclut les charges sauf demande explicite. */
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)
   @Max(100_000)
   maxRent?: number;
+
+  @IsOptional()
+  // Lire l'entrée brute : la conversion implicite globale de Nest transforme
+  // sinon la chaîne "false" en true avant l'exécution de ce transformateur.
+  @Transform(({ obj, key }: { obj: Record<string, unknown>; key: string }) => {
+    const value = obj[key];
+    return value === 'true' ? true : value === 'false' ? false : value;
+  })
+  @IsBoolean()
+  includeCharges?: boolean = true;
+
+  @IsOptional()
+  @IsEnum(PropertyType)
+  propertyType?: PropertyType;
 
   @IsOptional()
   @Type(() => Number)

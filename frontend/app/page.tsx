@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import Link from 'next/link';
 import { AnimatedCounter } from '@/components/animated-counter';
 import { HeroSearch } from '@/components/hero-search';
@@ -36,9 +37,9 @@ const OWNER_STEPS = [
 ];
 
 export default async function HomePage() {
-  const [featured, districts, market, subscription, all, user, savedReferences] =
-    await Promise.all([
-      getFeaturedProperties(3),
+  const [featured, districts, market, subscription, all, user, savedReferences] = await Promise.all(
+    [
+      getFeaturedProperties(4),
       getDistricts(),
       getMarketSnapshot(),
       getOwnerSubscriptionPricing(),
@@ -48,63 +49,77 @@ export default async function HomePage() {
       // ajouté à chaque bien : les routes publiques d'annonces restent
       // publiques et sans état.
       getSavedReferences(),
-    ]);
+    ],
+  );
 
   return (
     <>
-      <main className="page">
-        <div className="hero">
-          <div>
-            <div className="hero__eyebrow anim-rise">
-              <i /> Marché pilote — Metz Métropole
+      <main className="home-intro">
+        <div className="home-intro__backdrop" aria-hidden="true">
+          <Image
+            src="/images/whoma-mediterranean-hero.webp"
+            alt=""
+            fill
+            sizes="(max-width: 1080px) 2000px, 100vw"
+            loading="eager"
+            fetchPriority="high"
+            className="home-intro__image"
+          />
+        </div>
+        <div className="page home-intro__inner">
+          <div className="hero">
+            <div>
+              <div className="hero__eyebrow anim-rise">
+                <i /> Marché pilote — Metz Métropole
+              </div>
+
+              <h1 className="hero__title anim-rise anim-rise-1">
+                Le dossier une fois.
+                <br />
+                La candidature en un clic.
+              </h1>
+
+              <p className="hero__lead anim-rise anim-rise-2">
+                À Metz, un studio part en 48 heures. Votre dossier est déjà vérifié quand vous
+                postulez.
+              </p>
+
+              <div className="anim-rise anim-rise-3">
+                <HeroSearch districts={districts} />
+              </div>
+
+              <div className="hero__reassurance anim-rise anim-rise-4">
+                <span>Dossier vérifié sous 24 h</span>
+                <span>Aucune commission propriétaire</span>
+                <span>Honoraires annoncés avant de candidater</span>
+              </div>
             </div>
 
-            <h1 className="hero__title anim-rise anim-rise-1">
-              Le dossier une fois.
-              <br />
-              La candidature en un clic.
-            </h1>
+            <aside className="hero__aside anim-rise anim-rise-2">
+              <div className="panel panel--strong tick">
+                <div className="registry__head">
+                  <span className="label">Biens vérifiés · Moselle</span>
+                  <div className="registry__counter">
+                    <AnimatedCounter target={market.verifiedPropertyCount} />
+                  </div>
+                  <div className="bar mt-12">
+                    <span className="bar-fill" />
+                  </div>
+                </div>
 
-            <p className="hero__lead anim-rise anim-rise-2">
-              À Metz, un studio part en 48 heures. Votre dossier est déjà vérifié quand
-              vous postulez.
-            </p>
+                {market.metrics.map((metric) => (
+                  <div key={metric.key} className="registry__row">
+                    <span className="registry__key">{metric.label}</span>
+                    <span className="registry__value">{metric.value}</span>
+                  </div>
+                ))}
 
-            <div className="anim-rise anim-rise-3">
-              <HeroSearch districts={districts} />
-            </div>
-
-            <div className="hero__reassurance anim-rise anim-rise-4">
-              <span>Dossier vérifié sous 24 h</span>
-              <span>Aucune commission propriétaire</span>
-              <span>Honoraires annoncés avant de candidater</span>
-            </div>
+                <div className="registry__foot">
+                  <span className="badge badge--ok anim-pop">Vérification automatisée active</span>
+                </div>
+              </div>
+            </aside>
           </div>
-
-          <aside className="hero__aside anim-rise anim-rise-2">
-            <div className="panel panel--strong tick">
-              <div className="registry__head">
-                <span className="label">Biens vérifiés · Moselle</span>
-                <div className="registry__counter">
-                  <AnimatedCounter target={market.verifiedPropertyCount} />
-                </div>
-                <div className="bar mt-12">
-                  <span className="bar-fill" />
-                </div>
-              </div>
-
-              {market.metrics.map((metric) => (
-                <div key={metric.key} className="registry__row">
-                  <span className="registry__key">{metric.label}</span>
-                  <span className="registry__value">{metric.value}</span>
-                </div>
-              ))}
-
-              <div className="registry__foot">
-                <span className="badge badge--ok anim-pop">Vérification automatisée active</span>
-              </div>
-            </div>
-          </aside>
         </div>
       </main>
 
@@ -123,7 +138,7 @@ export default async function HomePage() {
             </Link>
           </div>
 
-          <div className="card-grid">
+          <div className="card-grid card-grid--featured">
             {featured.map((property) => (
               <PropertyCard
                 key={property.reference}
@@ -144,8 +159,8 @@ export default async function HomePage() {
               pas une commission.
             </h2>
             <p className="p">
-              Vous gardez la main sur la sélection. Nous vérifions identité, revenus et
-              cohérence avant que le dossier arrive chez vous.
+              Vous gardez la main sur la sélection. Nous vérifions identité, revenus et cohérence
+              avant que le dossier arrive chez vous.
             </p>
 
             {subscription.monthlyAmountCents !== null ? (
@@ -167,7 +182,14 @@ export default async function HomePage() {
             </div>
           </div>
 
-          <div className="panel panel--strong">
+          <div className="panel panel--strong owner-pitch__steps">
+            <Image
+              src="/images/whoma-owner-panel.webp"
+              alt=""
+              fill
+              sizes="(max-width: 720px) 100vw, 650px"
+              className="owner-pitch__image"
+            />
             {OWNER_STEPS.map((step) => (
               <div key={step.n} className="owner-step">
                 <span className="owner-step__n">{step.n}</span>

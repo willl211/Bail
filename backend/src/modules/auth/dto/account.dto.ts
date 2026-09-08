@@ -40,3 +40,13 @@ export class VerifyEmailDto {
   @MaxLength(200)
   token!: string;
 }
+
+export class ChangeEmailDto {
+  @Transform(normalizeEmail)
+  @IsEmail({}, { message: 'Adresse e-mail invalide.' })
+  @MaxLength(254)
+  email!: string;
+
+  @IsString() @MinLength(1) @MaxLength(200)
+  currentPassword!: string;
+}

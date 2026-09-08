@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import type { OwnerProfile } from '@/lib/api';
 import { saveOwnerProfile, type ProfileFailure } from '@/lib/owner-profile-client';
 
@@ -17,6 +18,7 @@ import { saveOwnerProfile, type ProfileFailure } from '@/lib/owner-profile-clien
  * conditionnent, et c'est à ce moment-là qu'elles manqueraient.
  */
 export function OwnerAddressForm({ initial }: { initial: OwnerProfile }) {
+  const router = useRouter();
   const [profile, setProfile] = useState(initial);
   const [form, setForm] = useState({
     addressLine: initial.addressLine ?? '',
@@ -39,6 +41,7 @@ export function OwnerAddressForm({ initial }: { initial: OwnerProfile }) {
     try {
       setProfile(await saveOwnerProfile(form));
       setSaved(true);
+      router.refresh();
     } catch (failure) {
       setError(failure as ProfileFailure);
     } finally {
@@ -47,9 +50,9 @@ export function OwnerAddressForm({ initial }: { initial: OwnerProfile }) {
   };
 
   return (
-    <div className="panel panel--strong pad-lg">
+    <section className="owner-account-section">
       <div className="flex jc-b ai-c gap-12 wrap">
-        <span className="label label--accent">Coordonnées du bailleur</span>
+        <span className="label">03 · Adresse postale</span>
         {profile.complete ? (
           <span className="badge badge--ok">Complètes</span>
         ) : (
@@ -57,7 +60,7 @@ export function OwnerAddressForm({ initial }: { initial: OwnerProfile }) {
         )}
       </div>
 
-      <h1 className="d3 mt-8">Votre adresse</h1>
+      <h2 className="h mt-8">Votre adresse de correspondance</h2>
       <p className="p-sm mt-12">
         Elle figure au bail, comme l’exige la loi du 6 juillet 1989 : c’est
         l’adresse à laquelle votre locataire pourra vous notifier un congé ou une
@@ -121,6 +124,6 @@ export function OwnerAddressForm({ initial }: { initial: OwnerProfile }) {
           )}
         </div>
       </form>
-    </div>
+    </section>
   );
 }

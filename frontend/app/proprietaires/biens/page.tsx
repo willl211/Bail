@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { OwnerAside } from '@/components/owner-aside';
+import { OwnerPropertyPhoto } from '@/components/owner-property-photo';
 import { getCurrentUser, getOwnerProfile, getOwnerProperties, getOwnerSummary } from '@/lib/api';
 import { VerifyEmailNotice } from '@/components/verify-email-notice';
 import type { OwnerProperty, PropertyStatus } from '@/lib/api';
@@ -25,7 +26,8 @@ function Holding({ property }: { property: OwnerProperty }) {
   const status = STATUS[property.status];
 
   return (
-    <Link href={`/proprietaires/biens/${property.reference}`} className="holding">
+    <Link href={`/proprietaires/biens/${property.reference}`} className="holding holding--photo">
+      <OwnerPropertyPhoto src={property.photoUrl} title={property.title} />
       <div>
         <div className="holding__title">{property.title}</div>
         <div className="holding__meta">

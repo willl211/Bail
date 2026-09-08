@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { ScrollProgress } from './scroll-progress';
+import { LogoutButton } from './logout-button';
 import { getCurrentUser, type CurrentUser } from '@/lib/api';
 
 interface NavLink {
@@ -32,10 +33,8 @@ function profileFor(user: CurrentUser | null): Profile {
     return {
       links: [
         { label: 'Rechercher', href: '/recherche' },
-        { label: 'Louer sans agence', href: '/proprietaires' },
       ],
-      secondary: { label: 'Se connecter', href: '/dossier' },
-      cta: { label: 'Créer mon dossier', href: '/dossier' },
+      cta: { label: 'Mon compte', href: '/connexion' },
     };
   }
 
@@ -115,6 +114,7 @@ export async function SiteHeader() {
               <span className="site-header__account-name">{profile.account.name}</span>
             </Link>
           ) : null}
+          {profile.internal ? <span className="site-header__logout"><LogoutButton /></span> : null}
         </nav>
       </div>
       <ScrollProgress />

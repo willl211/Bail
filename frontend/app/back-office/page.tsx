@@ -26,7 +26,7 @@ export const metadata: Metadata = { title: 'Back-office' };
  */
 export default async function BackofficePage() {
   const user = await getCurrentUser();
-  if (!user) redirect('/dossier');
+  if (!user) redirect('/connexion');
   if (user.role !== 'AGENT') redirect('/');
 
   const [summary, providers, files, properties, leases, visits, agents, journal] =

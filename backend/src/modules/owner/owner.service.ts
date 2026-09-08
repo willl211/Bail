@@ -16,6 +16,8 @@ import { Readable } from 'node:stream';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UpsertPropertyDto } from './dto/upsert-property.dto';
 import { UpdateOwnerProfileDto } from './dto/owner-profile.dto';
+import { UpdateOwnerContactDto } from './dto/owner-contact.dto';
+import { toPublicUser } from '../auth/auth.service';
 import { accountBlockers } from '../auth/account.checks';
 import { isAddressComplete } from './address.checks';
 import { propertyChecks } from './property.checks';
@@ -32,6 +34,7 @@ const MAX_PHOTOS = 12;
 
 /** Bien tel que son propriétaire le voit — statuts internes compris. */
 export interface OwnerPropertyItem {
+  photoUrl: string | null;
   reference: string;
   title: string;
   district: string;
@@ -74,6 +77,7 @@ export interface OwnerPropertyItem {
 /** Bien complet pour le formulaire de dépôt. */
 export interface OwnerPropertyDetail
   extends Omit<OwnerPropertyItem, 'addressLine' | 'district'> {
+  propertyType: Property['propertyType'];
   description: string;
   addressLine: string;
   districtSlug: string;
@@ -362,7 +366,7 @@ export class OwnerService {
         where: { ownerId },
         include: {
           district: true,
-          photos: { select: { id: true } },
+          photos: { select: { id: true, storageKey: true }, orderBy: { position: 'asc' } },
           documents: { select: { type: true } },
           _count: { select: { applications: true } },
         },
@@ -395,6 +399,7 @@ export class OwnerService {
         chargesCents: property.chargesCents,
         totalRentCents: property.rentCents + property.chargesCents,
         photoCount: property.photos.length,
+        photoUrl: property.photos[0] ? this.storage.publicUrl('public', property.photos[0].storageKey) : null,
         applicationCount: property._count.applications,
         savedCount: saved.get(property.id) ?? 0,
         publishedAt: property.publishedAt?.toISOString() ?? null,
@@ -427,6 +432,7 @@ export class OwnerService {
       reference: property.reference,
       title: property.title,
       description: property.description,
+      propertyType: property.propertyType,
       addressLine: property.addressLine,
       districtSlug: property.district.slug,
       district: property.district.name,
@@ -464,6 +470,7 @@ export class OwnerService {
         rejectionReason: document.rejectionReason,
       })),
       photoCount: property.photos.length,
+      photoUrl: property.photos[0] ? this.storage.publicUrl('public', property.photos[0].storageKey) : null,
       applicationCount: property._count.applications,
       savedCount: (await this.saved.countsByProperty([property.id])).get(property.id) ?? 0,
       publishedAt: property.publishedAt?.toISOString() ?? null,
@@ -517,6 +524,7 @@ export class OwnerService {
     const data: Prisma.PropertyUpdateInput = {};
 
     if (dto.title !== undefined) data.title = dto.title;
+    if (dto.propertyType !== undefined) data.propertyType = dto.propertyType;
     if (dto.description !== undefined) data.description = dto.description;
     if (dto.addressLine !== undefined) data.addressLine = dto.addressLine;
     if (dto.surfaceM2 !== undefined) data.surfaceM2 = dto.surfaceM2;
@@ -700,6 +708,13 @@ export class OwnerService {
       select: { addressLine: true, postalCode: true, city: true },
     });
     return { ...owner, complete: isAddressComplete(owner) };
+  }
+
+  async updateContact(ownerId: string, dto: UpdateOwnerContactDto) {
+    return toPublicUser(await this.prisma.user.update({
+      where: { id: ownerId },
+      data: { firstName: dto.firstName, lastName: dto.lastName, phone: dto.phone || null },
+    }));
   }
 
   async updateProfile(

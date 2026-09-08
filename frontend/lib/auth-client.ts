@@ -98,6 +98,14 @@ export function confirmEmail(token: string) {
   return post<{ email: string }>('/auth/email/verification/confirm', { token });
 }
 
+export function requestEmailChange(email: string, currentPassword: string) {
+  return post<void>('/auth/email/change', { email, currentPassword });
+}
+
+export function confirmEmailChange(token: string) {
+  return post<{ email: string }>('/auth/email/change/confirm', { token });
+}
+
 // --------------------------------------------------- Mot de passe oublié
 
 /**

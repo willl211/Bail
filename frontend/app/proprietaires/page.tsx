@@ -1,13 +1,14 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
-import { OwnerAuthForm } from '@/components/owner-auth-form';
+import { AccountRegistrationForm } from '@/components/account-registration-form';
+import { AuthScenery } from '@/components/auth-scenery';
 import { getCurrentUser, getMarketSnapshot, getOwnerSubscriptionPricing } from '@/lib/api';
 import * as fmt from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'Louer sans agence',
+  title: 'Créer mon espace propriétaire',
   description:
     'Publiez votre bien à Metz avec un abonnement mensuel, sans commission sur le loyer. Dossiers vérifiés, bail et signature inclus.',
 };
@@ -46,6 +47,8 @@ const BENEFITS = [
 export default async function OwnersPage() {
   const user = await getCurrentUser();
   if (user?.role === 'OWNER') redirect('/proprietaires/biens');
+  if (user?.role === 'TENANT') redirect('/dossier');
+  if (user?.role === 'AGENT') redirect('/back-office');
 
   const [subscription, market] = await Promise.all([
     getOwnerSubscriptionPricing().catch(() => null),
@@ -56,19 +59,19 @@ export default async function OwnersPage() {
 
   return (
     <main className="page">
-      <div className="auth">
+      <div className="auth auth--welcome">
         <div className="auth__form">
           <span className="label label--accent">Espace propriétaire</span>
-          <h1 className="d2 mt-12">
-            Publiez votre bien
-            <br />
-            sans passer par une agence.
-          </h1>
+          <h1 className="d2 mt-12">Votre bien, entre vos mains.</h1>
 
-          <OwnerAuthForm />
+          <p className="p mt-16">
+            Créez votre espace propriétaire pour publier un logement et suivre vos
+            candidatures.
+          </p>
+          <AccountRegistrationForm role="OWNER" />
         </div>
 
-        <div className="auth__side">
+        <AuthScenery title="Louer, l’esprit tranquille.">
           <span className="label label--ink">Ce que vous obtenez</span>
           <div className="mt-16" style={{ maxWidth: 440 }}>
             {BENEFITS.map((benefit) => (
@@ -76,7 +79,8 @@ export default async function OwnersPage() {
                 <span className="bullet__i">{benefit.n}</span>
                 <div>
                   <div className="h-sm">
-                    {benefit.n === '01' && subscription?.monthlyAmountCents !== null &&
+                    {benefit.n === '01' &&
+                    subscription?.monthlyAmountCents !== null &&
                     subscription?.monthlyAmountCents !== undefined
                       ? `${fmt.euros(subscription.monthlyAmountCents)} par mois et par bien`
                       : benefit.title}
@@ -104,7 +108,7 @@ export default async function OwnersPage() {
               </div>
             </div>
           ) : null}
-        </div>
+        </AuthScenery>
       </div>
     </main>
   );

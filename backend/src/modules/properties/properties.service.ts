@@ -74,9 +74,8 @@ export class PropertiesService {
   private buildWhere(query: SearchPropertiesDto): Prisma.PropertyWhereInput {
     const where: Prisma.PropertyWhereInput = visiblePropertyWhere();
 
-    // Le filtre de loyer porte sur le loyer charges comprises, donc sur une
-    // somme de deux colonnes : il est appliqué dans `search()` via une requête
-    // SQL préalable, Prisma ne sachant pas comparer deux colonnes entre elles.
+    // Le budget est appliqué dans search(), avec ou sans les charges.
+    if (query.propertyType) where.propertyType = query.propertyType;
 
     if (query.minSurface) {
       where.surfaceM2 = { gte: query.minSurface };
@@ -133,15 +132,17 @@ export class PropertiesService {
     const where = this.buildWhere(query);
     const asked = query.sort ?? PropertySort.COMPATIBILITY;
 
-    // Le filtre « loyer charges comprises » porte sur une somme de colonnes :
-    // on restreint d'abord l'ensemble des identifiants avec une requête SQL,
-    // puis on laisse Prisma gérer le reste des filtres et la pagination.
+    // Expression SQL fixe : les montants restent liés, jamais concaténés.
+    // Les autres critères et la visibilité restent appliqués par Prisma.
     if (query.maxRent !== undefined || query.minRent !== undefined) {
       const max = query.maxRent !== undefined ? query.maxRent * 100 : Number.MAX_SAFE_INTEGER;
       const min = query.minRent !== undefined ? query.minRent * 100 : 0;
+      const budget = query.includeCharges === false
+        ? Prisma.sql`"rentCents"`
+        : Prisma.sql`("rentCents" + "chargesCents")`;
       const rows = await this.prisma.$queryRaw<{ id: string }[]>`
         SELECT id FROM properties
-        WHERE ("rentCents" + "chargesCents") BETWEEN ${min} AND ${max}
+        WHERE ${budget} BETWEEN ${min} AND ${max}
       `;
       where.id = { in: rows.map((row) => row.id) };
     }

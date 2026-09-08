@@ -20,6 +20,8 @@ type SearchParams = Record<string, string | string[] | undefined>;
 function toApiParams(searchParams: SearchParams): URLSearchParams {
   const allowed = [
     'maxRent',
+    'includeCharges',
+    'propertyType',
     'minRent',
     'minSurface',
     'minRooms',
@@ -73,10 +75,10 @@ export default async function SearchPage({
       <section>
         <div className="results__head">
           <div>
-            <h1 className="section__title">Biens à louer · Metz</h1>
+            <h1 className="section__title" id="search-results-title" tabIndex={-1}>Biens à louer · Metz</h1>
             <span className="results__count">
               {results.total} {results.total > 1 ? 'résultats' : 'résultat'}
-              {maxRent ? ` · loyer max ${Number(maxRent).toLocaleString('fr-FR')} €` : null}
+              {maxRent ? ` · loyer max ${Number(maxRent).toLocaleString('fr-FR')} € ${params.get('includeCharges') === 'false' ? 'hors charges' : 'CC'}` : null}
             </span>
           </div>
 
@@ -96,10 +98,13 @@ export default async function SearchPage({
           </p>
         ) : null}
 
+        {params.get('includeCharges') === 'false' ? (
+          <p className="p-sm mt-12">Budget filtré hors charges. Les loyers affichés incluent les charges.</p>
+        ) : null}
+
         {results.items.length === 0 ? (
           <div className="results__empty">
-            Aucun bien ne correspond à ces critères. Élargissez le loyer ou ajoutez un
-            quartier.
+            Aucun bien ne correspond à ces critères. Modifiez vos filtres pour élargir la recherche.
           </div>
         ) : (
           results.items.map((property) => (

@@ -26,6 +26,7 @@ import { OwnerApplicationsService } from './applications.service';
 import { OwnerService } from './owner.service';
 import { UpsertPropertyDto } from './dto/upsert-property.dto';
 import { UpdateOwnerProfileDto } from './dto/owner-profile.dto';
+import { UpdateOwnerContactDto } from './dto/owner-contact.dto';
 import { RejectApplicationDto } from './dto/reject-application.dto';
 
 /**
@@ -73,6 +74,11 @@ export class OwnerController {
   @Patch('profile')
   updateProfile(@CurrentUser() user: PublicUser, @Body() dto: UpdateOwnerProfileDto) {
     return this.owner.updateProfile(user.id, dto);
+  }
+
+  @Patch('contact')
+  updateContact(@CurrentUser() user: PublicUser, @Body() dto: UpdateOwnerContactDto) {
+    return this.owner.updateContact(user.id, dto);
   }
 
   /**

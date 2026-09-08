@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { SavedScreen } from '@/components/saved-screen';
-import { getCurrentUser, getSavedProperties } from '@/lib/api';
+import { getCurrentUser, getSavedProperties, getTenantFile } from '@/lib/api';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,5 +15,6 @@ export default async function SavedPage() {
   if (!user) redirect('/dossier');
   if (user.role !== 'TENANT') redirect('/');
 
-  return <SavedScreen user={user} items={await getSavedProperties()} />;
+  const [items, file] = await Promise.all([getSavedProperties(), getTenantFile()]);
+  return <SavedScreen user={user} items={items} file={file} />;
 }

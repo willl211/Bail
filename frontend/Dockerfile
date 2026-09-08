@@ -49,15 +49,13 @@ ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
 # Sortie autonome : Next a déjà rassemblé le serveur et les seules dépendances
-# qu'il atteint réellement. Les fichiers statiques, eux, ne font pas partie de
-# cette trace et se copient à part.
-#
-# Il n'y a pas de dossier `frontend/public` : le produit ne sert aucun fichier
-# statique déposé à la main — les photos d'annonces viennent du stockage objet,
-# et les icônes sont dessinées en SVG dans les composants. Le jour où il en
-# faudrait un, il se copierait ici.
+# qu'il atteint réellement. Ni les fichiers statiques ni le dossier public ne
+# font partie de cette trace — ils se copient à part, et les oublier ne casse
+# rien à la construction : les images manquent simplement à l'exécution, page
+# par page, sans qu'aucune erreur ne le signale.
 COPY --from=build /app/frontend/.next/standalone ./
 COPY --from=build /app/frontend/.next/static ./frontend/.next/static
+COPY --from=build /app/frontend/public ./frontend/public
 
 USER node
 

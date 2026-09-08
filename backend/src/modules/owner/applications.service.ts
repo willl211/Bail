@@ -13,9 +13,12 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { EVENT } from '../mail/event.templates';
+import { StorageService } from '../storage/storage.service';
 
 /** Vignette par bien : combien de candidatures, et sur quel loyer. */
 export interface ApplicationTile {
+  addressLine: string;
+  photoUrl: string | null;
   reference: string;
   title: string;
   district: string;
@@ -118,6 +121,7 @@ export class OwnerApplicationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mail: MailService,
+    private readonly storage: StorageService,
   ) {}
 
   async list(ownerId: string): Promise<OwnerApplicationsView> {
@@ -128,6 +132,8 @@ export class OwnerApplicationsService {
         select: {
           reference: true,
           title: true,
+          addressLine: true,
+          photos: { select: { storageKey: true }, orderBy: { position: 'asc' }, take: 1 },
           status: true,
           rentCents: true,
           chargesCents: true,
@@ -184,6 +190,8 @@ export class OwnerApplicationsService {
       visitsScheduledCount,
       averageResponseHours: averageResponseHours(applications),
       tiles: properties.map((property) => ({
+        addressLine: property.addressLine,
+        photoUrl: property.photos[0] ? this.storage.publicUrl('public', property.photos[0].storageKey) : null,
         reference: property.reference,
         title: property.title,
         district: property.district.name,

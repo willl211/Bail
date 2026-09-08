@@ -35,6 +35,12 @@ const formatDate = (iso: string) =>
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const ACCEPT = 'application/pdf,image/jpeg,image/png,image/webp';
+const GROUP = {
+  identity: 'Identité',
+  income: 'Revenus',
+  housing: 'Domicile',
+  guarantor: 'Garant',
+};
 
 /**
  * Liste des pièces attendues.
@@ -91,8 +97,7 @@ export function TenantDocuments({
           const full = slot.documents.length >= slot.max;
           const verdict =
             slot.documents.find((document) => document.rejectionReason)?.rejectionReason ??
-            slot.documents.find((document) => document.verificationNote)
-              ?.verificationNote ??
+            slot.documents.find((document) => document.verificationNote)?.verificationNote ??
             null;
 
           return (
@@ -104,6 +109,7 @@ export function TenantDocuments({
                     {slot.required ? null : <span className="doc__opt">facultatif</span>}
                   </div>
                   <div className="doc__m">
+                    {GROUP[slot.group]} ·{' '}
                     {slot.max > 1
                       ? `${slot.hint} · ${slot.documents.length} / ${slot.max} déposés`
                       : slot.hint}
@@ -113,9 +119,7 @@ export function TenantDocuments({
                 <div className="doc__c">{verdict ?? '—'}</div>
 
                 <div className="doc__a">
-                  <span className={STATUS[slot.status].tone}>
-                    {STATUS[slot.status].label}
-                  </span>
+                  <span className={STATUS[slot.status].tone}>{STATUS[slot.status].label}</span>
                   {!readOnly && !full ? (
                     <>
                       <button
@@ -139,6 +143,17 @@ export function TenantDocuments({
                   ) : null}
                 </div>
               </div>
+
+              {slot.status === 'MISSING' ? (
+                <p className="tenant-document-guidance">
+                  Déposez le justificatif demandé pour compléter cette rubrique.
+                </p>
+              ) : slot.status === 'REJECTED' || slot.status === 'EXPIRED' ? (
+                <p className="tenant-document-guidance tenant-document-guidance--attention">
+                  {slot.status === 'EXPIRED' ? 'Ce document n’est plus à jour. ' : ''}Retirez
+                  la pièce concernée, puis déposez une nouvelle version lisible et à jour.
+                </p>
+              ) : null}
 
               {slot.documents.length > 0 ? (
                 <ul className="doc__files">
@@ -170,9 +185,7 @@ export function TenantDocuments({
                           <button
                             type="button"
                             className="link"
-                            onClick={() =>
-                              run(slot.type, () => deleteDocument(document.id))
-                            }
+                            onClick={() => run(slot.type, () => deleteDocument(document.id))}
                             disabled={pending}
                           >
                             Retirer

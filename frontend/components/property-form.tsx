@@ -43,6 +43,7 @@ const toNumber = (value: string) => {
 };
 
 interface FormState {
+  propertyType: 'APARTMENT' | 'HOUSE' | '';
   title: string;
   addressLine: string;
   districtSlug: string;
@@ -62,6 +63,7 @@ interface FormState {
 
 function initialState(property: OwnerPropertyDetail | null, districts: District[]): FormState {
   return {
+    propertyType: property?.propertyType ?? '',
     title: property && property.title !== 'Nouveau bien' ? property.title : '',
     addressLine: property?.addressLine ?? '',
     districtSlug: property?.districtSlug ?? districts[0]?.slug ?? '',
@@ -129,6 +131,7 @@ export function PropertyForm({
 
   /** N'envoie que ce qui est renseigné : un brouillon peut rester incomplet. */
   const toPayload = (): PropertyDraft => ({
+    ...(form.propertyType ? { propertyType: form.propertyType } : {}),
     ...(form.title ? { title: form.title } : {}),
     description: form.description,
     addressLine: form.addressLine,
@@ -198,6 +201,14 @@ export function PropertyForm({
         <h2 className="h mb-12">Le bien</h2>
         <div className="panel" style={{ padding: '19px 20px' }}>
           <div className="form form--2">
+            <label className="field form__full">
+              <span className="label label--ink">Type de logement</span>
+              <select className="field__box" value={form.propertyType} onChange={set('propertyType')} disabled={readOnly}>
+                <option value="" disabled>À renseigner</option>
+                <option value="APARTMENT">Appartement</option>
+                <option value="HOUSE">Maison</option>
+              </select>
+            </label>
             <label className="field form__full">
               <span className="label label--ink">Titre de l’annonce</span>
               <input

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SearchFilters, SURFACE_DEFAULT, SURFACE_MAX } from './search-filters';
 import { routerMock, setSearchParams } from '../test/setup-components';
@@ -16,6 +16,82 @@ const query = () => {
   const url = (calls[calls.length - 1]?.[0] as string) ?? '';
   return url.includes('?') ? url.slice(url.indexOf('?') + 1) : '';
 };
+
+describe('SearchFilters — critères combinés', () => {
+  it('combine aussi deux changements reçus avant le prochain rendu React', () => {
+    render(<SearchFilters districts={districts} />);
+    act(() => {
+      screen.getByRole('button', { name: 'Maison' }).click();
+      screen.getByRole('button', { name: '2 pièces' }).click();
+    });
+    expect(Object.fromEntries(new URLSearchParams(query()))).toEqual({ propertyType: 'HOUSE', minRooms: '2', maxRooms: '2' });
+  });
+  it('combine les curseurs et les nouveaux critères avant le retour du serveur', async () => {
+    setSearchParams('sort=recent&page=3');
+    render(<SearchFilters districts={districts} />);
+    fireEvent.change(screen.getByLabelText(/loyer maximum/i), { target: { value: '900' } });
+    fireEvent.change(surface(), { target: { value: '40' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Charges comprises' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Maison' }));
+    fireEvent.click(screen.getByRole('button', { name: '2 pièces' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /Sablon/ }));
+    const params = new URLSearchParams(query());
+    expect(Object.fromEntries(params)).toEqual({ sort: 'recent', maxRent: '900', minSurface: '40', includeCharges: 'false', propertyType: 'HOUSE', minRooms: '2', maxRooms: '2', districts: 'sablon' });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 300)); });
+    expect(new URLSearchParams(query()).get('propertyType')).toBe('HOUSE');
+  });
+
+  it('distingue deux pièces exactement et quatre pièces ou plus', () => {
+    setSearchParams('minRooms=2&maxRooms=2');
+    render(<SearchFilters districts={districts} />);
+    expect(screen.getByRole('button', { name: '2 pièces' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: '4 pièces et plus' }));
+    expect(query()).toBe('minRooms=4');
+    fireEvent.click(screen.getByRole('button', { name: 'Toutes les pièces' }));
+    expect(query()).toBe('');
+  });
+
+  it('réinitialise aussi la temporisation, le type et les charges en conservant le tri', async () => {
+    setSearchParams('propertyType=HOUSE&includeCharges=false&minRooms=4&sort=recent');
+    render(<SearchFilters districts={districts} />);
+    fireEvent.change(surface(), { target: { value: '75' } });
+    fireEvent.click(screen.getByRole('button', { name: /réinitialiser/i }));
+    expect(screen.getByRole('checkbox', { name: 'Charges comprises' })).toBeChecked();
+    expect(query()).toBe('sort=recent');
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 300)); });
+    expect(query()).toBe('sort=recent');
+  });
+
+  it('restaure une autre URL et annule une modification en attente', async () => {
+    const { rerender } = render(<SearchFilters districts={districts} />);
+    fireEvent.change(surface(), { target: { value: '75' } });
+    setSearchParams('propertyType=HOUSE&minSurface=30&includeCharges=false');
+    rerender(<SearchFilters districts={districts} />);
+    expect(surface()).toHaveValue('30');
+    expect(screen.getByRole('button', { name: 'Maison' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('checkbox', { name: 'Charges comprises' })).not.toBeChecked();
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 300)); });
+    expect(routerMock.replace).not.toHaveBeenCalled();
+  });
+
+  it('conserve le dernier choix quand une réponse précédente arrive', () => {
+    const { rerender } = render(<SearchFilters districts={districts} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Maison' }));
+    const first = query();
+    fireEvent.click(screen.getByRole('button', { name: '2 pièces' }));
+    setSearchParams(first);
+    rerender(<SearchFilters districts={districts} />);
+    expect(screen.getByRole('button', { name: '2 pièces' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('un plafond explicite de 1 400 € reste un filtre', () => {
+    setSearchParams('maxRent=1400');
+    render(<SearchFilters districts={districts} />);
+    expect(screen.getByLabelText(/loyer maximum/i)).toHaveAttribute('aria-valuetext', '1 400 €');
+    fireEvent.click(screen.getByRole('button', { name: 'Sans plafond' }));
+    expect(query()).toBe('');
+  });
+});
 
 /**
  * Panneau de filtres, curseur de surface.

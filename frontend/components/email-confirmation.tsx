@@ -117,7 +117,7 @@ export function EmailConfirmation({ token }: { token: string | null }) {
                 >
                   {resent === 'sending' ? 'Envoi…' : 'M’envoyer un nouveau lien'}
                 </button>
-                <Link href="/dossier" className="btn btn--ghost">
+                <Link href="/connexion" className="btn btn--ghost">
                   Se connecter
                 </Link>
               </div>

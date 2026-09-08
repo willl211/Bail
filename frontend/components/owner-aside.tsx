@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import type { CurrentUser, OwnerSummary } from '@/lib/api';
 import * as fmt from '@/lib/format';
 import { LogoutButton } from './logout-button';
@@ -46,8 +47,13 @@ export function OwnerAside({
   ];
 
   return (
-    <aside className="aside">
+    <aside className="aside owner-aside">
+      <div className="owner-aside__scene" aria-hidden="true">
+        <Image src="/images/whoma-owner-panel.webp" alt="" fill sizes="(max-width: 1080px) 100vw, 240px" />
+        <span>Chez vous, simplement.</span>
+      </div>
       <div className="aside__who">
+        <span className="owner-aside__initials" aria-hidden="true">{user.firstName.charAt(0)}{user.lastName.charAt(0)}</span>
         <span className="label label--accent">Propriétaire</span>
         <div className="aside__name">
           {user.firstName} {user.lastName}
@@ -55,7 +61,7 @@ export function OwnerAside({
         <div className="aside__meta">{user.email}</div>
       </div>
 
-      <nav className="aside__nav">
+      <nav className="aside__nav" aria-label="Espace propriétaire">
         {items.map((item) => (
           <Link
             key={item.key}

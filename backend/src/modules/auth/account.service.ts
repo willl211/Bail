@@ -4,15 +4,18 @@ import {
   Injectable,
   Logger,
   UnauthorizedException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AuthTokenPurpose, type User } from '@prisma/client';
+import { AuthTokenPurpose, Prisma, type User } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import {
   TEMPLATE,
   emailVerification,
+  emailChange,
+  emailChanged,
   passwordChanged,
   passwordReset,
 } from '../mail/mail.templates';
@@ -63,6 +66,7 @@ export class AccountService {
     purpose: AuthTokenPurpose,
     ttlMs: number,
     ipAddress?: string,
+    emailTarget?: { targetEmail: string; sourceEmail: string },
   ): Promise<string> {
     const secret = newSecret();
 
@@ -78,6 +82,7 @@ export class AccountService {
           userId,
           expiresAt: new Date(Date.now() + ttlMs),
           ipAddress,
+          ...emailTarget,
         },
       }),
     ]);
@@ -182,6 +187,116 @@ export class AccountService {
     return { email: user.email };
   }
 
+  // -------------------------------------------------- Changement d’adresse e-mail
+
+  async requestEmailChange(
+    userId: string,
+    email: string,
+    currentPassword: string,
+  ): Promise<void> {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    if (!user.passwordHash || !(await bcrypt.compare(currentPassword, user.passwordHash))) {
+      throw new UnauthorizedException('Mot de passe actuel incorrect.');
+    }
+    if (email === user.email)
+      throw new BadRequestException('Cette adresse est déjà celle de votre compte.');
+    if (await this.prisma.user.findUnique({ where: { email } }))
+      throw new ConflictException('Cette adresse ne peut pas être utilisée.');
+    const requests = await this.prisma.authToken.count({
+      where: {
+        userId,
+        purpose: AuthTokenPurpose.EMAIL_CHANGE,
+        createdAt: { gte: new Date(Date.now() - 3600000) },
+      },
+    });
+    if (requests >= MAX_SENDS_PER_HOUR)
+      throw new ConflictException('Trop de demandes. Réessayez dans une heure.');
+    const secret = await this.issueToken(
+      userId,
+      AuthTokenPurpose.EMAIL_CHANGE,
+      24 * 3600000,
+      undefined,
+      { targetEmail: email, sourceEmail: user.email },
+    );
+    const sent = await this.mail.send({
+      template: TEMPLATE.emailChange,
+      to: email,
+      userId,
+      message: emailChange({
+        firstName: user.firstName,
+        url: `${this.siteUrl}/changement-email?jeton=${encodeURIComponent(secret)}`,
+      }),
+    });
+    if (!sent) {
+      await this.prisma.authToken.updateMany({
+        where: { tokenHash: hashSecret(secret) },
+        data: { consumedAt: new Date() },
+      });
+      throw new ServiceUnavailableException(
+        'Le message n’a pas pu être envoyé. Votre adresse actuelle reste inchangée ; réessayez plus tard.',
+      );
+    }
+  }
+
+  async confirmEmailChange(secret: string): Promise<{ email: string }> {
+    const invalid = () =>
+      new BadRequestException(
+        'Ce lien n’est plus valable. Demandez un nouveau changement depuis Mon compte.',
+      );
+    let changed: { email: string; oldEmail: string; userId: string };
+    try {
+      changed = await this.prisma.$transaction(async (tx) => {
+        const token = await tx.authToken.findUnique({
+          where: { tokenHash: hashSecret(secret) },
+          include: { user: true },
+        });
+        const now = new Date();
+        if (
+          !token ||
+          token.purpose !== AuthTokenPurpose.EMAIL_CHANGE ||
+          !token.targetEmail ||
+          !token.sourceEmail ||
+          token.consumedAt ||
+          token.expiresAt <= now ||
+          !token.user.isActive
+        )
+          throw invalid();
+        const claim = await tx.authToken.updateMany({
+          where: { id: token.id, consumedAt: null, expiresAt: { gt: now } },
+          data: { consumedAt: now },
+        });
+        if (claim.count !== 1) throw invalid();
+        const updated = await tx.user.updateMany({
+          where: { id: token.userId, email: token.sourceEmail, isActive: true },
+          data: { email: token.targetEmail, emailVerifiedAt: now },
+        });
+        if (updated.count !== 1) throw invalid();
+        await tx.authToken.updateMany({
+          where: { userId: token.userId, consumedAt: null },
+          data: { consumedAt: now },
+        });
+        await tx.session.updateMany({
+          where: { userId: token.userId, revokedAt: null },
+          data: { revokedAt: now },
+        });
+        return { email: token.targetEmail, oldEmail: token.sourceEmail, userId: token.userId };
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
+        throw new ConflictException(
+          'Cette adresse ne peut plus être utilisée. Demandez un nouveau changement.',
+        );
+      throw error;
+    }
+    await this.mail.send({
+      template: TEMPLATE.emailChanged,
+      to: changed.oldEmail,
+      userId: changed.userId,
+      message: emailChanged(),
+    });
+    return { email: changed.email };
+  }
+
   // -------------------------------------------------- Mot de passe oublié
 
   /**
@@ -272,6 +387,7 @@ export class AccountService {
     );
 
     await this.prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
+    await this.prisma.authToken.updateMany({ where: { userId: user.id, purpose: AuthTokenPurpose.EMAIL_CHANGE, consumedAt: null }, data: { consumedAt: new Date() } });
     const revokedSessions = await this.auth.revokeAllSessions(user.id);
 
     await this.mail.send({

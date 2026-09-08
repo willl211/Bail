@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { OwnerAddressForm } from '@/components/owner-address-form';
+import { OwnerAccountForm } from '@/components/owner-account-form';
 import { OwnerAside } from '@/components/owner-aside';
 import { VerifyEmailNotice } from '@/components/verify-email-notice';
 import { getCurrentUser, getOwnerProfile, getOwnerSummary } from '@/lib/api';
@@ -26,7 +27,11 @@ export default async function OwnerAccountPage() {
         <OwnerAside user={user} summary={summary} current="account" />
 
         <div className="body">
+          <div className="page__head"><div><span className="label label--accent">Espace propriétaire</span><h1 className="d3 mt-8">Mon compte</h1><p className="p-sm mt-8">Vos informations, vos coordonnées et votre adresse de connexion.</p></div></div>
+          <div className="owner-account">
+          <OwnerAccountForm user={user} />
           <OwnerAddressForm initial={profile} />
+          </div>
         </div>
       </div>
     </div>

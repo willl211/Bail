@@ -767,6 +767,7 @@ async function main() {
     const values = {
       ownerId: owner.id,
       title: seed.title,
+      propertyType: 'APARTMENT' as const,
       description: seed.description,
       addressLine: seed.addressLine,
       districtId,

@@ -1,6 +1,6 @@
 'use client';
 
-import type { OwnerProfile } from '@/lib/api';
+import type { CurrentUser, OwnerProfile } from '@/lib/api';
 
 /**
  * Enregistrement des coordonnées du bailleur, depuis le navigateur.
@@ -14,14 +14,10 @@ export interface ProfileFailure {
   message: string;
 }
 
-export async function saveOwnerProfile(payload: {
-  addressLine: string;
-  postalCode: string;
-  city: string;
-}): Promise<OwnerProfile> {
+async function save<T>(path: string, payload: unknown): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(`${API_URL}/owner/profile`, {
+    response = await fetch(`${API_URL}${path}`, {
       method: 'PATCH',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -45,5 +41,13 @@ export async function saveOwnerProfile(payload: {
     throw { message } satisfies ProfileFailure;
   }
 
-  return (await response.json()) as OwnerProfile;
+  return (await response.json()) as T;
+}
+
+export function saveOwnerProfile(payload: { addressLine: string; postalCode: string; city: string }) {
+  return save<OwnerProfile>('/owner/profile', payload);
+}
+
+export function saveOwnerContact(payload: { firstName: string; lastName: string; phone: string }) {
+  return save<CurrentUser>('/owner/contact', payload);
 }

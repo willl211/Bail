@@ -48,9 +48,20 @@ export function TenantProfileForm({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<TenantFailure | null>(null);
   const [saved, setSaved] = useState(false);
+  const [editing, setEditing] = useState(false);
+
+  const reset = () => {
+    setSituation(file.contractType ?? '');
+    setEmployer(file.employerName ?? '');
+    setIncome(
+      file.netMonthlyIncomeCents === null ? '' : String(file.netMonthlyIncomeCents / 100),
+    );
+    setError(null);
+  };
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (readOnly || pending) return;
     setPending(true);
     setError(null);
     setSaved(false);
@@ -71,6 +82,7 @@ export function TenantProfileForm({
         }),
       );
       setSaved(true);
+      setEditing(false);
     } catch (failure) {
       setError(failure as TenantFailure);
     } finally {
@@ -78,8 +90,70 @@ export function TenantProfileForm({
     }
   };
 
+  if (!editing || readOnly) {
+    return (
+      <div className="tenant-profile-summary">
+        <dl className="tenant-fact-sheet">
+          <div>
+            <dt>Situation professionnelle</dt>
+            <dd>
+              {SITUATIONS.find((item) => item.value === file.contractType)?.label ??
+                'À renseigner'}
+            </dd>
+          </div>
+          <div>
+            <dt>{file.contractType === 'STUDENT' ? 'Établissement' : 'Employeur'}</dt>
+            <dd>{file.employerName || 'Non renseigné'}</dd>
+          </div>
+          <div>
+            <dt>Revenus nets mensuels</dt>
+            <dd>
+              {file.netMonthlyIncomeCents === null
+                ? 'À renseigner'
+                : `${fmt.euros(file.netMonthlyIncomeCents)} / mois`}
+            </dd>
+          </div>
+          <div>
+            <dt>Loyer conseillé, charges comprises</dt>
+            <dd>
+              {file.maxRentCents === null
+                ? 'À estimer avec vos revenus'
+                : `${fmt.euros(file.maxRentCents)} / mois`}
+            </dd>
+          </div>
+        </dl>
+        {readOnly ? (
+          <p className="field__hint">Consultation seule pendant le contrôle du dossier.</p>
+        ) : (
+          <button
+            type="button"
+            className="btn btn--ghost btn-sm"
+            onClick={() => {
+              reset();
+              setSaved(false);
+              setEditing(true);
+            }}
+          >
+            {file.contractType && file.netMonthlyIncomeCents !== null
+              ? 'Modifier ma situation'
+              : 'Renseigner ma situation'}
+          </button>
+        )}
+        {saved ? (
+          <p role="status" className="field__hint mt-12">
+            Votre situation a été enregistrée.
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <form className="form form--2" onSubmit={submit} noValidate>
+      <p className="form__full tenant-edit-note">
+        Un changement de situation professionnelle peut modifier les pièces demandées et
+        relancer le contrôle du dossier.
+      </p>
       <label className="field">
         <span className="label label--ink">Situation</span>
         <select
@@ -98,9 +172,7 @@ export function TenantProfileForm({
             </option>
           ))}
         </select>
-        <span className="field__hint">
-          Elle détermine les pièces qu’on vous demande.
-        </span>
+        <span className="field__hint">Elle détermine les pièces qu’on vous demande.</span>
       </label>
 
       <label className="field">
@@ -142,8 +214,8 @@ export function TenantProfileForm({
           {file.maxRentCents === null ? '—' : `${fmt.euros(file.maxRentCents)} CC`}
         </div>
         <span className="field__hint">
-          Le tiers de vos revenus : c’est le plafond que retiennent la plupart
-          des propriétaires.
+          Le tiers de vos revenus : c’est le plafond que retiennent la plupart des
+          propriétaires.
         </span>
       </div>
 
@@ -157,6 +229,17 @@ export function TenantProfileForm({
         <div className="form__full flex gap-12 wrap ai-c">
           <button type="submit" className="btn btn-sm" disabled={pending}>
             {pending ? 'Enregistrement…' : 'Enregistrer'}
+          </button>
+          <button
+            type="button"
+            className="link"
+            disabled={pending}
+            onClick={() => {
+              reset();
+              setEditing(false);
+            }}
+          >
+            Annuler
           </button>
           {saved ? <span className="label label--accent">Enregistré</span> : null}
         </div>

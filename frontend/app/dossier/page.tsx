@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
-import { TenantAuthForm } from '@/components/tenant-auth-form';
+import { AccountRegistrationForm } from '@/components/account-registration-form';
+import { AuthScenery } from '@/components/auth-scenery';
+import { accountEntry } from '@/lib/account-navigation';
 import { TenantFileScreen } from '@/components/tenant-file-screen';
 import { getCurrentUser, getMarketSnapshot, getTenantFile } from '@/lib/api';
 
@@ -59,7 +61,7 @@ export default async function TenantFilePage({
   // Un propriétaire n'a pas de dossier locataire : l'API le lui refuserait
   // (403), autant le renvoyer chez lui plutôt que de lui montrer une erreur.
   if (user?.role === 'OWNER') redirect('/proprietaires/biens');
-  if (user?.role === 'AGENT') redirect('/');
+  if (user?.role === 'AGENT') redirect('/back-office');
 
   if (user) {
     if (returnTo) redirect(returnTo);
@@ -74,7 +76,7 @@ export default async function TenantFilePage({
 
   return (
     <main className="page">
-      <div className="auth">
+      <div className="auth auth--welcome">
         <div className="auth__form">
           <span className="label label--accent">Espace locataire</span>
           <h1 className="d2 mt-12">
@@ -90,14 +92,18 @@ export default async function TenantFilePage({
                 : 'Vos pièces une seule fois, vérifiées par whoma. Ensuite, chaque candidature part en un clic.'}
           </p>
 
-          <TenantAuthForm redirectTo={returnTo ?? undefined} />
+          <AccountRegistrationForm
+            role="TENANT"
+            redirectTo={returnTo ?? undefined}
+            loginHref={accountEntry('/connexion', params)}
+          />
 
           <p className="field__hint mt-16">
             Documents hébergés en France, jamais transmis aux propriétaires.
           </p>
         </div>
 
-        <div className="auth__side">
+        <AuthScenery title="Faites place à votre prochain chez-vous.">
           <span className="label label--ink">Ce qu’il vous faudra</span>
           <div className="mt-16" style={{ maxWidth: 440 }}>
             {STEPS.map((step) => (
@@ -112,20 +118,16 @@ export default async function TenantFilePage({
           </div>
 
           {applicants ? (
-            <div
-              className="panel pad mt-24 wash"
-              style={{ maxWidth: 440 }}
-            >
+            <div className="panel pad mt-24 wash" style={{ maxWidth: 440 }}>
               <span className="label label--accent">Marché tendu</span>
               <p className="p-sm mt-8">
-                À Metz, un bien reçoit en moyenne{' '}
-                <b className="mono">{applicants.value}</b> candidatures. Un
-                dossier déjà vérifié passe devant : le propriétaire n’a rien à
+                À Metz, un bien reçoit en moyenne <b className="mono">{applicants.value}</b>{' '}
+                candidatures. Un dossier déjà vérifié passe devant : le propriétaire n’a rien à
                 contrôler lui-même.
               </p>
             </div>
           ) : null}
-        </div>
+        </AuthScenery>
       </div>
     </main>
   );

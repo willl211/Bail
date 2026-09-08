@@ -42,11 +42,9 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  // Deux thèmes : papier bible en clair, charbon chaud en sombre.
-  themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#f1f0ea' },
-    { media: '(prefers-color-scheme: dark)', color: '#1a1917' },
-  ],
+  // La palette méditerranéenne conserve sa lumière sur tous les appareils.
+  themeColor: '#f5f1e7',
+  colorScheme: 'light',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
