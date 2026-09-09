@@ -1,12 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { TenantFileScreen } from './tenant-file-screen';
 import { SavedScreen } from './saved-screen';
-import {
-  submitFile,
-  updateProfile,
-  saveGuarantor,
-  deleteGuarantor,
-} from '@/lib/tenant-client';
+import { submitFile, updateProfile, saveGuarantor, deleteGuarantor } from '@/lib/tenant-client';
 import type { CurrentUser, SavedPropertyItem, TenantFileView } from '@/lib/api';
 
 jest.mock('@/lib/tenant-client', () => ({
@@ -29,6 +24,8 @@ const user: CurrentUser = {
   createdAt: '2026-09-01T10:00:00Z',
 };
 const file: TenantFileView = {
+  revision: 1,
+  verifiedRevision: null,
   reference: 'LOC-0871',
   status: 'DRAFT',
   holderName: 'Camille Ferry',
@@ -64,10 +61,9 @@ const file: TenantFileView = {
 
 function openSection(label: string) {
   fireEvent.click(
-    within(screen.getByRole('navigation', { name: 'Rubriques du dossier' })).getByRole(
-      'button',
-      { name: label },
-    ),
+    within(screen.getByRole('navigation', { name: 'Rubriques du dossier' })).getByRole('button', {
+      name: label,
+    }),
   );
 }
 
@@ -123,17 +119,13 @@ describe('Dossier locataire par rubriques', () => {
   it('maintient les modifications verrouillées dans chaque rubrique pendant le contrôle', () => {
     render(<TenantFileScreen user={user} initial={{ ...file, status: 'UNDER_REVIEW' }} />);
     openSection('Ma situation');
-    expect(
-      screen.queryByRole('button', { name: 'Modifier ma situation' }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Modifier ma situation' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Enregistrer' })).not.toBeInTheDocument();
     openSection('Mes documents');
     expect(screen.queryByRole('button', { name: 'Déposer' })).not.toBeInTheDocument();
     openSection('Mon garant');
     for (const radio of screen.getAllByRole('radio')) expect(radio).toBeDisabled();
-    expect(
-      screen.queryByRole('button', { name: 'Déclarer un garant' }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Déclarer un garant' })).not.toBeInTheDocument();
   });
 
   it('consulte la situation avant édition et restaure les valeurs si on annule', () => {
@@ -151,15 +143,39 @@ describe('Dossier locataire par rubriques', () => {
     expect(screen.getByRole('textbox', { name: 'Employeur' })).toHaveValue('Atelier');
   });
 
+  it('ne transforme pas un revenu négatif en montant positif', async () => {
+    render(<TenantFileScreen user={user} initial={readyFile} />);
+    openSection('Ma situation');
+    fireEvent.click(screen.getByRole('button', { name: 'Modifier ma situation' }));
+    fireEvent.change(screen.getByRole('textbox', { name: /Revenus nets mensuels/ }), {
+      target: { value: '-2500' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Revenus illisibles');
+    expect(updateProfile).not.toHaveBeenCalled();
+  });
+
+  it('conserve les centimes lorsque le formulaire est enregistré sans changement', async () => {
+    const precise = { ...readyFile, netMonthlyIncomeCents: 298_055 };
+    jest.mocked(updateProfile).mockResolvedValue(precise);
+    render(<TenantFileScreen user={user} initial={precise} />);
+    openSection('Ma situation');
+    fireEvent.click(screen.getByRole('button', { name: 'Modifier ma situation' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    await waitFor(() =>
+      expect(updateProfile).toHaveBeenCalledWith(
+        expect.objectContaining({ netMonthlyIncomeCents: 298_055 }),
+      ),
+    );
+  });
+
   it('explique la remise en contrôle et affiche la situation enregistrée', async () => {
-    jest
-      .mocked(updateProfile)
-      .mockResolvedValue({
-        ...readyFile,
-        status: 'SUBMITTED',
-        employerName: 'Nouvel atelier',
-        contractType: 'CDD',
-      });
+    jest.mocked(updateProfile).mockResolvedValue({
+      ...readyFile,
+      status: 'SUBMITTED',
+      employerName: 'Nouvel atelier',
+      contractType: 'CDD',
+    });
     render(<TenantFileScreen user={user} initial={{ ...readyFile, status: 'VERIFIED' }} />);
     openSection('Ma situation');
     fireEvent.click(screen.getByRole('button', { name: 'Modifier ma situation' }));
@@ -195,10 +211,7 @@ describe('Dossier locataire par rubriques', () => {
       label: 'Domicile manquant',
     };
     render(
-      <TenantFileScreen
-        user={user}
-        initial={{ ...file, slots: [identity, housing, rejected] }}
-      />,
+      <TenantFileScreen user={user} initial={{ ...file, slots: [identity, housing, rejected] }} />,
     );
     openSection('Mes documents');
     const attention = screen.getByRole('region', { name: 'Documents à traiter' });

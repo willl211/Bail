@@ -28,9 +28,7 @@ export function TenantGuarantorForm({
     organisationName: guarantor?.organisationName ?? '',
     relationship: guarantor?.relationship ?? '',
     income:
-      guarantor?.netMonthlyIncomeCents == null
-        ? ''
-        : String(guarantor.netMonthlyIncomeCents / 100),
+      guarantor?.netMonthlyIncomeCents == null ? '' : String(guarantor.netMonthlyIncomeCents / 100),
   });
   const [form, setForm] = useState(values);
   const [pending, setPending] = useState(false);
@@ -56,11 +54,7 @@ export function TenantGuarantorForm({
     const income = form.income.trim()
       ? Number(form.income.replace(/\s/g, '').replace(',', '.'))
       : undefined;
-    if (
-      kind === 'INDIVIDUAL' &&
-      income !== undefined &&
-      (!Number.isFinite(income) || income < 0)
-    ) {
+    if (kind === 'INDIVIDUAL' && income !== undefined && (!Number.isFinite(income) || income < 0)) {
       setError({ message: 'Indiquez des revenus valides en euros.' });
       setPending(false);
       return;
@@ -74,8 +68,11 @@ export function TenantGuarantorForm({
               firstName: form.firstName.trim(),
               lastName: form.lastName.trim(),
               relationship: form.relationship || undefined,
-              netMonthlyIncomeCents:
-                income === undefined ? undefined : Math.round(income * 100),
+              contractType:
+                guarantor?.kind === 'INDIVIDUAL'
+                  ? (guarantor.contractType ?? undefined)
+                  : undefined,
+              netMonthlyIncomeCents: income === undefined ? undefined : Math.round(income * 100),
             },
       );
       onChange(next);
@@ -139,8 +136,8 @@ export function TenantGuarantorForm({
             <>
               <h3>Retirer le garant enregistré ?</h3>
               <p>
-                Son identité et ses justificatifs seront retirés du dossier. Le garant actuel
-                reste enregistré tant que vous ne confirmez pas.
+                Son identité et ses justificatifs seront retirés du dossier. Le garant actuel reste
+                enregistré tant que vous ne confirmez pas.
               </p>
               {readOnly ? null : (
                 <div className="flex gap-12 wrap mt-16">
@@ -162,14 +159,26 @@ export function TenantGuarantorForm({
             <>
               <h3>Vous continuez sans garant</h3>
               <p>
-                Votre dossier peut être préparé sans garant. Certaines annonces en demandent un
-                : vous pourrez l’ajouter ici avant de candidater.
+                Votre dossier peut être préparé sans garant. Certaines annonces en demandent un :
+                vous pourrez l’ajouter ici avant de candidater.
               </p>
             </>
           )}
         </div>
       ) : (
         <form className="form form--2 tenant-form-panel" onSubmit={submit}>
+          {guarantor &&
+          (kind !== guarantor.kind ||
+            (kind === 'INDIVIDUAL' &&
+              (form.firstName.trim() !== guarantor.firstName ||
+                form.lastName.trim() !== guarantor.lastName)) ||
+            (kind === 'ORGANISATION' &&
+              form.organisationName.trim() !== guarantor.organisationName)) ? (
+            <p className="field__hint form__full" role="status">
+              Changer l’identité ou le type du garant retirera ses justificatifs actuels. Vous
+              devrez déposer ceux du nouveau garant.
+            </p>
+          ) : null}
           {kind === 'INDIVIDUAL' ? (
             <>
               <label className="field">
@@ -225,16 +234,13 @@ export function TenantGuarantorForm({
                 disabled={readOnly || pending}
                 onChange={set('organisationName')}
               />
-              <span className="field__hint">
-                Seule l’attestation de garantie sera demandée.
-              </span>
+              <span className="field__hint">Seule l’attestation de garantie sera demandée.</span>
             </label>
           )}
           {readOnly ? null : (
             <>
               <p className="form__full tenant-edit-note">
-                L’enregistrement du garant relance le contrôle si votre dossier était déjà
-                vérifié.
+                L’enregistrement du garant relance le contrôle si votre dossier était déjà vérifié.
               </p>
               <div className="form__full flex gap-12 wrap">
                 <button className="btn btn-sm" disabled={pending}>

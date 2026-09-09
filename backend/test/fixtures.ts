@@ -108,6 +108,7 @@ export async function createVerifiedFile(prisma: PrismaClient, tenantId: string)
       tenantId,
       reference: `LOC-2026-${String(1000 + n).padStart(4, '0')}`,
       status: TenantFileStatus.VERIFIED,
+      verifiedRevision: 1,
       netMonthlyIncomeCents: 300_000,
       contractType: EmploymentContractType.CDI,
       employerName: 'CHR Metz-Thionville',
@@ -117,7 +118,7 @@ export async function createVerifiedFile(prisma: PrismaClient, tenantId: string)
   });
 
   await prisma.tenantDocument.createMany({
-    data: [DocumentType.ID_CARD, DocumentType.PROOF_OF_ADDRESS].map((type) => ({
+    data: [DocumentType.ID_CARD, DocumentType.PROOF_OF_ADDRESS, DocumentType.PAYSLIP, DocumentType.EMPLOYMENT_CONTRACT, DocumentType.TAX_NOTICE].map((type) => ({
       tenantFileId: file.id,
       type,
       status: DocumentStatus.VERIFIED,

@@ -14,6 +14,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { EVENT } from '../mail/event.templates';
 import { StorageService } from '../storage/storage.service';
+import { isCurrentVerification, requiredDocumentChecks } from '../tenant/tenant-file.policy';
 
 /** Vignette par bien : combien de candidatures, et sur quel loyer. */
 export interface ApplicationTile {
@@ -53,6 +54,7 @@ export interface OwnerApplication {
   fileReference: string;
   fileStatus: TenantFileStatus;
   netMonthlyIncomeCents: number | null;
+  incomeVerified: boolean;
   contractType: EmploymentContractType | null;
   employerName: string | null;
   /**
@@ -156,12 +158,14 @@ export class OwnerApplicationsService {
           readAt: true,
           incomeRatio: true,
           message: true,
-          property: { select: { reference: true, title: true } },
+          property: { select: { reference: true, title: true, rentCents: true, chargesCents: true } },
           tenant: { select: { firstName: true, lastName: true } },
           tenantFile: {
             select: {
               reference: true,
               status: true,
+              revision: true,
+              verifiedRevision: true,
               netMonthlyIncomeCents: true,
               contractType: true,
               employerName: true,
@@ -209,6 +213,7 @@ export class OwnerApplicationsService {
       applications: applications.map((application) => {
         const file = application.tenantFile;
         const guarantor = file.guarantors[0] ?? null;
+        const verified = isCurrentVerification(file);
 
         return {
           id: application.id,
@@ -220,18 +225,20 @@ export class OwnerApplicationsService {
             application.tenant.lastName,
           ),
           fileReference: file.reference,
-          fileStatus: file.status,
+          fileStatus: file.status === 'VERIFIED' && !verified ? ('SUBMITTED' as const) : file.status,
           netMonthlyIncomeCents: file.netMonthlyIncomeCents,
+          incomeVerified: verified,
           contractType: file.contractType,
           employerName: file.employerName,
-          identityVerified: file.documents.some(
-            (document) =>
-              (document.type === DocumentType.ID_CARD ||
-                document.type === DocumentType.PASSPORT) &&
-              document.status === DocumentStatus.VERIFIED,
-          ),
+          identityVerified:
+            requiredDocumentChecks(file).find((slot) => slot.type === DocumentType.ID_CARD)?.status ===
+            DocumentStatus.VERIFIED,
           message: application.message,
-          effortRate: application.incomeRatio,
+          effortRate:
+            verified && file.netMonthlyIncomeCents !== null && file.netMonthlyIncomeCents > 0
+              ? (application.property.rentCents + application.property.chargesCents) /
+                file.netMonthlyIncomeCents
+              : null,
           guarantorLabel: guarantorLabel(guarantor),
           verifiedDocumentCount: file.documents.filter(
             (document) => document.status === DocumentStatus.VERIFIED,
@@ -240,7 +247,10 @@ export class OwnerApplicationsService {
           status: application.status,
           submittedAt: application.submittedAt.toISOString(),
         };
-      }),
+      }).sort((a, b) =>
+        (a.effortRate ?? Infinity) - (b.effortRate ?? Infinity) ||
+        b.submittedAt.localeCompare(a.submittedAt),
+      ),
     };
   }
 

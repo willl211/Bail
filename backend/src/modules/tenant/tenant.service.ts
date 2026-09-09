@@ -15,6 +15,7 @@ import {
   type Guarantor,
   type TenantDocument,
   type TenantFile,
+  type TenantFileEvent,
 } from '@prisma/client';
 import { Readable } from 'node:stream';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -30,6 +31,13 @@ import {
   requiredTypes,
   type DocumentGroup,
 } from './tenant.slots';
+import {
+  aggregateDocumentStatus,
+  documentsForType,
+  isCurrentVerification,
+  profileMissing,
+} from './tenant-file.policy';
+import { advanceFileRevision, fileEventView, recordFileEvent } from './tenant-file.revision';
 
 /**
  * Taux d'effort maximal admis par les propriétaires du pilote : le loyer
@@ -93,6 +101,8 @@ export interface TenantJournalEntry {
 
 export interface TenantFileView {
   reference: string;
+  revision: number;
+  verifiedRevision: number | null;
   status: TenantFileStatus;
   holderName: string;
   contractType: EmploymentContractType | null;
@@ -129,7 +139,14 @@ export interface TenantFileView {
 type FileWithRelations = TenantFile & {
   documents: TenantDocument[];
   guarantors: Guarantor[];
+  events: TenantFileEvent[];
 };
+
+const FILE_RELATIONS = {
+  documents: true,
+  guarantors: true,
+  events: { orderBy: { revision: 'desc' }, take: 40 },
+} satisfies Prisma.TenantFileInclude;
 
 @Injectable()
 export class TenantService {
@@ -174,7 +191,7 @@ export class TenantService {
     for (let attempt = 0; ; attempt += 1) {
       const existing = await this.prisma.tenantFile.findUnique({
         where: { tenantId },
-        include: { documents: true, guarantors: true },
+        include: FILE_RELATIONS,
       });
       if (existing) return existing;
 
@@ -183,7 +200,7 @@ export class TenantService {
           async (tx) =>
             tx.tenantFile.create({
               data: { tenantId, reference: await this.nextReference(tx) },
-              include: { documents: true, guarantors: true },
+              include: FILE_RELATIONS,
             }),
           // Sans `Serializable`, deux dossiers ouverts en même temps
           // réserveraient la même référence.
@@ -235,21 +252,6 @@ export class TenantService {
     }
   }
 
-  /**
-   * Retire le sceau « vérifié » quand le contenu du dossier change.
-   *
-   * Sans ça, ajouter une pièce à un dossier vérifié laisserait le dossier
-   * marqué vérifié alors que la pièce ajoutée n'a été contrôlée par personne.
-   */
-  private async unsealIfVerified(file: TenantFile): Promise<void> {
-    if (file.status !== TenantFileStatus.VERIFIED) return;
-
-    await this.prisma.tenantFile.update({
-      where: { id: file.id },
-      data: { status: TenantFileStatus.SUBMITTED, verifiedAt: null },
-    });
-  }
-
   async getFile(tenantId: string): Promise<TenantFileView> {
     const file = await this.fileOf(tenantId);
     return this.toView(tenantId, file);
@@ -269,7 +271,7 @@ export class TenantService {
   async compatibilitySummary(tenantId: string): Promise<CompatibilityFile | null> {
     const file = await this.prisma.tenantFile.findUnique({
       where: { tenantId },
-      include: { documents: true, guarantors: true },
+      include: FILE_RELATIONS,
     });
     if (!file) return null;
 
@@ -280,7 +282,7 @@ export class TenantService {
     const file = await this.fileOf(tenantId);
     TenantService.assertEditable(file);
 
-    const data: Prisma.TenantFileUpdateInput = {};
+    const data: Prisma.TenantFileUpdateManyMutationInput = {};
     if (dto.contractType !== undefined) data.contractType = dto.contractType;
     if (dto.employerName !== undefined) data.employerName = dto.employerName || null;
     if (dto.inProbationPeriod !== undefined) data.inProbationPeriod = dto.inProbationPeriod;
@@ -288,19 +290,47 @@ export class TenantService {
       data.netMonthlyIncomeCents = dto.netMonthlyIncomeCents;
     }
 
-    // Changer de situation change les pièces exigées : le dossier vérifié ne
-    // l'est plus pour la nouvelle situation.
-    if (dto.contractType !== undefined && dto.contractType !== file.contractType) {
-      await this.unsealIfVerified(file);
-    }
+    const labels = {
+      contractType: 'situation professionnelle',
+      employerName: 'employeur',
+      inProbationPeriod: 'période d’essai',
+      netMonthlyIncomeCents: 'revenus mensuels',
+    };
+    const changed = (Object.keys(labels) as (keyof typeof labels)[]).filter(
+      (key) => data[key] !== undefined && data[key] !== file[key],
+    );
+    if (changed.length === 0) return this.toView(tenantId, file);
 
-    const updated = await this.prisma.tenantFile.update({
-      where: { id: file.id },
-      data,
-      include: { documents: true, guarantors: true },
+    await this.prisma.$transaction(async (tx) => {
+      const revision = await advanceFileRevision(tx, file, data);
+      // Les contrôles antérieurs ne prouvent pas les nouvelles déclarations.
+      // Les pièces restent disponibles, les refus restent motivés.
+      await tx.tenantDocument.updateMany({
+        where: {
+          tenantFileId: file.id,
+          type: { in: SLOTS.filter((slot) => slot.group === 'income').map((slot) => slot.type) },
+          status: { in: [DocumentStatus.VERIFIED, DocumentStatus.PROCESSING] },
+        },
+        data: {
+          status: DocumentStatus.PENDING,
+          verifiedAt: null,
+          verificationNote: 'Informations professionnelles modifiées · rapprochement à refaire',
+          rejectionReason: null,
+        },
+      });
+      await recordFileEvent(
+        tx,
+        file.id,
+        revision,
+        { id: tenantId, label: 'Locataire' },
+        {
+          action: 'PROFILE_UPDATED',
+          title: 'Informations mises à jour',
+          note: `${changed.map((key) => labels[key]).join(', ')}. Une nouvelle validation est nécessaire.`,
+        },
+      );
     });
-
-    return this.toView(tenantId, updated);
+    return this.getFile(tenantId);
   }
 
   // ---------------------------------------------------------------- Pièces
@@ -320,7 +350,7 @@ export class TenantService {
       throw new BadRequestException('Déclarez d’abord votre garant avant de déposer ses pièces.');
     }
 
-    const existing = tenantFile.documents.filter((document) => document.type === type);
+    const existing = documentsForType(tenantFile.documents, type);
     if (existing.length >= slot.max) {
       throw new ConflictException(
         slot.max === 1
@@ -337,20 +367,40 @@ export class TenantService {
       DOCUMENT_TYPES,
     );
 
-    const created = await this.prisma.tenantDocument.create({
-      data: {
-        tenantFileId: tenantFile.id,
-        type,
-        status: DocumentStatus.PROCESSING,
-        fileName: file.originalname.slice(0, 200),
-        mimeType: stored.mimeType,
-        fileSize: stored.size,
-        storageKey: stored.key,
-      },
-    });
+    let created: TenantDocument;
+    try {
+      created = await this.prisma.$transaction(async (tx) => {
+        const revision = await advanceFileRevision(tx, tenantFile);
+        const document = await tx.tenantDocument.create({
+          data: {
+            tenantFileId: tenantFile.id,
+            type,
+            status: DocumentStatus.PROCESSING,
+            fileName: file.originalname.slice(0, 200),
+            mimeType: stored.mimeType,
+            fileSize: stored.size,
+            storageKey: stored.key,
+          },
+        });
+        await recordFileEvent(
+          tx,
+          tenantFile.id,
+          revision,
+          { id: tenantId, label: 'Locataire' },
+          {
+            action: 'DOCUMENT_ADDED',
+            title: 'Pièce ajoutée',
+            note: slot.label,
+          },
+        );
+        return document;
+      });
+    } catch (error) {
+      await this.storage.remove('private', stored.key);
+      throw error;
+    }
 
     await this.runVerification(created);
-    await this.unsealIfVerified(tenantFile);
     return this.getFile(tenantId);
   }
 
@@ -413,7 +463,47 @@ export class TenantService {
       };
     }
 
-    await this.prisma.tenantDocument.update({ where: { id: document.id }, data });
+    // Un retour tardif du prestataire ne doit écraser ni une décision humaine,
+    // ni l'invalidation provoquée par une modification des informations.
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const current = await this.prisma.tenantDocument.findUnique({
+        where: { id: document.id },
+        include: { tenantFile: true },
+      });
+      if (
+        !current ||
+        current.status !== DocumentStatus.PROCESSING ||
+        current.updatedAt.getTime() !== document.updatedAt.getTime()
+      )
+        return;
+      try {
+        await this.prisma.$transaction(async (tx) => {
+          const revision = await advanceFileRevision(tx, current.tenantFile);
+          await tx.tenantDocument.update({ where: { id: document.id }, data });
+          await recordFileEvent(
+            tx,
+            current.tenantFileId,
+            revision,
+            {
+              label: `Prestataire ${this.verification.name}${this.verification.name === 'mock' ? ' (simulé)' : ''}`,
+            },
+            {
+              action:
+                data.status === DocumentStatus.VERIFIED
+                  ? 'DOCUMENT_VERIFIED'
+                  : data.status === DocumentStatus.REJECTED
+                    ? 'DOCUMENT_REJECTED'
+                    : 'DOCUMENT_PENDING',
+              title: 'Résultat du contrôle de pièce',
+              note: `${SLOT_BY_TYPE.get(document.type)?.label ?? document.type} · ${String(data.verificationNote ?? data.rejectionReason ?? 'En attente')}`,
+            },
+          );
+        });
+        return;
+      } catch (error) {
+        if (!(error instanceof ConflictException) || attempt === 3) throw error;
+      }
+    }
   }
 
   async removeDocument(tenantId: string, documentId: string): Promise<TenantFileView> {
@@ -425,11 +515,22 @@ export class TenantService {
     // chez quelqu'un d'autre.
     if (!document) throw new NotFoundException('Pièce introuvable.');
 
-    if (document.storageKey) {
-      await this.storage.remove('private', document.storageKey);
-    }
-    await this.prisma.tenantDocument.delete({ where: { id: document.id } });
-    await this.unsealIfVerified(file);
+    await this.prisma.$transaction(async (tx) => {
+      const revision = await advanceFileRevision(tx, file);
+      await tx.tenantDocument.delete({ where: { id: document.id } });
+      await recordFileEvent(
+        tx,
+        file.id,
+        revision,
+        { id: tenantId, label: 'Locataire' },
+        {
+          action: 'DOCUMENT_REMOVED',
+          title: 'Pièce retirée',
+          note: SLOT_BY_TYPE.get(document.type)?.label ?? document.type,
+        },
+      );
+    });
+    if (document.storageKey) await this.storage.remove('private', document.storageKey);
 
     return this.getFile(tenantId);
   }
@@ -483,12 +584,67 @@ export class TenantService {
     };
 
     const existing = file.guarantors[0];
-    if (existing) {
-      await this.prisma.guarantor.update({ where: { id: existing.id }, data });
-    } else {
-      await this.prisma.guarantor.create({ data: { ...data, tenantFileId: file.id } });
+    if (
+      existing &&
+      (Object.keys(data) as (keyof typeof data)[]).every((key) => data[key] === existing[key])
+    )
+      return this.toView(tenantId, file);
+    const identityChanged =
+      existing &&
+      ['kind', 'firstName', 'lastName', 'organisationName'].some(
+        (key) => data[key as keyof typeof data] !== existing[key as keyof typeof data],
+      );
+    const obsolete = identityChanged
+      ? file.documents.filter((document) =>
+          [DocumentType.GUARANTOR_ID, DocumentType.GUARANTOR_INCOME].includes(
+            document.type as 'GUARANTOR_ID' | 'GUARANTOR_INCOME',
+          ),
+        )
+      : [];
+    await this.prisma.$transaction(async (tx) => {
+      const revision = await advanceFileRevision(tx, file);
+      if (existing)
+        await tx.guarantor.update({
+          where: { id: existing.id },
+          data: { ...data, status: DocumentStatus.PENDING },
+        });
+      else await tx.guarantor.create({ data: { ...data, tenantFileId: file.id } });
+      if (identityChanged) {
+        await tx.tenantDocument.deleteMany({
+          where: { id: { in: obsolete.map((document) => document.id) } },
+        });
+      } else {
+        await tx.tenantDocument.updateMany({
+          where: {
+            tenantFileId: file.id,
+            type: { in: [DocumentType.GUARANTOR_ID, DocumentType.GUARANTOR_INCOME] },
+            status: { in: [DocumentStatus.VERIFIED, DocumentStatus.PROCESSING] },
+          },
+          data: {
+            status: DocumentStatus.PENDING,
+            verifiedAt: null,
+            verificationNote: 'Informations du garant modifiées · contrôle à refaire',
+            rejectionReason: null,
+          },
+        });
+      }
+      await recordFileEvent(
+        tx,
+        file.id,
+        revision,
+        { id: tenantId, label: 'Locataire' },
+        {
+          action: 'GUARANTOR_UPDATED',
+          title: 'Garant mis à jour',
+          note: identityChanged
+            ? 'Le garant a changé : ses justificatifs sont à déposer à nouveau.'
+            : 'Les informations du garant doivent être contrôlées.',
+        },
+      );
+    });
+    for (const document of obsolete) {
+      if (document.storageKey) await this.storage.remove('private', document.storageKey);
     }
-    await this.unsealIfVerified(file);
 
     return this.getFile(tenantId);
   }
@@ -507,14 +663,27 @@ export class TenantService {
         document.type === DocumentType.GUARANTOR_ID ||
         document.type === DocumentType.GUARANTOR_INCOME,
     );
+    await this.prisma.$transaction(async (tx) => {
+      const revision = await advanceFileRevision(tx, file);
+      await tx.tenantDocument.deleteMany({
+        where: { id: { in: documents.map((document) => document.id) } },
+      });
+      await tx.guarantor.delete({ where: { id: existing.id } });
+      await recordFileEvent(
+        tx,
+        file.id,
+        revision,
+        { id: tenantId, label: 'Locataire' },
+        {
+          action: 'GUARANTOR_REMOVED',
+          title: 'Garant retiré',
+          note: 'Le garant et ses pièces ont été retirés du dossier.',
+        },
+      );
+    });
     for (const document of documents) {
       if (document.storageKey) await this.storage.remove('private', document.storageKey);
     }
-    await this.prisma.tenantDocument.deleteMany({
-      where: { id: { in: documents.map((document) => document.id) } },
-    });
-    await this.prisma.guarantor.delete({ where: { id: existing.id } });
-    await this.unsealIfVerified(file);
 
     return this.getFile(tenantId);
   }
@@ -528,6 +697,9 @@ export class TenantService {
     if (file.status === TenantFileStatus.UNDER_REVIEW) {
       throw new ConflictException('Votre dossier est déjà en cours de contrôle.');
     }
+    if (file.status === TenantFileStatus.VERIFIED || file.status === TenantFileStatus.SUBMITTED) {
+      throw new ConflictException('Votre dossier est déjà transmis.');
+    }
 
     const view = await this.toView(tenantId, file);
     if (view.missing.length > 0) {
@@ -538,40 +710,28 @@ export class TenantService {
       });
     }
 
-    await this.prisma.tenantFile.update({
-      where: { id: file.id },
-      data: { status: TenantFileStatus.SUBMITTED, submittedAt: new Date() },
+    await this.prisma.$transaction(async (tx) => {
+      const revision = await advanceFileRevision(tx, file, {
+        status: TenantFileStatus.SUBMITTED,
+        submittedAt: new Date(),
+      });
+      await recordFileEvent(
+        tx,
+        file.id,
+        revision,
+        { id: tenantId, label: 'Locataire' },
+        {
+          action: 'FILE_SUBMITTED',
+          title: 'Dossier transmis',
+          note: 'Cette version du dossier est prête pour le contrôle.',
+        },
+      );
     });
 
     return this.getFile(tenantId);
   }
 
   // ---------------------------------------------------------------- Lecture
-
-  /**
-   * Statut agrégé d'un ensemble de pièces — une ligne, ou tout un groupe.
-   *
-   * Ne prend que les statuts : ça permet de la réutiliser sur des lignes déjà
-   * transformées pour l'affichage, sans reconstruire de faux documents.
-   */
-  private static aggregate(documents: { status: DocumentStatus }[]): DocumentStatus | 'MISSING' {
-    if (documents.length === 0) return 'MISSING';
-    // L'état le plus défavorable l'emporte : une ligne dont une pièce est
-    // refusée n'est pas « vérifiée », même si les autres le sont.
-    if (documents.some((d) => d.status === DocumentStatus.REJECTED)) {
-      return DocumentStatus.REJECTED;
-    }
-    if (documents.some((d) => d.status === DocumentStatus.EXPIRED)) {
-      return DocumentStatus.EXPIRED;
-    }
-    if (documents.some((d) => d.status === DocumentStatus.PROCESSING)) {
-      return DocumentStatus.PROCESSING;
-    }
-    if (documents.some((d) => d.status === DocumentStatus.PENDING)) {
-      return DocumentStatus.PENDING;
-    }
-    return DocumentStatus.VERIFIED;
-  }
 
   private async toView(tenantId: string, file: FileWithRelations): Promise<TenantFileView> {
     const holder = await this.prisma.user.findUniqueOrThrow({
@@ -594,7 +754,7 @@ export class TenantService {
       )
       .map((slot) => {
         const documents = file.documents
-          .filter((document) => document.type === slot.type)
+          .filter((document) => documentsForType([document], slot.type).length > 0)
           .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 
         const renamed =
@@ -609,7 +769,7 @@ export class TenantService {
           group: slot.group,
           max: slot.max,
           required: required.has(slot.type),
-          status: TenantService.aggregate(documents),
+          status: aggregateDocumentStatus(documents),
           documents: documents.map((document) => ({
             id: document.id,
             hasFile: document.storageKey !== null,
@@ -643,21 +803,17 @@ export class TenantService {
           slot.status === DocumentStatus.EXPIRED,
       )
       .map((slot) =>
-        slot.status === 'MISSING'
-          ? `${slot.label} — à déposer`
-          : `${slot.label} — à remplacer`,
+        slot.status === 'MISSING' ? `${slot.label} — à déposer` : `${slot.label} — à remplacer`,
       );
 
     const awaiting = requiredSlots
       .filter(
         (slot) =>
-          slot.status === DocumentStatus.PENDING ||
-          slot.status === DocumentStatus.PROCESSING,
+          slot.status === DocumentStatus.PENDING || slot.status === DocumentStatus.PROCESSING,
       )
       .map((slot) => `${slot.label} — en cours de contrôle`);
 
-    if (file.contractType === null) missing.push('Votre situation — à renseigner');
-    if (file.netMonthlyIncomeCents === null) missing.push('Vos revenus — à renseigner');
+    missing.push(...profileMissing(file));
 
     const groupStatus = (group: DocumentGroup): DocumentStatus | 'MISSING' => {
       const inGroup = requiredSlots.filter((slot) => slot.group === group);
@@ -666,10 +822,11 @@ export class TenantService {
       // seulement les fichiers déposés dirait « vérifié » sur un groupe dont
       // une pièce manque.
       if (inGroup.some((slot) => slot.status === 'MISSING')) return 'MISSING';
-      return TenantService.aggregate(inGroup.flatMap((slot) => slot.documents));
+      return aggregateDocumentStatus(inGroup.flatMap((slot) => slot.documents));
     };
 
     const incomeVerified =
+      isCurrentVerification(file) &&
       requiredSlots.some((slot) => slot.group === 'income') &&
       requiredSlots
         .filter((slot) => slot.group === 'income')
@@ -677,7 +834,12 @@ export class TenantService {
 
     return {
       reference: file.reference,
-      status: file.status,
+      revision: file.revision,
+      verifiedRevision: file.verifiedRevision,
+      status:
+        file.status === TenantFileStatus.VERIFIED && !isCurrentVerification(file)
+          ? TenantFileStatus.SUBMITTED
+          : file.status,
       holderName: `${holder.firstName} ${holder.lastName}`,
       contractType: file.contractType,
       employerName: file.employerName,
@@ -694,7 +856,9 @@ export class TenantService {
       awaiting,
       groups: {
         identity: groupStatus('identity'),
-        income: groupStatus('income'),
+        income: groupStatus('income') === DocumentStatus.VERIFIED && !incomeVerified
+          ? DocumentStatus.PENDING
+          : groupStatus('income'),
         housing: groupStatus('housing'),
         guarantor: guarantor === null ? 'MISSING' : groupStatus('guarantor'),
       },
@@ -712,7 +876,7 @@ export class TenantService {
               netMonthlyIncomeCents: guarantor.netMonthlyIncomeCents,
               contractType: guarantor.contractType,
             },
-      journal: TenantService.journal(file),
+      journal: file.events.length ? file.events.map(fileEventView) : TenantService.journal(file),
       submittedAt: file.submittedAt?.toISOString() ?? null,
       verifiedAt: file.verifiedAt?.toISOString() ?? null,
       verificationDriver: this.verification.name,

@@ -3,18 +3,14 @@ import userEvent from '@testing-library/user-event';
 import { BackofficeScreen } from './backoffice-screen';
 import { routerMock } from '../test/setup-components';
 import { decideFile, decideProperty } from '@/lib/admin-client';
-import type {
-  AdminFileRow,
-  AdminPropertyRow,
-  BackofficeSummary,
-  ProviderRow,
-} from '@/lib/api';
+import type { AdminFileRow, AdminPropertyRow, BackofficeSummary, ProviderRow } from '@/lib/api';
 
 jest.mock('@/lib/admin-client', () => ({
   decideDocument: jest.fn(),
   decideFile: jest.fn(),
   decideProperty: jest.fn(),
   assignVisit: jest.fn(),
+  adminDocumentFileUrl: (id: string) => `/api/v1/admin/documents/${id}/file`,
 }));
 
 const mockDecideFile = decideFile as jest.MockedFunction<typeof decideFile>;
@@ -36,6 +32,16 @@ const providers: ProviderRow[] = [
 ];
 
 const fileIncomplet: AdminFileRow = {
+  revision: 1,
+  profile: {
+    contractType: 'CDI',
+    employerName: 'Employeur',
+    netMonthlyIncomeCents: 250_000,
+    inProbationPeriod: false,
+    guarantor: null,
+  },
+  documents: [],
+  history: [],
   reference: 'LOC-2026-0890',
   holderName: 'Inès Lemoine',
   initials: 'IL',
@@ -90,6 +96,38 @@ function monter(overrides: Partial<Parameters<typeof BackofficeScreen>[0]> = {})
  * rejeter.
  */
 describe('BackofficeScreen', () => {
+  it('transmet la version examinée et affiche les informations à rapprocher des pièces', async () => {
+    mockDecideFile.mockResolvedValue([{ ...fileIncomplet, status: 'VERIFIED', revision: 8 }]);
+    monter({ files: [{ ...fileIncomplet, revision: 7, missingLabels: [], verifiedCount: 7 }] });
+    expect(screen.getByText('2 500 €')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /valider le dossier/i }));
+    expect(mockDecideFile).toHaveBeenCalledWith(fileIncomplet.reference, 'VERIFY', 7);
+  });
+
+  it('ouvre les pièces via la route privée réservée aux agents', async () => {
+    monter({
+      files: [
+        {
+          ...fileIncomplet,
+          documents: [
+            {
+              id: 'piece-test',
+              label: 'Bulletin',
+              status: 'PENDING',
+              fileName: 'bulletin.pdf',
+              hasFile: true,
+            },
+          ],
+        },
+      ],
+    });
+    await userEvent.click(screen.getByText(/Consulter les justificatifs/));
+    expect(screen.getByRole('link', { name: /bulletin.pdf/ })).toHaveAttribute(
+      'href',
+      '/api/v1/admin/documents/piece-test/file',
+    );
+  });
+
   const onglet = (nom: RegExp) => screen.getByRole('button', { name: nom });
 
   it('affiche les pièces non vérifiées et désactive la validation', async () => {
@@ -115,10 +153,7 @@ describe('BackofficeScreen', () => {
 
     expect(screen.getByRole('button', { name: /^rejeter$/i })).toBeDisabled();
 
-    await userEvent.type(
-      screen.getByLabelText(/motif/i),
-      'Pièces incohérentes entre elles.',
-    );
+    await userEvent.type(screen.getByLabelText(/motif/i), 'Pièces incohérentes entre elles.');
     expect(screen.getByRole('button', { name: /^rejeter$/i })).toBeEnabled();
   });
 

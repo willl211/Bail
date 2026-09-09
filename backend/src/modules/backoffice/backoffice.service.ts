@@ -22,7 +22,20 @@ import { SubscriptionService } from '../payments/subscription.service';
 import { EVENT } from '../mail/event.templates';
 import { MailService } from '../mail/mail.service';
 import { SavedService } from '../saved/saved.service';
-import { requiredTypes } from '../tenant/tenant.slots';
+import {
+  requiredDocumentChecks,
+  verificationBlockers,
+  verificationSnapshot,
+} from '../tenant/tenant-file.policy';
+import {
+  advanceFileRevision,
+  fileEventView,
+  recordFileEvent,
+  FILE_CHANGED,
+  type FileActor,
+} from '../tenant/tenant-file.revision';
+import { StorageService } from '../storage/storage.service';
+import type { EmploymentContractType, GuarantorKind } from '@prisma/client';
 
 export interface BackofficeSummary {
   filesToReview: number;
@@ -39,6 +52,22 @@ export interface BackofficeSummary {
 
 export interface AdminFileRow {
   reference: string;
+  revision: number;
+  profile: {
+    contractType: EmploymentContractType | null;
+    employerName: string | null;
+    netMonthlyIncomeCents: number | null;
+    inProbationPeriod: boolean | null;
+    guarantor: { kind: GuarantorKind; name: string; netMonthlyIncomeCents: number | null } | null;
+  };
+  documents: {
+    id: string;
+    label: string;
+    status: DocumentStatus;
+    fileName: string | null;
+    hasFile: boolean;
+  }[];
+  history: JournalEntry[];
   holderName: string;
   initials: string;
   status: TenantFileStatus;
@@ -136,6 +165,7 @@ export class BackofficeService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly storage: StorageService,
     private readonly config: ConfigService,
     private readonly subscriptions: SubscriptionService,
     private readonly mail: MailService,
@@ -160,7 +190,11 @@ export class BackofficeService {
       }),
       this.prisma.property.count({ where: { status: PropertyStatus.PENDING_REVIEW } }),
       this.prisma.lease.count({
-        where: { status: { in: [LeaseStatus.SENT_FOR_SIGNATURE, LeaseStatus.PARTIALLY_SIGNED, LeaseStatus.SIGNED] } },
+        where: {
+          status: {
+            in: [LeaseStatus.SENT_FOR_SIGNATURE, LeaseStatus.PARTIALLY_SIGNED, LeaseStatus.SIGNED],
+          },
+        },
       }),
       this.prisma.payment.aggregate({
         where: { fundsStatus: { in: ['HELD_BY_PLATFORM', 'PAYOUT_PENDING'] } },
@@ -235,26 +269,44 @@ export class BackofficeService {
       include: {
         tenant: { select: { firstName: true, lastName: true } },
         documents: true,
-        guarantors: { select: { kind: true } },
+        guarantors: true,
+        events: { orderBy: { revision: 'desc' }, take: 20 },
       },
     });
-
     return files.map((file) => {
-      const required = requiredTypes(file.contractType, file.guarantors[0]?.kind ?? null);
-      const isVerified = (type: DocumentType) =>
-        file.documents.some(
-          (document) => document.type === type && document.status === DocumentStatus.VERIFIED,
-        );
-      const verifiedCount = required.filter(isVerified).length;
-
+      const checks = requiredDocumentChecks(file);
       return {
         reference: file.reference,
-        holderName: `${file.tenant.firstName} ${file.tenant.lastName}`,
-        initials:
-          `${file.tenant.firstName.charAt(0)}${file.tenant.lastName.charAt(0)}`.toUpperCase(),
+        revision: file.revision,
+        holderName: [file.tenant.firstName, file.tenant.lastName].join(' '),
+        initials: (file.tenant.firstName.charAt(0) + file.tenant.lastName.charAt(0)).toUpperCase(),
         status: file.status,
-        verifiedCount,
-        requiredCount: required.length,
+        verifiedCount: checks.filter((slot) => slot.status === DocumentStatus.VERIFIED).length,
+        requiredCount: checks.length,
+        profile: {
+          contractType: file.contractType,
+          employerName: file.employerName,
+          netMonthlyIncomeCents: file.netMonthlyIncomeCents,
+          inProbationPeriod: file.inProbationPeriod,
+          guarantor: file.guarantors[0]
+            ? {
+                kind: file.guarantors[0].kind,
+                name:
+                  file.guarantors[0].organisationName ??
+                  [file.guarantors[0].firstName, file.guarantors[0].lastName]
+                    .filter(Boolean)
+                    .join(' '),
+                netMonthlyIncomeCents: file.guarantors[0].netMonthlyIncomeCents,
+              }
+            : null,
+        },
+        documents: file.documents.map((document) => ({
+          id: document.id,
+          label: DOCUMENT_LABELS[document.type] ?? document.type,
+          status: document.status,
+          fileName: document.fileName,
+          hasFile: document.storageKey !== null,
+        })),
         pendingDocuments: file.documents
           .filter(
             (document) =>
@@ -268,151 +320,149 @@ export class BackofficeService {
             note: document.verificationNote,
             uploadedAt: document.createdAt.toISOString(),
           })),
-        missingLabels: required
-          .filter((type) => !isVerified(type))
-          .map((type) => DOCUMENT_LABELS[type] ?? type),
-        identityVerified: file.documents.some(
-          (document) =>
-            (document.type === DocumentType.ID_CARD ||
-              document.type === DocumentType.PASSPORT) &&
-            document.status === DocumentStatus.VERIFIED,
-        ),
-        // Le rapprochement revenus déclarés / bulletins demanderait de lire les
-        // pièces : hors de portée sans prestataire KYC. On ne prétend pas le
-        // faire — un écart inventé serait pire qu'aucun signalement.
+        missingLabels: verificationBlockers(file),
+        identityVerified:
+          checks.find((slot) => slot.type === DocumentType.ID_CARD)?.status ===
+          DocumentStatus.VERIFIED,
         incomeFlag: null,
         submittedAt: file.submittedAt?.toISOString() ?? null,
+        history: file.events.map(fileEventView),
       };
     });
   }
 
-  /** Tranche sur une pièce déposée. */
+  /** Consultation privée par un agent ; aucune route propriétaire n'est élargie. */
+  async readTenantDocument(documentId: string, actor: FileActor) {
+    const document = await this.prisma.tenantDocument.findUnique({ where: { id: documentId } });
+    if (!document?.storageKey) throw new NotFoundException('Pièce introuvable.');
+    const stream = await this.storage.read('private', document.storageKey);
+    this.logger.log('Consultation de pièce ' + document.id + ' par agent ' + actor.id);
+    return {
+      stream,
+      mimeType: document.mimeType ?? 'application/octet-stream',
+      fileName: document.fileName ?? 'document',
+    };
+  }
+
   async decideDocument(
     documentId: string,
     decision: 'VERIFY' | 'REJECT',
+    expectedRevision: number,
+    actor: FileActor,
     reason?: string,
   ): Promise<AdminFileRow[]> {
     const document = await this.prisma.tenantDocument.findUnique({
       where: { id: documentId },
-      select: {
-        id: true,
-        status: true,
-        tenantFileId: true,
-        tenantFile: { select: { tenantId: true } },
-      },
+      include: { tenantFile: true },
     });
     if (!document) throw new NotFoundException('Pièce introuvable.');
-
-    if (document.status === DocumentStatus.VERIFIED && decision === 'VERIFY') {
+    const file = document.tenantFile;
+    if (file.revision !== expectedRevision) throw new ConflictException(FILE_CHANGED);
+    if (file.status === TenantFileStatus.DRAFT)
+      throw new ConflictException('Ce dossier n’a pas encore été transmis.');
+    if (document.status === DocumentStatus.VERIFIED && decision === 'VERIFY')
       throw new ConflictException('Cette pièce est déjà vérifiée.');
-    }
-    if (decision === 'REJECT' && !reason?.trim()) {
-      // Un refus sans motif renvoie le locataire à un mur : il ne saurait pas
-      // quoi corriger.
+    if (decision === 'REJECT' && !reason?.trim())
       throw new BadRequestException('Un refus doit être motivé.');
-    }
 
-    await this.prisma.tenantDocument.update({
-      where: { id: document.id },
-      data:
-        decision === 'VERIFY'
-          ? {
-              status: DocumentStatus.VERIFIED,
-              verifiedAt: new Date(),
-              verificationNote: 'Contrôle manuel par un agent whoma',
-              rejectionReason: null,
-            }
-          : {
-              status: DocumentStatus.REJECTED,
-              verifiedAt: null,
-              rejectionReason: reason?.trim(),
-              verificationNote: null,
-            },
+    const event = await this.prisma.$transaction(async (tx) => {
+      const revision = await advanceFileRevision(
+        tx,
+        file,
+        decision === 'REJECT' && file.status === TenantFileStatus.VERIFIED
+          ? { status: TenantFileStatus.INCOMPLETE }
+          : {},
+      );
+      await tx.tenantDocument.update({
+        where: { id: document.id },
+        data:
+          decision === 'VERIFY'
+            ? {
+                status: DocumentStatus.VERIFIED,
+                verifiedAt: new Date(),
+                verificationNote: 'Contrôle manuel par un agent whoma',
+                rejectionReason: null,
+              }
+            : {
+                status: DocumentStatus.REJECTED,
+                verifiedAt: null,
+                rejectionReason: reason!.trim(),
+                verificationNote: null,
+              },
+      });
+      return recordFileEvent(tx, file.id, revision, actor, {
+        action: decision === 'VERIFY' ? 'DOCUMENT_VERIFIED' : 'DOCUMENT_REJECTED',
+        title: decision === 'VERIFY' ? 'Pièce validée' : 'Pièce refusée',
+        note:
+          (DOCUMENT_LABELS[document.type] ?? document.type) +
+          (reason?.trim() ? ' · ' + reason.trim() : ''),
+        snapshot: {
+          documentId: document.id,
+          type: document.type,
+          fileName: document.fileName,
+          reviewedRevision: expectedRevision,
+        },
+      });
     });
-
-    if (decision === 'REJECT') {
-      // La clé de dédoublonnage porte l'instant de la décision : une même pièce
-      // peut être refusée, corrigée, puis refusée à nouveau, et le locataire
-      // doit l'apprendre les deux fois.
+    if (decision === 'REJECT')
       await this.mail.enqueue({
         template: EVENT.documentRejected,
-        userId: document.tenantFile.tenantId,
+        userId: file.tenantId,
         subjectRef: document.id,
-        dedupeKey: `${EVENT.documentRejected}:${document.id}:${Date.now()}`,
+        dedupeKey: EVENT.documentRejected + ':' + event.id,
       });
-    }
-
-    // Un dossier dont une pièce vient d'être refusée n'est plus « vérifié » :
-    // le laisser tel quel le ferait passer pour bon auprès des propriétaires.
-    if (decision === 'REJECT') {
-      await this.prisma.tenantFile.updateMany({
-        where: { id: document.tenantFileId, status: TenantFileStatus.VERIFIED },
-        data: { status: TenantFileStatus.INCOMPLETE, verifiedAt: null },
-      });
-    }
-
     return this.listFiles();
   }
 
-  /**
-   * Clôt le contrôle d'un dossier.
-   *
-   * Refuse de le marquer vérifié s'il reste une pièce requise non vérifiée :
-   * un dossier estampillé « vérifié » circule ensuite auprès des propriétaires,
-   * il ne doit pas mentir.
-   */
   async decideFile(
     reference: string,
     decision: 'VERIFY' | 'REJECT',
+    expectedRevision: number,
+    actor: FileActor,
     reason?: string,
   ): Promise<AdminFileRow[]> {
     const file = await this.prisma.tenantFile.findUnique({
       where: { reference },
-      include: { documents: true, guarantors: { select: { kind: true } } },
+      include: { documents: true, guarantors: true },
     });
     if (!file) throw new NotFoundException('Dossier introuvable.');
-    const notify = (template: string) =>
-      this.mail.enqueue({
-        template: template as (typeof EVENT)[keyof typeof EVENT],
-        userId: file.tenantId,
-        subjectRef: file.id,
-        // Un dossier peut être vérifié, redevenir incomplet après le refus
-        // d'une pièce, puis vérifié à nouveau : chaque passage se notifie.
-        dedupeKey: `${template}:${file.id}:${Date.now()}`,
+    if (file.revision !== expectedRevision) throw new ConflictException(FILE_CHANGED);
+    if (file.status === TenantFileStatus.DRAFT || file.submittedAt === null)
+      throw new ConflictException('Ce dossier n’a pas encore été transmis.');
+    if (decision === 'VERIFY' && file.status === TenantFileStatus.VERIFIED)
+      throw new ConflictException('Ce dossier est déjà vérifié.');
+    if (decision === 'REJECT' && !reason?.trim())
+      throw new BadRequestException('Un refus doit être motivé.');
+    const blockers = verificationBlockers(file);
+    if (decision === 'VERIFY' && blockers.length)
+      throw new BadRequestException({
+        statusCode: 400,
+        message: 'Ce dossier ne peut pas être marqué vérifié.',
+        blockers,
       });
 
-    if (decision === 'VERIFY') {
-      const required = requiredTypes(file.contractType, file.guarantors[0]?.kind ?? null);
-      const missing = required.filter(
-        (type) =>
-          !file.documents.some(
-            (document) => document.type === type && document.status === DocumentStatus.VERIFIED,
-          ),
-      );
-      if (missing.length > 0) {
-        throw new BadRequestException({
-          statusCode: 400,
-          message: 'Ce dossier ne peut pas être marqué vérifié.',
-          blockers: missing.map(
-            (type) => `${DOCUMENT_LABELS[type] ?? type} — en attente de vérification`,
-          ),
-        });
-      }
-
-      await this.prisma.tenantFile.update({
-        where: { id: file.id },
-        data: { status: TenantFileStatus.VERIFIED, verifiedAt: new Date() },
+    const event = await this.prisma.$transaction(async (tx) => {
+      const revision = await advanceFileRevision(tx, file, {
+        status: decision === 'VERIFY' ? TenantFileStatus.VERIFIED : TenantFileStatus.REJECTED,
+        verifiedAt: decision === 'VERIFY' ? new Date() : null,
+        verifiedRevision: decision === 'VERIFY' ? file.revision + 1 : null,
       });
-      await notify(EVENT.fileVerified);
-    } else {
-      if (!reason?.trim()) throw new BadRequestException('Un refus doit être motivé.');
-      await this.prisma.tenantFile.update({
-        where: { id: file.id },
-        data: { status: TenantFileStatus.REJECTED, verifiedAt: null },
+      return recordFileEvent(tx, file.id, revision, actor, {
+        action: decision === 'VERIFY' ? 'FILE_VERIFIED' : 'FILE_REJECTED',
+        title: decision === 'VERIFY' ? 'Dossier validé' : 'Dossier refusé',
+        note:
+          reason?.trim() ||
+          'Les informations et toutes les pièces requises de cette version ont été contrôlées.',
+        snapshot: { reviewedRevision: expectedRevision, ...verificationSnapshot(file) },
       });
-      await notify(EVENT.fileRejected);
-    }
-
+    });
+    const template = decision === 'VERIFY' ? EVENT.fileVerified : EVENT.fileRejected;
+    await this.mail.enqueue({
+      template,
+      userId: file.tenantId,
+      subjectRef: file.id,
+      dedupeKey: template + ':' + event.id,
+    });
     return this.listFiles();
   }
 
@@ -579,9 +629,7 @@ export class BackofficeService {
       type: visit.type,
       status: visit.status,
       scheduledAt: visit.scheduledAt.toISOString(),
-      agentName: visit.agent
-        ? `${visit.agent.firstName} ${visit.agent.lastName.charAt(0)}.`
-        : null,
+      agentName: visit.agent ? `${visit.agent.firstName} ${visit.agent.lastName.charAt(0)}.` : null,
     }));
   }
 
@@ -638,9 +686,8 @@ export class BackofficeService {
           tenant: { select: { firstName: true, lastName: true } },
         },
       }),
-      this.prisma.tenantDocument.findMany({
-        where: { OR: [{ verifiedAt: { not: null } }, { status: DocumentStatus.REJECTED }] },
-        orderBy: { updatedAt: 'desc' },
+      this.prisma.tenantFileEvent.findMany({
+        orderBy: { createdAt: 'desc' },
         take: 15,
         include: { tenantFile: { select: { reference: true } } },
       }),
@@ -669,24 +716,14 @@ export class BackofficeService {
         title: `Candidature sur ${application.property.reference}`,
         note: `${application.tenant.firstName} ${application.tenant.lastName}`,
       })),
-      ...documents.map((document) => ({
-        at: (document.verifiedAt ?? document.updatedAt).toISOString(),
-        tone: (document.status === DocumentStatus.REJECTED ? 'reject' : 'ok') as
-          | 'reject'
-          | 'ok',
-        // Formulation sans accord : les intitulés de pièces sont tantôt
-        // masculins (« Bulletin de salaire »), tantôt féminins (« Pièce
-        // d'identité »), tantôt pluriels (« Revenus du garant »).
-        title: `${document.tenantFile.reference} — ${DOCUMENT_LABELS[document.type] ?? document.type} · ${
-          document.status === DocumentStatus.REJECTED ? 'refus' : 'contrôle validé'
-        }`,
-        note: document.rejectionReason ?? document.verificationNote ?? 'Contrôle',
+      ...documents.map((event) => ({
+        ...fileEventView(event),
+        title: `${event.tenantFile.reference} — ${event.title}`,
       })),
       ...visits.map((visit) => ({
         at: visit.updatedAt.toISOString(),
         tone: (visit.status === VisitStatus.CANCELLED ? 'reject' : 'pending') as
-          | 'reject'
-          | 'pending',
+          'reject' | 'pending',
         title: `Visite ${visit.status === VisitStatus.CANCELLED ? 'annulée' : 'planifiée'} · ${visit.property.reference}`,
         note:
           visit.recordingExpiresAt !== null

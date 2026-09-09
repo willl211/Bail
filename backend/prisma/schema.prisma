@@ -498,6 +498,11 @@ model TenantFile {
 
   status TenantFileStatus @default(DRAFT)
 
+  /// Toute modification ou décision avance cette version. Une validation ne
+  /// vaut que pour la version effectivement examinée.
+  revision         Int  @default(1)
+  verifiedRevision Int?
+
   /// Score de dossier 0-100 affiché au locataire et au propriétaire.
   /// La règle de calcul reste à figer : aucun document du dossier docs/ ne la
   /// définit. Le champ est persisté, le calcul vivra dans un service dédié.
@@ -519,9 +524,30 @@ model TenantFile {
   guarantors   Guarantor[]
   applications Application[]
   kycChecks    KycCheck[]
+  events       TenantFileEvent[]
 
   @@index([status])
   @@map("tenant_files")
+}
+
+/// Historique conservé indépendamment des pièces, y compris après leur retrait.
+/// Les instantanés contiennent les données examinées, jamais les fichiers bruts.
+model TenantFileEvent {
+  id           String     @id @default(uuid())
+  tenantFileId String
+  tenantFile   TenantFile @relation(fields: [tenantFileId], references: [id], onDelete: Cascade)
+  revision     Int
+  action       String
+  actorId      String?
+  actorLabel   String
+  title        String
+  note         String
+  snapshot     Json?
+  createdAt    DateTime   @default(now())
+
+  @@unique([tenantFileId, revision])
+  @@index([createdAt])
+  @@map("tenant_file_events")
 }
 
 model TenantDocument {

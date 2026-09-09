@@ -13,6 +13,7 @@ const application = (
   propertyReference: string,
   tenantName: string,
 ): OwnerApplication => ({
+  incomeVerified: true,
   id,
   propertyReference,
   propertyTitle: 'Logement',

@@ -1,12 +1,10 @@
-import { Body, Controller, Get, HttpCode, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post, Res, StreamableFile } from '@nestjs/common';
+import type { Response } from 'express';
 import { UserRole } from '@prisma/client';
-import { Roles } from '../auth/session.guard';
+import { CurrentUser, Roles } from '../auth/session.guard';
+import type { PublicUser } from '../auth/auth.service';
 import { BackofficeService } from './backoffice.service';
-import {
-  AssignVisitDto,
-  PropertyDecisionDto,
-  ReviewDecisionDto,
-} from './dto/decision.dto';
+import { AssignVisitDto, PropertyDecisionDto, ReviewDecisionDto } from './dto/decision.dto';
 
 /**
  * Back-office — registre de l'agence.
@@ -48,14 +46,50 @@ export class BackofficeController {
   decideDocument(
     @Param('documentId') documentId: string,
     @Body() dto: ReviewDecisionDto,
+    @CurrentUser() user: PublicUser,
   ) {
-    return this.backoffice.decideDocument(documentId, dto.decision, dto.reason);
+    return this.backoffice.decideDocument(
+      documentId,
+      dto.decision,
+      dto.expectedRevision,
+      { id: user.id, label: `${user.firstName} ${user.lastName}` },
+      dto.reason,
+    );
+  }
+
+  @Get('documents/:documentId/file')
+  async readDocument(
+    @Param('documentId') documentId: string,
+    @CurrentUser() user: PublicUser,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const document = await this.backoffice.readTenantDocument(documentId, {
+      id: user.id,
+      label: `${user.firstName} ${user.lastName}`,
+    });
+    response.set({
+      'Content-Type': document.mimeType,
+      'Content-Disposition': `inline; filename="${encodeURIComponent(document.fileName)}"`,
+      'Cache-Control': 'private, no-store',
+      'X-Content-Type-Options': 'nosniff',
+    });
+    return new StreamableFile(document.stream);
   }
 
   @Post('tenant-files/:reference/decision')
   @HttpCode(200)
-  decideFile(@Param('reference') reference: string, @Body() dto: ReviewDecisionDto) {
-    return this.backoffice.decideFile(reference, dto.decision, dto.reason);
+  decideFile(
+    @Param('reference') reference: string,
+    @Body() dto: ReviewDecisionDto,
+    @CurrentUser() user: PublicUser,
+  ) {
+    return this.backoffice.decideFile(
+      reference,
+      dto.decision,
+      dto.expectedRevision,
+      { id: user.id, label: `${user.firstName} ${user.lastName}` },
+      dto.reason,
+    );
   }
 
   // --- Biens ------------------------------------------------------------
@@ -67,10 +101,7 @@ export class BackofficeController {
 
   @Post('properties/:reference/decision')
   @HttpCode(200)
-  decideProperty(
-    @Param('reference') reference: string,
-    @Body() dto: PropertyDecisionDto,
-  ) {
+  decideProperty(@Param('reference') reference: string, @Body() dto: PropertyDecisionDto) {
     return this.backoffice.decideProperty(reference, dto.decision, dto.reason);
   }
 

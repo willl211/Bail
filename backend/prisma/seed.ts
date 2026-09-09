@@ -894,7 +894,14 @@ async function main() {
       create: { email: seed.email, ...tenantValues },
     });
 
+    const previousFile = await prisma.tenantFile.findUnique({
+      where: { reference: seed.fileReference },
+      select: { revision: true },
+    });
+    const revision = (previousFile?.revision ?? 0) + 1;
     const fileValues = {
+      revision,
+      verifiedRevision: seed.fileStatus === TenantFileStatus.VERIFIED ? revision : null,
       tenantId: tenant.id,
       status: seed.fileStatus,
       score: seed.score,
@@ -971,6 +978,17 @@ async function main() {
         },
       });
     }
+
+    await prisma.tenantFileEvent.create({
+      data: {
+        tenantFileId: file.id,
+        revision,
+        action: 'DEMO_INITIALIZED',
+        actorLabel: 'Jeu de démonstration',
+        title: 'Dossier de démonstration initialisé',
+        note: 'Les données et contrôles de ce dossier sont simulés.',
+      },
+    });
 
     const property = await prisma.property.findUniqueOrThrow({
       where: { reference: seed.propertyReference },

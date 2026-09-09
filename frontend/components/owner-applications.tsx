@@ -319,7 +319,7 @@ export function OwnerApplications({
                   <dl className="applications-facts">
                     {[
                       [
-                        'Revenus nets mensuels',
+                        selected.incomeVerified ? 'Revenus nets vérifiés' : 'Revenus déclarés · à vérifier',
                         selected.netMonthlyIncomeCents === null
                           ? 'Non renseignés'
                           : fmt.euros(selected.netMonthlyIncomeCents),

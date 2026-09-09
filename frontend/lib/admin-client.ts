@@ -50,22 +50,24 @@ async function post<T>(path: string, payload: unknown): Promise<T> {
 export function decideDocument(
   documentId: string,
   decision: 'VERIFY' | 'REJECT',
+  expectedRevision: number,
   reason?: string,
 ) {
   return post<AdminFileRow[]>(
     `/admin/documents/${encodeURIComponent(documentId)}/decision`,
-    { decision, reason },
+    { decision, expectedRevision, reason },
   );
 }
 
 export function decideFile(
   reference: string,
   decision: 'VERIFY' | 'REJECT',
+  expectedRevision: number,
   reason?: string,
 ) {
   return post<AdminFileRow[]>(
     `/admin/tenant-files/${encodeURIComponent(reference)}/decision`,
-    { decision, reason },
+    { decision, expectedRevision, reason },
   );
 }
 
@@ -84,4 +86,8 @@ export function assignVisit(visitId: string, agentId: string) {
   return post<AdminVisitRow[]>(`/admin/visits/${encodeURIComponent(visitId)}/assign`, {
     agentId,
   });
+}
+
+export function adminDocumentFileUrl(documentId: string) {
+  return `${API_URL}/admin/documents/${encodeURIComponent(documentId)}/file`;
 }

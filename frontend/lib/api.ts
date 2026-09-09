@@ -514,6 +514,7 @@ export interface OwnerApplication {
   fileReference: string;
   fileStatus: TenantFileStatus;
   netMonthlyIncomeCents: number | null;
+  incomeVerified: boolean;
   contractType: string | null;
   employerName: string | null;
   identityVerified: boolean;
@@ -618,6 +619,8 @@ export interface TenantJournalEntry {
 
 export interface TenantFileView {
   reference: string;
+  revision: number;
+  verifiedRevision: number | null;
   status: TenantFileStatus;
   holderName: string;
   contractType: EmploymentContractType | null;
@@ -965,6 +968,22 @@ export interface BackofficeSummary {
 
 export interface AdminFileRow {
   reference: string;
+  revision: number;
+  profile: {
+    contractType: EmploymentContractType | null;
+    employerName: string | null;
+    netMonthlyIncomeCents: number | null;
+    inProbationPeriod: boolean | null;
+    guarantor: { kind: GuarantorKind; name: string; netMonthlyIncomeCents: number | null } | null;
+  };
+  documents: {
+    id: string;
+    label: string;
+    status: DocumentStatus;
+    fileName: string | null;
+    hasFile: boolean;
+  }[];
+  history: JournalEntry[];
   holderName: string;
   initials: string;
   status: TenantFileStatus;

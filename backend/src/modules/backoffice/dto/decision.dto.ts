@@ -1,11 +1,16 @@
 import { Transform } from 'class-transformer';
-import { IsIn, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
 
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
 
 /** Décision d'un agent sur une pièce ou un dossier. */
 export class ReviewDecisionDto {
+  @IsInt()
+  @Min(1)
+  @Max(2_147_483_647)
+  expectedRevision!: number;
+
   @IsIn(['VERIFY', 'REJECT'], { message: 'Décision inconnue.' })
   decision!: 'VERIFY' | 'REJECT';
 

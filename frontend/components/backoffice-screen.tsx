@@ -18,10 +18,21 @@ import {
   decideDocument,
   decideFile,
   decideProperty,
+  adminDocumentFileUrl,
   type AdminFailure,
 } from '@/lib/admin-client';
 
 type Pane = 'dossiers' | 'biens' | 'baux' | 'journal';
+
+const EMPLOYMENT_LABELS: Record<string, string> = {
+  CDI: 'Salarié·e en CDI',
+  CDD: 'Salarié·e en CDD',
+  PUBLIC_SECTOR: 'Fonction publique',
+  SELF_EMPLOYED: 'Indépendant·e',
+  STUDENT: 'Étudiant·e',
+  RETIRED: 'Retraité·e',
+  OTHER: 'Autre situation',
+};
 
 const FILE_STATUS: Record<string, { label: string; tone: string }> = {
   DRAFT: { label: 'Brouillon', tone: 'badge badge--mute' },
@@ -292,25 +303,23 @@ export function BackofficeScreen({
               </table>
             </div>
             <p className="field__hint mt-10">
-              Les pièces en attente sont celles qu’aucun contrôle automatique ne
-              tranche — un justificatif de domicile se lit à l’œil. Elles demandent
-              une décision humaine.
+              Les pièces en attente sont celles qu’aucun contrôle automatique ne tranche — un
+              justificatif de domicile se lit à l’œil. Elles demandent une décision humaine.
             </p>
           </div>
 
           <aside>
             {file ? (
               <div className="panel panel--strong tick">
-                <div
-                  className="pad"
-                  style={{ borderBottom: '1px solid var(--line-softer)' }}
-                >
+                <div className="pad" style={{ borderBottom: '1px solid var(--line-softer)' }}>
                   <div className="flex jc-b ai-c gap-12 wrap">
                     <div className="flex ai-c gap-12">
                       <span className="mono-av">{file.initials}</span>
                       <div>
                         <div className="h-sm">{file.holderName}</div>
-                        <div className="doc__m">{file.reference}</div>
+                        <div className="doc__m">
+                          {file.reference} · Version {file.revision}
+                        </div>
                       </div>
                     </div>
                     <span className={FILE_STATUS[file.status].tone}>
@@ -320,9 +329,66 @@ export function BackofficeScreen({
                 </div>
 
                 <div className="pad">
+                  <dl className="mb-16">
+                    {[
+                      [
+                        'Revenus mensuels déclarés',
+                        file.profile.netMonthlyIncomeCents === null
+                          ? 'Non renseignés'
+                          : fmt.euros(file.profile.netMonthlyIncomeCents),
+                      ],
+                      ['Situation', EMPLOYMENT_LABELS[file.profile.contractType ?? ''] ?? 'Non renseignée'],
+                      ['Employeur', file.profile.employerName ?? 'Non renseigné'],
+                      [
+                        'Période d’essai',
+                        file.profile.inProbationPeriod === null
+                          ? 'Non renseignée'
+                          : file.profile.inProbationPeriod
+                            ? 'Oui'
+                            : 'Non',
+                      ],
+                      ['Garant', file.profile.guarantor?.name ?? 'Aucun'],
+                      ...(file.profile.guarantor?.netMonthlyIncomeCents != null
+                        ? [
+                            [
+                              'Revenus du garant',
+                              fmt.euros(file.profile.guarantor.netMonthlyIncomeCents),
+                            ],
+                          ]
+                        : []),
+                    ].map(([label, value]) => (
+                      <div className="kv" key={label}>
+                        <dt className="kv__k">{label}</dt>
+                        <dd>{value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                  {file.documents.length ? (
+                    <details className="mb-16">
+                      <summary>Consulter les justificatifs ({file.documents.length})</summary>
+                      <ul className="checklist mt-10">
+                        {file.documents.map((document) => (
+                          <li key={document.id}>
+                            {document.hasFile ? (
+                              <a
+                                className="link"
+                                href={adminDocumentFileUrl(document.id)}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                {document.label} — {document.fileName ?? 'Ouvrir la pièce'} ↗
+                              </a>
+                            ) : (
+                              <span>{document.label} — fichier non disponible</span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  ) : null}
                   {file.missingLabels.length > 0 ? (
                     <div className="mb-16">
-                      <span className="label label--ink">Pièces non vérifiées</span>
+                      <span className="label label--ink">Éléments à vérifier ou compléter</span>
                       <ul className="checklist mt-8">
                         {file.missingLabels.map((label) => (
                           <li key={label}>{label}</li>
@@ -342,13 +408,9 @@ export function BackofficeScreen({
                       <div key={document.id} className="kv" style={{ display: 'block' }}>
                         <div className="flex jc-b ai-c gap-12 wrap">
                           <span className="kv__k">{document.label}</span>
-                          <span className="label">
-                            {fmt.relativeAge(document.uploadedAt)}
-                          </span>
+                          <span className="label">{fmt.relativeAge(document.uploadedAt)}</span>
                         </div>
-                        {document.note ? (
-                          <div className="doc__m">{document.note}</div>
-                        ) : null}
+                        {document.note ? <div className="doc__m">{document.note}</div> : null}
                         <div className="flex gap-10 wrap mt-8">
                           <button
                             type="button"
@@ -356,7 +418,9 @@ export function BackofficeScreen({
                             disabled={pending !== null}
                             onClick={() =>
                               run(document.id, async () =>
-                                setFiles(await decideDocument(document.id, 'VERIFY')),
+                                setFiles(
+                                  await decideDocument(document.id, 'VERIFY', file.revision),
+                                ),
                               )
                             }
                           >
@@ -366,14 +430,17 @@ export function BackofficeScreen({
                             type="button"
                             className="btn btn--ghost btn-sm"
                             disabled={pending !== null || reason.trim() === ''}
-                            title={
-                              reason.trim() === ''
-                                ? 'Saisissez d’abord un motif'
-                                : undefined
-                            }
+                            title={reason.trim() === '' ? 'Saisissez d’abord un motif' : undefined}
                             onClick={() =>
                               run(document.id, async () =>
-                                setFiles(await decideDocument(document.id, 'REJECT', reason)),
+                                setFiles(
+                                  await decideDocument(
+                                    document.id,
+                                    'REJECT',
+                                    file.revision,
+                                    reason,
+                                  ),
+                                ),
                               )
                             }
                           >
@@ -385,10 +452,7 @@ export function BackofficeScreen({
                   )}
                 </div>
 
-                <div
-                  className="pad wash"
-                  style={{ borderTop: '1px solid var(--line-softer)' }}
-                >
+                <div className="pad wash" style={{ borderTop: '1px solid var(--line-softer)' }}>
                   <label className="field">
                     <span className="label label--ink">
                       Motif <span className="doc__opt">transmis au locataire</span>
@@ -414,13 +478,11 @@ export function BackofficeScreen({
                         file.missingLabels.length > 0
                       }
                       title={
-                        file.missingLabels.length > 0
-                          ? file.missingLabels.join(' · ')
-                          : undefined
+                        file.missingLabels.length > 0 ? file.missingLabels.join(' · ') : undefined
                       }
                       onClick={() =>
                         run(file.reference, async () =>
-                          setFiles(await decideFile(file.reference, 'VERIFY')),
+                          setFiles(await decideFile(file.reference, 'VERIFY', file.revision)),
                         )
                       }
                     >
@@ -433,7 +495,9 @@ export function BackofficeScreen({
                       disabled={pending !== null || reason.trim() === ''}
                       onClick={() =>
                         run(file.reference, async () =>
-                          setFiles(await decideFile(file.reference, 'REJECT', reason)),
+                          setFiles(
+                            await decideFile(file.reference, 'REJECT', file.revision, reason),
+                          ),
                         )
                       }
                     >
@@ -441,10 +505,25 @@ export function BackofficeScreen({
                     </button>
                   </div>
                   <p className="field__hint mt-10">
-                    Un refus est toujours motivé : sans motif, le locataire ne saurait
-                    pas quoi corriger. Ses candidatures sont suspendues, pas
-                    supprimées.
+                    Un refus est toujours motivé : sans motif, le locataire ne saurait pas quoi
+                    corriger. Ses candidatures sont suspendues, pas supprimées.
                   </p>
+                  {file.history.length ? (
+                    <details className="mt-16">
+                      <summary>Historique du dossier</summary>
+                      <ul className="checklist mt-10">
+                        {file.history.map((entry, index) => (
+                          <li key={`${entry.at}-${index}`}>
+                            <strong>{entry.title}</strong>
+                            <p className="p-sm">{entry.note}</p>
+                            <span className="doc__m">
+                              {fmt.logStamp(entry.at)}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  ) : null}
                 </div>
               </div>
             ) : (
@@ -461,9 +540,7 @@ export function BackofficeScreen({
                     <span className="kv__k">{provider.label}</span>
                     <span className="kv__v">
                       <span
-                        className={`badge badge--${
-                          provider.live ? 'ok' : 'pending'
-                        } badge--nodot`}
+                        className={`badge badge--${provider.live ? 'ok' : 'pending'} badge--nodot`}
                       >
                         {provider.driver}
                       </span>
@@ -472,8 +549,8 @@ export function BackofficeScreen({
                 ))}
               </div>
               <p className="field__hint mt-10">
-                Aucun prestataire réglementé n’est branché pendant le pilote. Les
-                contrôles, signatures et paiements affichés sont simulés.
+                Aucun prestataire réglementé n’est branché pendant le pilote. Les contrôles,
+                signatures et paiements affichés sont simulés.
               </p>
             </div>
           </aside>
@@ -500,10 +577,10 @@ export function BackofficeScreen({
               />
             </label>
             <p className="field__hint mt-10">
-              Un bien n’est publié qu’après contrôle des diagnostics et de la cohérence
-              surface / loyer. La publication rejoue les mêmes contrôles que ceux
-              affichés au propriétaire : cliquer plus vite ne les contourne pas. Un
-              bien renvoyé repasse en brouillon, corrigeable et resoumettable.
+              Un bien n’est publié qu’après contrôle des diagnostics et de la cohérence surface /
+              loyer. La publication rejoue les mêmes contrôles que ceux affichés au propriétaire :
+              cliquer plus vite ne les contourne pas. Un bien renvoyé repasse en brouillon,
+              corrigeable et resoumettable.
             </p>
           </div>
 
@@ -517,8 +594,8 @@ export function BackofficeScreen({
                     </div>
                     <div className="doc__m">
                       {property.ownerName} · {property.district} ·{' '}
-                      {fmt.surfaceLower(property.surfaceM2)} ·{' '}
-                      {fmt.euros(property.totalRentCents)} CC
+                      {fmt.surfaceLower(property.surfaceM2)} · {fmt.euros(property.totalRentCents)}{' '}
+                      CC
                     </div>
                   </div>
 
@@ -548,15 +625,11 @@ export function BackofficeScreen({
                           className="btn btn-sm"
                           disabled={pending !== null || property.blockers.length > 0}
                           title={
-                            property.blockers.length > 0
-                              ? property.blockers.join(' · ')
-                              : undefined
+                            property.blockers.length > 0 ? property.blockers.join(' · ') : undefined
                           }
                           onClick={() =>
                             run(property.reference, async () =>
-                              setProperties(
-                                await decideProperty(property.reference, 'PUBLISH'),
-                              ),
+                              setProperties(await decideProperty(property.reference, 'PUBLISH')),
                             )
                           }
                         >
@@ -599,8 +672,7 @@ export function BackofficeScreen({
                         {visit.propertyReference} · {fmt.appointment(visit.scheduledAt)}
                       </div>
                       <div className="doc__m">
-                        {visit.tenantName} ·{' '}
-                        {visit.type === 'VIDEO' ? 'visio' : 'accompagnée'}
+                        {visit.tenantName} · {visit.type === 'VIDEO' ? 'visio' : 'accompagnée'}
                       </div>
                     </div>
                     <div className="doc__c">
@@ -684,12 +756,11 @@ export function BackofficeScreen({
           <div className="panel pad mt-16 wash">
             <span className="label label--accent">Circuit des fonds</span>
             <p className="p-sm mt-8">
-              La plateforme encaisse dépôts de garantie et premiers loyers pour le
-              compte du propriétaire — d’où le besoin d’une carte G en plus de la
-              carte T. Chaque ligne suit trois états successifs :{' '}
-              <b className="mono">reçu</b>, <b className="mono">à reverser</b>,{' '}
-              <b className="mono">reversé</b>. Les honoraires, eux, sont encaissés
-              pour compte propre et ne transitent pas.
+              La plateforme encaisse dépôts de garantie et premiers loyers pour le compte du
+              propriétaire — d’où le besoin d’une carte G en plus de la carte T. Chaque ligne suit
+              trois états successifs : <b className="mono">reçu</b>,{' '}
+              <b className="mono">à reverser</b>, <b className="mono">reversé</b>. Les honoraires,
+              eux, sont encaissés pour compte propre et ne transitent pas.
             </p>
             <p className="field__hint mt-10">
               En attente de reversement : {fmt.euros(summary.pendingPayoutCents)}.
@@ -747,19 +818,18 @@ export function BackofficeScreen({
               </div>
               <p className="field__hint mt-10">
                 La purge des enregistrements est datée à l’ouverture de la salle mais
-                <b> aucune tâche ne la déclenche encore</b> : à brancher avant toute
-                visio réelle. La durée de conservation des pièces d’un dossier refusé
-                reste à trancher avec l’avocat.
+                <b> aucune tâche ne la déclenche encore</b> : à brancher avant toute visio réelle.
+                La durée de conservation des pièces d’un dossier refusé reste à trancher avec
+                l’avocat.
               </p>
             </div>
 
             <div className="panel mt-16 pad">
               <span className="label label--ink">Journal</span>
               <p className="p-sm mt-8">
-                Reconstitué à partir d’horodatages réels — publications, candidatures,
-                pièces contrôlées, visites, baux. Rien n’est ajouté pour remplir la
-                page : un journal qui mentirait sur ce qui s’est passé n’aurait
-                aucune valeur d’audit.
+                Reconstitué à partir d’horodatages réels — publications, candidatures, pièces
+                contrôlées, visites, baux. Rien n’est ajouté pour remplir la page : un journal qui
+                mentirait sur ce qui s’est passé n’aurait aucune valeur d’audit.
               </p>
             </div>
           </aside>

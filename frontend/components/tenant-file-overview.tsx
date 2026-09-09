@@ -103,7 +103,7 @@ export function TenantFileOverview({
           <p>{note}</p>
           {file.verifiedAt && file.status === 'VERIFIED' ? (
             <p className="tenant-verification-date">
-              Validé le {new Date(file.verifiedAt).toLocaleDateString('fr-FR')}
+              Version {file.verifiedRevision} validée le {fmt.longDate(file.verifiedAt)}
             </p>
           ) : null}
         </div>

@@ -23,10 +23,10 @@ const SITUATIONS: { value: EmploymentContractType; label: string }[] = [
 
 /** « 2 980 » → 298000 centimes. Espaces et symboles sont tolérés à la saisie. */
 function toCents(input: string): number | null {
-  const cleaned = input.replace(/[^\d,.]/g, '').replace(',', '.');
+  const cleaned = input.replace(/[\s€]/g, '').replace(',', '.');
   if (cleaned === '') return null;
   const euros = Number(cleaned);
-  return Number.isFinite(euros) ? Math.round(euros * 100) : null;
+  return Number.isFinite(euros) && euros >= 0 ? Math.round(euros * 100) : null;
 }
 
 export function TenantProfileForm({
@@ -43,7 +43,7 @@ export function TenantProfileForm({
   const [income, setIncome] = useState(
     file.netMonthlyIncomeCents === null
       ? ''
-      : String(Math.round(file.netMonthlyIncomeCents / 100)),
+      : String(file.netMonthlyIncomeCents / 100),
   );
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<TenantFailure | null>(null);
