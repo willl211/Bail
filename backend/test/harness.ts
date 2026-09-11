@@ -2,8 +2,10 @@ import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { ExpressAdapter } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
+import { ConfigService } from '@nestjs/config';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { PAYSLIP_DRIVER, type PayslipDriver } from '../src/modules/payslip-analysis/payslip.driver';
 
 /**
  * Application de test.
@@ -25,8 +27,13 @@ export interface Harness {
   close: () => Promise<void>;
 }
 
-export async function createHarness(): Promise<Harness> {
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+export async function createHarness(
+  options: { payslipDriver?: PayslipDriver } = {},
+): Promise<Harness> {
+  const builder = Test.createTestingModule({ imports: [AppModule] });
+  if (options.payslipDriver)
+    builder.overrideProvider(PAYSLIP_DRIVER).useValue(options.payslipDriver);
+  const moduleRef = await builder.compile();
 
   const app = moduleRef.createNestApplication(new ExpressAdapter(), {
     // Comme en production : la signature d'un webhook se vérifie octet pour
@@ -36,6 +43,11 @@ export async function createHarness(): Promise<Harness> {
   });
   app.setGlobalPrefix('api/v1');
   app.use(cookieParser());
+  const proxies = app.get(ConfigService).get<string[]>('trustedProxyCidrs', []);
+  app
+    .getHttpAdapter()
+    .getInstance()
+    .set('trust proxy', proxies.length ? proxies : false);
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

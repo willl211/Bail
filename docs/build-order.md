@@ -11,3 +11,7 @@ Construis et teste dans cet ordre. Un écran doit être fonctionnel avant de pas
 7. **Paiement des honoraires** (peut tourner en mode test/mock au départ avec Stripe sandbox)
 
 Si tu te reprends en main après une interruption : regarde quel écran de cette liste est le dernier fonctionnel et complet, et reprends à partir du suivant plutôt que de repartir de zéro ou de sauter des étapes.
+
+## Ajustements à prévoir
+
+- [ ] **Changer la police du site** — demande du 11 septembre 2026. Nouvelle typographie à choisir, puis à harmoniser sur l’ensemble du site et à vérifier sur PC et mobile. Demande notée uniquement : aucun changement de police effectué à ce stade.

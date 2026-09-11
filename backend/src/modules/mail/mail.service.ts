@@ -127,10 +127,7 @@ export class MailService {
         },
       });
     } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         // Événement déjà en file ou déjà parti : c'est précisément ce que la
         // contrainte d'unicité doit produire.
         return;
@@ -141,6 +138,31 @@ export class MailService {
         `Mise en file « ${options.template} » impossible : ${(error as Error).message}`,
       );
     }
+  }
+
+  /** Notification atomique avec une transition métier : aucun envoi réseau ici. */
+  async enqueueInTransaction(tx: Prisma.TransactionClient, options: EnqueueOptions): Promise<void> {
+    const recipient = await tx.user.findUnique({
+      where: { id: options.userId },
+      select: { email: true, isActive: true },
+    });
+    if (!recipient?.isActive) return;
+    // Le doublon est normal ; une autre erreur doit annuler la transition pour
+    // que le prestataire puisse rejouer la notification sans perdre les e-mails.
+    await tx.emailMessage.createMany({
+      data: [
+        {
+          template: options.template,
+          recipientEmail: recipient.email,
+          recipientId: options.userId,
+          subjectRef: options.subjectRef,
+          dedupeKey: options.dedupeKey ?? `${options.template}:${options.subjectRef}`,
+          driver: this.driver.name,
+          nextAttemptAt: new Date(),
+        },
+      ],
+      skipDuplicates: true,
+    });
   }
 
   /**

@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BackofficeScreen } from './backoffice-screen';
 import { routerMock } from '../test/setup-components';
-import { decideFile, decideProperty } from '@/lib/admin-client';
+import { decideFile, decideProperty, loadAdminDocument } from '@/lib/admin-client';
 import type { AdminFileRow, AdminPropertyRow, BackofficeSummary, ProviderRow } from '@/lib/api';
 
 jest.mock('@/lib/admin-client', () => ({
@@ -10,6 +10,9 @@ jest.mock('@/lib/admin-client', () => ({
   decideFile: jest.fn(),
   decideProperty: jest.fn(),
   assignVisit: jest.fn(),
+  loadAdminDocument: jest.fn(),
+  getPayslipAnalysis: jest.fn().mockResolvedValue({ status: 'UNAVAILABLE', configured: false, checks: [], extraction: null, message: 'Analyse non activée', canRequest: false }),
+  decidePropertyDocument: jest.fn(),
   adminDocumentFileUrl: (id: string) => `/api/v1/admin/documents/${id}/file`,
 }));
 
@@ -56,6 +59,12 @@ const fileIncomplet: AdminFileRow = {
 };
 
 const propertyEnAttente: AdminPropertyRow = {
+  revision: 1,
+  addressLine: '12 rue du Pont',
+  energyRating: 'C',
+  reviewNote: null,
+  documents: [],
+  history: [],
   reference: 'MZ-0193',
   title: '2 pièces meublé, Outre-Seille',
   ownerName: 'Claire Vogt',
@@ -112,20 +121,38 @@ describe('BackofficeScreen', () => {
           documents: [
             {
               id: 'piece-test',
+              type: 'PAYSLIP',
               label: 'Bulletin',
               status: 'PENDING',
               fileName: 'bulletin.pdf',
               hasFile: true,
+              note: null,
+              uploadedAt: '2026-09-01T09:00:00.000Z',
             },
           ],
         },
       ],
     });
-    await userEvent.click(screen.getByText(/Consulter les justificatifs/));
-    expect(screen.getByRole('link', { name: /bulletin.pdf/ })).toHaveAttribute(
-      'href',
-      '/api/v1/admin/documents/piece-test/file',
+    URL.createObjectURL = jest.fn(() => 'blob:piece-test');
+    URL.revokeObjectURL = jest.fn();
+    (loadAdminDocument as jest.Mock).mockResolvedValue(
+      new Blob(['Document'], { type: 'application/pdf' }),
     );
+    expect(screen.getByRole('button', { name: 'Valider cette pièce' })).toBeDisabled();
+    await userEvent.click(screen.getByRole('button', { name: 'Consulter le document' }));
+    expect(loadAdminDocument).toHaveBeenCalledWith(
+      'tenant',
+      'piece-test',
+      1,
+      expect.any(AbortSignal),
+    );
+    expect(await screen.findByRole('link', { name: /Ouvrir en grand/ })).toHaveAttribute(
+      'href',
+      'blob:piece-test',
+    );
+    expect(screen.getByRole('button', { name: 'Valider cette pièce' })).toBeDisabled();
+    await userEvent.click(screen.getByRole('checkbox'));
+    expect(screen.getByRole('button', { name: 'Valider cette pièce' })).toBeEnabled();
   });
 
   const onglet = (nom: RegExp) => screen.getByRole('button', { name: nom });
@@ -181,7 +208,7 @@ describe('BackofficeScreen', () => {
     expect(screen.getAllByText('LOC-2026-0890').length).toBeGreaterThan(0);
 
     await userEvent.click(onglet(/^Biens/));
-    expect(screen.getByText(/MZ-0193/)).toBeInTheDocument();
+    expect(screen.getAllByText(/MZ-0193/).length).toBeGreaterThan(0);
     expect(screen.queryAllByText('LOC-2026-0890')).toHaveLength(0);
 
     await userEvent.click(onglet(/^Journal/));

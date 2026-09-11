@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common';
 import { TenantController } from './tenant.controller';
 import { TenantService } from './tenant.service';
+import { PayslipAnalysisModule } from '../payslip-analysis/payslip-analysis.module';
 
 @Module({
+  imports: [PayslipAnalysisModule],
   controllers: [TenantController],
   providers: [TenantService],
   // Le module `applications` a besoin du dossier du locataire (synthèse

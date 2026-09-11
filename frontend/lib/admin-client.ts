@@ -1,6 +1,7 @@
 'use client';
 
 import type { AdminFileRow, AdminPropertyRow, AdminVisitRow } from '@/lib/api';
+import type { PayslipAnalysisView } from './payslip-analysis';
 
 /**
  * Décisions du back-office, depuis le navigateur.
@@ -53,10 +54,11 @@ export function decideDocument(
   expectedRevision: number,
   reason?: string,
 ) {
-  return post<AdminFileRow[]>(
-    `/admin/documents/${encodeURIComponent(documentId)}/decision`,
-    { decision, expectedRevision, reason },
-  );
+  return post<AdminFileRow[]>(`/admin/documents/${encodeURIComponent(documentId)}/decision`, {
+    decision,
+    expectedRevision,
+    reason,
+  });
 }
 
 export function decideFile(
@@ -65,21 +67,24 @@ export function decideFile(
   expectedRevision: number,
   reason?: string,
 ) {
-  return post<AdminFileRow[]>(
-    `/admin/tenant-files/${encodeURIComponent(reference)}/decision`,
-    { decision, expectedRevision, reason },
-  );
+  return post<AdminFileRow[]>(`/admin/tenant-files/${encodeURIComponent(reference)}/decision`, {
+    decision,
+    expectedRevision,
+    reason,
+  });
 }
 
 export function decideProperty(
   reference: string,
   decision: 'PUBLISH' | 'REJECT',
+  expectedRevision: number,
   reason?: string,
 ) {
-  return post<AdminPropertyRow[]>(
-    `/admin/properties/${encodeURIComponent(reference)}/decision`,
-    { decision, reason },
-  );
+  return post<AdminPropertyRow[]>(`/admin/properties/${encodeURIComponent(reference)}/decision`, {
+    decision,
+    expectedRevision,
+    reason,
+  });
 }
 
 export function assignVisit(visitId: string, agentId: string) {
@@ -90,4 +95,72 @@ export function assignVisit(visitId: string, agentId: string) {
 
 export function adminDocumentFileUrl(documentId: string) {
   return `${API_URL}/admin/documents/${encodeURIComponent(documentId)}/file`;
+}
+
+export async function getPayslipAnalysis(
+  documentId: string,
+  revision: number,
+  signal: AbortSignal,
+): Promise<PayslipAnalysisView> {
+  const response = await fetch(
+    `${API_URL}/admin/documents/${encodeURIComponent(documentId)}/analysis?revision=${revision}`,
+    {
+      credentials: 'include',
+      cache: 'no-store',
+      signal,
+    },
+  );
+  if (!response.ok) throw await toFailure(response);
+  return response.json() as Promise<PayslipAnalysisView>;
+}
+
+export function requestPayslipAnalysis(documentId: string, expectedRevision: number) {
+  return post<PayslipAnalysisView>(`/admin/documents/${encodeURIComponent(documentId)}/analysis`, {
+    expectedRevision,
+  });
+}
+
+export interface DiagnosticReview {
+  decision: 'VERIFY' | 'REJECT';
+  reason?: string;
+  issuedAt?: string;
+  expiresAt?: string;
+  energyRating?: string;
+}
+
+export function decidePropertyDocument(
+  documentId: string,
+  expectedRevision: number,
+  review: DiagnosticReview,
+) {
+  return post<AdminPropertyRow[]>(
+    `/admin/property-documents/${encodeURIComponent(documentId)}/decision`,
+    {
+      ...review,
+      expectedRevision,
+    },
+  );
+}
+
+/** Un blob privé local au navigateur, libéré à la fermeture du contrôle. */
+export async function loadAdminDocument(
+  kind: 'tenant' | 'property',
+  id: string,
+  revision: number,
+  signal: AbortSignal,
+) {
+  const path = kind === 'property' ? 'property-documents' : 'documents';
+  const response = await fetch(
+    `${API_URL}/admin/${path}/${encodeURIComponent(id)}/file?revision=${revision}`,
+    {
+      credentials: 'include',
+      cache: 'no-store',
+      signal,
+    },
+  );
+  if (!response.ok) throw await toFailure(response);
+  const blob = await response.blob();
+  if (blob.size === 0)
+    throw { message: 'Ce fichier est vide. Demandez un nouveau dépôt.' } satisfies AdminFailure;
+  return blob;
 }

@@ -5,6 +5,7 @@ Ces prestataires peuvent être branchés en mode test/sandbox pendant tout le d�
 | Besoin | Prestataire | Statut |
 |---|---|---|
 | KYC / vérification des pièces (dossier locataire, avant visite) | Non choisi | **Interface en place, driver `mock` seul accepté** (voir ci-dessous) |
+| Aide à la lecture des bulletins de salaire | OpenAI Responses | **Connecteur écrit, désactivé par défaut, contrôle humain obligatoire** — [activation et limites](payslip-analysis.md) |
 | Signature électronique du bail | DocuSign | Confirmé — **interface en place, driver non écrit** (voir ci-dessous) |
 | Paiement (abonnements propriétaires, honoraires) | Stripe | Confirmé — **code complet, aucun compte branché** (voir ci-dessous) |
 | Visio pour les visites à distance | Non choisi formellement | **Interface en place, driver `mock` seul accepté.** Recommandation : Daily.co (le plus simple à intégrer et le moins cher pour démarrer, comparé à Twilio) |
@@ -54,8 +55,10 @@ propriétaire sont lus dans `fee_schedules` et `platform_settings`, et tant que
 
 ## Vérification des pièces — précision du 3 septembre 2026
 
-Le contrat du prestataire est écrit (`VerificationDriver`) et tout le dossier
-locataire passe par lui. Aucun prestataire n'étant retenu, `KYC_DRIVER=mock` est
+Le contrat du prestataire est écrit (`VerificationDriver`). Depuis le 10 septembre,
+les nouveaux bulletins passent par une file d'analyse distincte et restent à contrôler
+par un agent, y compris sans IA configurée. Les autres pièces utilisent ce contrat.
+Aucun prestataire KYC n'étant retenu, `KYC_DRIVER=mock` est
 la **seule valeur acceptée** : un nom inconnu fait échouer le démarrage plutôt
 que de retomber sur le simulateur — en production, ça reviendrait à valider des
 pièces d'identité sans les contrôler.
@@ -65,7 +68,8 @@ vrai prestataire :
 
 | Pièce | Verdict simulé |
 |---|---|
-| Identité, bulletins, contrat, avis d'imposition, certificat de scolarité, pièces du garant | vérifiée automatiquement, avec une note de contrôle |
+| Identité, contrat, avis d'imposition, certificat de scolarité, pièces du garant | vérifiée automatiquement, avec une note de contrôle simulé |
+| Nouveaux bulletins de salaire | **revue humaine**, aide IA facultative distincte du simulateur |
 | Justificatif de domicile, pièce non reconnue | **revue humaine** — document hétérogène dont l'adresse se lit à l'œil |
 
 Un mock qui validerait tout masquerait l'existence même du contrôle manuel, et

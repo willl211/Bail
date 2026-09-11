@@ -1,3 +1,4 @@
+import { PayslipAnalysisService } from '../payslip-analysis/payslip-analysis.service';
 import {
   BadRequestException,
   ConflictException,
@@ -154,6 +155,7 @@ export class TenantService {
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
     @Inject(VERIFICATION_DRIVER) private readonly verification: VerificationDriver,
+    private readonly payslips: PayslipAnalysisService,
   ) {}
 
   // ---------------------------------------------------------------- Dossier
@@ -375,7 +377,8 @@ export class TenantService {
           data: {
             tenantFileId: tenantFile.id,
             type,
-            status: DocumentStatus.PROCESSING,
+            status: type === DocumentType.PAYSLIP ? DocumentStatus.PENDING : DocumentStatus.PROCESSING,
+            verificationNote: type === DocumentType.PAYSLIP ? 'Bulletin reçu · validation par un agent requise' : null,
             fileName: file.originalname.slice(0, 200),
             mimeType: stored.mimeType,
             fileSize: stored.size,
@@ -393,6 +396,7 @@ export class TenantService {
             note: slot.label,
           },
         );
+        await this.payslips.enqueue(tx, document, tenantId);
         return document;
       });
     } catch (error) {
@@ -400,7 +404,7 @@ export class TenantService {
       throw error;
     }
 
-    await this.runVerification(created);
+    if (created.type !== DocumentType.PAYSLIP) await this.runVerification(created);
     return this.getFile(tenantId);
   }
 

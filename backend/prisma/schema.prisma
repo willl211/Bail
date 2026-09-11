@@ -263,6 +263,17 @@ enum PropertyType {
   HOUSE
 }
 
+/// Quotas d'authentification partagés, y compris pour les comptes inexistants.
+/// La clé est une empreinte ; aucune adresse e-mail/IP n'est stockée en clair.
+model AuthRateLimit {
+  key       String   @id
+  attempts  Int
+  expiresAt DateTime
+
+  @@index([expiresAt])
+  @@map("auth_rate_limits")
+}
+
 /// Type de bail applicable. Conditionne le modèle légal utilisé pour la
 /// génération du bail (docs/legal-context.md).
 enum LeaseType {
@@ -346,12 +357,14 @@ model Property {
   /// serait fausse — le propriétaire verrait son annonce repasser en brouillon
   /// sans savoir pourquoi. Effacé à la resoumission.
   reviewNote String? @db.Text
+  reviewRevision Int @default(1)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   photos       PropertyPhoto[]
   documents    PropertyDocument[]
+  reviewEvents PropertyReviewEvent[]
   applications Application[]
   savedBy      SavedProperty[]
   visits       Visit[]
@@ -420,12 +433,32 @@ model PropertyDocument {
 
   verificationNote String?
   rejectionReason  String?
+  verifiedAt       DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([propertyId, type])
   @@map("property_documents")
+}
+
+/// Décisions conservées même après le remplacement ou le retrait d'une pièce.
+model PropertyReviewEvent {
+  id         String   @id @default(uuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  revision   Int
+  action     String
+  actorId    String?
+  actorLabel String
+  title      String
+  note       String
+  snapshot   Json?
+  createdAt  DateTime @default(now())
+
+  @@unique([propertyId, revision])
+  @@index([createdAt])
+  @@map("property_review_events")
 }
 
 model PropertyPhoto {
@@ -575,8 +608,47 @@ model TenantDocument {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  payslipAnalysis PayslipAnalysis?
+
   @@index([tenantFileId, type])
   @@map("tenant_documents")
+}
+
+enum PayslipAnalysisStatus {
+  UNAVAILABLE
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+/// Lecture assistée, jamais une validation de pièce. Supprimée avec sa source.
+model PayslipAnalysis {
+  id               String @id @default(uuid())
+  documentId       String @unique
+  document         TenantDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  status           PayslipAnalysisStatus
+  generation       Int @default(1)
+  provider         String
+  model            String?
+  promptVersion    String
+  sourceStorageKey String
+  sourceCreatedAt  DateTime
+  sourceSha256     String?
+  result           Json?
+  errorCode        String?
+  attempts         Int @default(0)
+  runToken         String?
+  lockedUntil      DateTime?
+  nextAttemptAt    DateTime @default(now())
+  requestedById    String?
+  requestedAt      DateTime @default(now())
+  completedAt      DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([status, nextAttemptAt])
+  @@map("payslip_analyses")
 }
 
 enum GuarantorKind {

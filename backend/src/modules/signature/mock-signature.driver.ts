@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+import { validateSignatureEvent } from './signature-event.validation';
 import type {
   SignatureDriver,
   SignatureEnvelope,
@@ -60,15 +61,15 @@ export class MockSignatureDriver implements SignatureDriver {
   }
 
   parseEvent(payload: Buffer): SignatureEvent {
-    // Pas de signature à vérifier sans prestataire réel, mais la charge doit
-    // rester un JSON valide : accepter n'importe quoi masquerait des erreurs de
-    // format qui exploseraient en production.
+    // L'accès au simulateur est réservé à l'agent connecté par LeaseService.
+    // L'identifiant d'événement est imposé afin que ses rejeux soient dédoublonnés.
     let body: {
       id?: string;
       envelopeId?: string;
       type?: SignatureEvent['type'];
       signerId?: string;
       reason?: string;
+      occurredAt?: string;
     };
     try {
       body = JSON.parse(payload.toString('utf8')) as typeof body;
@@ -76,17 +77,20 @@ export class MockSignatureDriver implements SignatureDriver {
       throw new BadRequestException('Charge de notification illisible.');
     }
 
-    if (!body.envelopeId) throw new BadRequestException('Enveloppe manquante.');
-    if (!body.type) throw new BadRequestException('Type d’événement manquant.');
-
-    return {
-      id: body.id ?? `evt_${randomUUID().slice(0, 12)}`,
-      envelopeId: body.envelopeId,
-      type: body.type,
+    if (!body || typeof body !== 'object' || Array.isArray(body))
+      throw new BadRequestException('Charge de notification invalide.');
+    if (body.occurredAt !== undefined && typeof body.occurredAt !== 'string')
+      throw new BadRequestException('Horodatage de notification invalide.');
+    const event: SignatureEvent = {
+      id: body.id!,
+      envelopeId: body.envelopeId!,
+      type: body.type!,
       signerId: body.signerId ?? null,
-      occurredAt: new Date(),
+      occurredAt: body.occurredAt === undefined ? new Date() : new Date(body.occurredAt),
       reason: body.reason ?? null,
     };
+    validateSignatureEvent(event);
+    return event;
   }
 
   async downloadSigned(envelopeId: string): Promise<{ content: Buffer; mimeType: string }> {

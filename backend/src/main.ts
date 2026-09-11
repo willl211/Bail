@@ -30,9 +30,10 @@ async function bootstrap() {
   // La session voyage dans un cookie `httpOnly` : le guard doit pouvoir le lire.
   app.use(cookieParser());
 
-  // Derrière le proxy d'OVH, `request.ip` renverrait l'adresse du proxy sans
-  // ça — or elle est journalisée avec chaque session, pour l'audit.
-  app.set('trust proxy', 1);
+  // Faire confiance à un nombre de sauts permettrait de falsifier l'IP en
+  // accès direct. Seuls les réseaux de proxy explicitement déclarés comptent.
+  const trustedProxies = config.get<string[]>('trustedProxyCidrs', []);
+  app.set('trust proxy', trustedProxies.length ? trustedProxies : false);
 
   // Fichiers publics (photos d'annonces) uniquement, et seulement quand ils sont
   // sur le disque de ce serveur.

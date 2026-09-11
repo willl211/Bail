@@ -17,6 +17,8 @@ interface PropertyDocument {
   fileName: string | null;
   fileSize: number | null;
   issuedAt: string | null;
+  expiresAt: string | null;
+  verificationNote: string | null;
   rejectionReason: string | null;
 }
 
@@ -141,6 +143,7 @@ export function DiagnosticsUploader({
       {EXPECTED.map((expected) => {
         const document = documents.find((entry) => entry.type === expected.type);
         const pending = busy === expected.type;
+        const status = document?.status;
 
         return (
           <div key={expected.type} className="doc-row">
@@ -157,6 +160,7 @@ export function DiagnosticsUploader({
                       formatDate(document.issuedAt)
                         ? `réalisé le ${formatDate(document.issuedAt)}`
                         : null,
+                      document.expiresAt ? `validité jusqu’au ${formatDate(document.expiresAt)}` : null,
                     ]
                       .filter(Boolean)
                       .join(' · ')
@@ -167,13 +171,14 @@ export function DiagnosticsUploader({
                   {document.rejectionReason}
                 </div>
               ) : null}
+              {document?.verificationNote ? <div className="doc-row__meta">{document.verificationNote}</div> : null}
             </div>
 
             <div className="doc-row__actions">
               {document ? (
                 <>
-                  <span className={STATUS_TONE[document.status] ?? 'badge badge--mute'}>
-                    {STATUS_LABEL[document.status] ?? document.status}
+                  <span className={STATUS_TONE[status!] ?? 'badge badge--mute'}>
+                    {STATUS_LABEL[status!] ?? status}
                   </span>
                   <a
                     className="link"

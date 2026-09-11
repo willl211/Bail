@@ -23,6 +23,10 @@ Seul le proxy est exposé. L'API et le front ne sont joignables que depuis le
 réseau interne de Docker : le front appelle l'API par `http://api:4000`, sans
 ressortir sur Internet.
 
+Pour les quotas de connexion, renseigner `TRUSTED_PROXY_CIDRS` avec le réseau
+réel du proxy ; laisser vide en accès direct sans proxy. Voir
+[la protection des connexions](auth-protection.md) avant de mettre l'API en ligne.
+
 **Le front est un serveur, pas un site statique.** Les pages lisent les cookies
 et sont rendues à chaque requête — un hébergement web mutualisé ne convient
 donc pas, il faut une machine qui exécute Node.

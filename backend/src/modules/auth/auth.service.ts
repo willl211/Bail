@@ -1,9 +1,4 @@
-import {
-  ConflictException,
-  Injectable,
-  Logger,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { ConflictException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { User, UserRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
@@ -135,12 +130,8 @@ export class AuthService {
     // temps de réponse ne doit pas trahir l'existence de l'adresse.
     const valid = await bcrypt.compare(dto.password, user?.passwordHash ?? DUMMY_HASH);
 
-    if (!user || !user.passwordHash || !valid) {
+    if (!user || !user.passwordHash || !valid || !user.isActive) {
       throw new UnauthorizedException('Adresse e-mail ou mot de passe incorrect.');
-    }
-
-    if (!user.isActive) {
-      throw new UnauthorizedException('Ce compte est désactivé.');
     }
 
     return this.createSession(user, context);
@@ -153,7 +144,7 @@ export class AuthService {
    * chaque requête authentifiée provoquerait une écriture en base.
    */
   async resolveSession(token: string | undefined): Promise<PublicUser | null> {
-    if (!token) return null;
+    if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(token)) return null;
 
     const session = await this.prisma.session.findUnique({
       where: { tokenHash: hashSecret(token) },

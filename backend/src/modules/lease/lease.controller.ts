@@ -52,7 +52,8 @@ export class LeaseController {
  *
  * Route publique — appelée par le prestataire, pas par un navigateur porteur de
  * session. C'est la signature de la charge qui l'authentifie, rien d'autre :
- * sans elle, n'importe qui pourrait déclarer un bail signé.
+ * sans elle, n'importe qui pourrait déclarer un bail signé. En mode mock, où
+ * aucune signature de prestataire n'existe, une session AGENT est exigée.
  */
 @Controller('leases/signature/webhook')
 @Public()
@@ -64,13 +65,14 @@ export class LeaseSignatureWebhookController {
   async receive(
     @Req() request: RawBodyRequest<Request>,
     @Headers('x-signature') signature?: string,
+    @CurrentUser() user?: PublicUser,
   ) {
     const payload = request.rawBody;
     if (!payload) {
       throw new BadRequestException('Charge brute absente : signature invérifiable.');
     }
 
-    const event = this.leases.parseSignatureEvent(payload, signature);
+    const event = this.leases.parseSignatureEvent(payload, signature, user?.role);
     const handled = await this.leases.applySignatureEvent(event);
     return { received: true, handled };
   }

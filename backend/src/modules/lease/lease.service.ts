@@ -1,3 +1,4 @@
+import { isCurrentDiagnostic, diagnosticStatus } from '../owner/property.checks';
 import {
   BadRequestException,
   ConflictException,
@@ -5,6 +6,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ForbiddenException,
 } from '@nestjs/common';
 import {
   ApplicationStatus,
@@ -32,6 +34,13 @@ import {
 } from '../signature/signature.driver';
 import { renderPlainText, renderTemplate, type RenderedBlock } from './lease.renderer';
 import { SIGNATURE_VALIDITY_DAYS } from './signature.validity';
+import {
+  acceptsSignatureEvents,
+  nextSignatureStatus,
+  signatureEventsOf,
+  signatureProgress,
+} from './lease-signature.policy';
+import { validateSignatureEvent } from '../signature/signature-event.validation';
 import { validateLease, type LeaseValidationReport } from './lease.validation';
 
 /** Réglage qui autorise — ou non — la génération de baux. */
@@ -177,7 +186,17 @@ export class LeaseService {
     const application = await this.prisma.application.findFirst({
       where: { id: applicationId, property: { ownerId } },
       include: {
-        property: { select: { id: true, reference: true, leaseType: true, rentCents: true, chargesCents: true, depositCents: true, availableFrom: true } },
+        property: {
+          select: {
+            id: true,
+            reference: true,
+            leaseType: true,
+            rentCents: true,
+            chargesCents: true,
+            depositCents: true,
+            availableFrom: true,
+          },
+        },
         tenant: { select: { id: true } },
       },
     });
@@ -385,16 +404,14 @@ export class LeaseService {
 
     const annexes = EXPECTED_ANNEXES.filter((annexe) =>
       property.documents.some(
-        (document) =>
-          document.type === annexe.type && document.status === DocumentStatus.VERIFIED,
+        (document) => document.type === annexe.type && isCurrentDiagnostic(document),
       ),
     ).map((annexe) => annexe.label);
 
     const feesCents = feeSchedule
       ? Math.round(
           property.surfaceM2 *
-            (feeSchedule.tenantVisitFeeCentsPerSqm +
-              feeSchedule.tenantInventoryFeeCentsPerSqm),
+            (feeSchedule.tenantVisitFeeCentsPerSqm + feeSchedule.tenantInventoryFeeCentsPerSqm),
         )
       : null;
 
@@ -425,9 +442,7 @@ export class LeaseService {
       // d'ici. Il reste vide tant que le texte n'est pas fourni.
       clausesLegalesTexteValide: '',
       honorairesMention:
-        feesCents === null
-          ? ''
-          : `Honoraires à la charge du locataire : ${euros(feesCents)} TTC.`,
+        feesCents === null ? '' : `Honoraires à la charge du locataire : ${euros(feesCents)} TTC.`,
       listeAnnexes: annexes.length > 0 ? annexes.join(', ') : '',
     };
   }
@@ -470,9 +485,7 @@ export class LeaseService {
 
     const identityVerified = await this.tenantIdentityVerified(lease.tenantId);
     const energyDocument = lease.property.documents.find(
-      (document) =>
-        document.type === PropertyDocumentType.DPE &&
-        document.status === DocumentStatus.VERIFIED,
+      (document) => document.type === PropertyDocumentType.DPE && isCurrentDiagnostic(document),
     );
 
     const validation = validateLease({
@@ -517,17 +530,12 @@ export class LeaseService {
       );
     }
     if (!generationEnabled) {
-      blockers.push(
-        'La génération de baux est désactivée en attendant la validation juridique.',
-      );
+      blockers.push('La génération de baux est désactivée en attendant la validation juridique.');
     }
     blockers.push(...validation.anomalies, ...validation.unverifiable);
 
-    const events = (lease.signatureEvents ?? []) as {
-      type: string;
-      signerId?: string;
-      occurredAt: string;
-    }[];
+    const events = signatureEventsOf(lease.signatureEvents);
+    const progress = signatureProgress(events);
 
     return {
       reference: lease.reference,
@@ -548,45 +556,31 @@ export class LeaseService {
       depositCents: lease.depositCents,
       document: renderTemplate(lease.template.body, fieldValues),
       validation,
-      signers: [
-        {
-          role: 'LANDLORD',
-          fullName: `${lease.property.owner.firstName} ${lease.property.owner.lastName}`,
-          signed: events.some(
-            (event) => event.type === 'signed' && event.signerId === 'LANDLORD',
-          ),
-          signedAt:
-            events.find(
-              (event) => event.type === 'signed' && event.signerId === 'LANDLORD',
-            )?.occurredAt ?? null,
-        },
-        {
-          role: 'TENANT',
-          fullName: `${lease.tenant.firstName} ${lease.tenant.lastName}`,
-          signed: events.some(
-            (event) => event.type === 'signed' && event.signerId === 'TENANT',
-          ),
-          signedAt:
-            events.find((event) => event.type === 'signed' && event.signerId === 'TENANT')
-              ?.occurredAt ?? null,
-        },
-      ],
+      signers: progress.signers.map((signer) => ({
+        ...signer,
+        fullName:
+          signer.role === 'LANDLORD'
+            ? `${lease.property.owner.firstName} ${lease.property.owner.lastName}`
+            : `${lease.tenant.firstName} ${lease.tenant.lastName}`,
+      })),
       annexes: EXPECTED_ANNEXES.map((annexe) => {
-        const document = lease.property.documents.find(
-          (entry) => entry.type === annexe.type,
-        );
+        const document = lease.property.documents.find((entry) => entry.type === annexe.type);
         return {
           type: annexe.type,
           label: annexe.label,
-          present: document?.status === DocumentStatus.VERIFIED,
+          present: document !== undefined && isCurrentDiagnostic(document),
           detail:
             document === undefined
               ? 'Non déposé'
-              : document.status === DocumentStatus.VERIFIED
+              : isCurrentDiagnostic(document)
                 ? annexe.type === PropertyDocumentType.DPE && lease.property.energyRating
                   ? `Classe ${lease.property.energyRating}`
                   : 'Vérifié'
-                : 'En cours de contrôle',
+                : diagnosticStatus(document) === 'EXPIRED'
+                  ? 'Expiré'
+                  : document.status === DocumentStatus.REJECTED
+                    ? 'Refusé'
+                    : 'À contrôler',
         };
       }),
       history: LeaseService.historyOf(lease, events),
@@ -611,15 +605,22 @@ export class LeaseService {
 
   /** Historique du document, reconstitué sur des faits datés. */
   private static historyOf(
-    lease: { createdAt: Date; validatedAt: Date | null; sentForSignatureAt: Date | null; signedAt: Date | null; reference: string; template: { code: string; version: number } },
-    events: { type: string; signerId?: string; occurredAt: string }[],
+    lease: {
+      createdAt: Date;
+      validatedAt: Date | null;
+      sentForSignatureAt: Date | null;
+      signedAt: Date | null;
+      reference: string;
+      template: { code: string; version: number };
+    },
+    events: { type: string; signerId?: string | null; occurredAt: string }[],
   ): LeaseHistoryEntry[] {
     const entries: LeaseHistoryEntry[] = events.map((event) => ({
       at: event.occurredAt,
       tone: event.type === 'declined' ? 'reject' : event.type === 'signed' ? 'ok' : 'pending',
       title:
         event.type === 'signed'
-          ? `Signé par ${event.signerId === 'LANDLORD' ? 'le bailleur' : 'le locataire'}`
+          ? `Signature reçue : ${event.signerId === 'LANDLORD' ? 'bailleur' : event.signerId === 'TENANT' ? 'locataire' : 'signataire inconnu'}`
           : event.type === 'sent'
             ? 'Envoyé aux signataires'
             : event.type === 'declined'
@@ -648,8 +649,18 @@ export class LeaseService {
   }
 
   /** Baux d'un utilisateur, selon son rôle. */
-  async listFor(userId: string, role: 'OWNER' | 'TENANT'): Promise<
-    { reference: string; status: LeaseStatus; propertyReference: string; propertyTitle: string; startDate: string; rentCents: number }[]
+  async listFor(
+    userId: string,
+    role: 'OWNER' | 'TENANT',
+  ): Promise<
+    {
+      reference: string;
+      status: LeaseStatus;
+      propertyReference: string;
+      propertyTitle: string;
+      startDate: string;
+      rentCents: number;
+    }[]
   > {
     const leases = await this.prisma.lease.findMany({
       where: role === 'OWNER' ? { property: { ownerId: userId } } : { tenantId: userId },
@@ -769,82 +780,78 @@ export class LeaseService {
    * Délégué au driver : le contrôleur n'a pas à connaître le prestataire, et
    * la vérification de signature reste au seul endroit qui sait la faire.
    */
-  parseSignatureEvent(payload: Buffer, signature: string | undefined): SignatureEvent {
+  parseSignatureEvent(
+    payload: Buffer,
+    signature: string | undefined,
+    actorRole?: string,
+  ): SignatureEvent {
+    if (this.signature.name === 'mock' && actorRole !== 'AGENT') {
+      throw new ForbiddenException(
+        'Les notifications de signature simulées sont réservées à un agent connecté.',
+      );
+    }
     return this.signature.parseEvent(payload, signature);
   }
 
   /** Applique un événement du prestataire de signature. */
   async applySignatureEvent(event: SignatureEvent): Promise<boolean> {
-    const lease = await this.prisma.lease.findFirst({
-      where: { signatureEnvelopeId: event.envelopeId },
-      select: {
-        id: true,
-        signatureEvents: true,
-        status: true,
-        tenantId: true,
-        property: { select: { ownerId: true } },
-      },
-    });
-    if (!lease) {
-      this.logger.warn(`Événement reçu pour une enveloppe inconnue : ${event.envelopeId}`);
-      return false;
-    }
-
-    const events = ((lease.signatureEvents ?? []) as { id?: string }[]).slice();
-    // Les rejeux sont ordinaires chez un prestataire de signature : un même
-    // événement ne doit pas compter deux fois.
-    if (events.some((entry) => entry.id === event.id)) return true;
-
-    events.push({
-      id: event.id,
-      ...{
+    validateSignatureEvent(event);
+    return this.prisma.$transaction(async (tx) => {
+      // Le verrou précède la lecture de l'historique. Deux webhooks simultanés
+      // voient ainsi les signatures déjà enregistrées, sans écraser l'autre.
+      const matches = await tx.$queryRaw<{ id: string }[]>`
+        SELECT "id" FROM "leases" WHERE "signatureEnvelopeId" = ${event.envelopeId} FOR UPDATE
+      `;
+      if (matches.length !== 1) {
+        this.logger.warn('Notification de signature ignorée : enveloppe inconnue ou ambiguë.');
+        return false;
+      }
+      const lease = await tx.lease.findUniqueOrThrow({
+        where: { id: matches[0].id },
+        include: { property: { select: { ownerId: true } } },
+      });
+      if (lease.signatureProvider !== this.signature.name) {
+        this.logger.warn('Notification ignorée : le prestataire ne correspond pas à l’enveloppe.');
+        return false;
+      }
+      const events = signatureEventsOf(lease.signatureEvents);
+      if (events.some((entry) => entry.id === event.id)) return true;
+      if (!acceptsSignatureEvents(lease.status)) {
+        // Accuser réception évite les rejeux inutiles ; l'état final et sa date
+        // ne changent jamais à cause d'une notification tardive.
+        this.logger.log(`Notification ignorée pour le bail ${lease.reference} (${lease.status}).`);
+        return true;
+      }
+      const stored = {
+        id: event.id,
         type: event.type,
         signerId: event.signerId,
         occurredAt: event.occurredAt.toISOString(),
         reason: event.reason,
-      },
-    } as never);
-
-    const signedCount = events.filter(
-      (entry) => (entry as { type?: string }).type === 'signed',
-    ).length;
-
-    const status =
-      event.type === 'declined'
-        ? LeaseStatus.DECLINED
-        : event.type === 'voided'
-          ? LeaseStatus.CANCELLED
-          : event.type === 'completed' || signedCount >= 2
-            ? LeaseStatus.SIGNED
-            : signedCount === 1
-              ? LeaseStatus.PARTIALLY_SIGNED
-              : lease.status;
-
-    await this.prisma.lease.update({
-      where: { id: lease.id },
-      data: {
-        status,
-        signatureEvents: events as unknown as Prisma.InputJsonValue,
-        signedAt: status === LeaseStatus.SIGNED ? event.occurredAt : undefined,
-        declinedAt: status === LeaseStatus.DECLINED ? event.occurredAt : undefined,
-        declineReason: status === LeaseStatus.DECLINED ? event.reason : undefined,
-      },
-    });
-
-    // Signé des deux côtés : les parties l'apprennent. La clé de dédoublonnage
-    // porte le bail, pas l'événement — un rejeu du prestataire ne doit pas
-    // annoncer deux fois la même signature.
-    if (status === LeaseStatus.SIGNED && lease.status !== LeaseStatus.SIGNED) {
-      for (const userId of [lease.property.ownerId, lease.tenantId]) {
-        await this.mail.enqueue({
-          template: EVENT.leaseSigned,
-          userId,
-          subjectRef: lease.id,
-          dedupeKey: `${EVENT.leaseSigned}:${lease.id}:${userId}`,
-        });
+      };
+      events.push(stored);
+      const status = nextSignatureStatus(events, stored);
+      await tx.lease.update({
+        where: { id: lease.id },
+        data: {
+          status,
+          signatureEvents: events as unknown as Prisma.InputJsonValue,
+          signedAt: status === LeaseStatus.SIGNED ? signatureProgress(events).signedAt : null,
+          declinedAt: status === LeaseStatus.DECLINED ? event.occurredAt : undefined,
+          declineReason: status === LeaseStatus.DECLINED ? event.reason : undefined,
+        },
+      });
+      if (status === LeaseStatus.SIGNED) {
+        for (const userId of [lease.property.ownerId, lease.tenantId]) {
+          await this.mail.enqueueInTransaction(tx, {
+            template: EVENT.leaseSigned,
+            userId,
+            subjectRef: lease.id,
+            dedupeKey: `${EVENT.leaseSigned}:${lease.id}:${userId}`,
+          });
+        }
       }
-    }
-
-    return true;
+      return true;
+    });
   }
 }

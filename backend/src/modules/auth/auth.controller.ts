@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { CookieOptions, Response } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -14,8 +14,10 @@ import {
   VerifyEmailDto,
 } from './dto/account.dto';
 import { CurrentUser, Public, RequestWithUser } from './session.guard';
+import { AuthProtectionGuard, AuthThrottle } from './auth-protection.guard';
 
 @Controller('auth')
+@UseGuards(AuthProtectionGuard)
 export class AuthController {
   constructor(
     private readonly auth: AuthService,
@@ -53,6 +55,7 @@ export class AuthController {
 
   @Public()
   @Post('register')
+  @AuthThrottle('register')
   async register(
     @Body() dto: RegisterDto,
     @Req() request: RequestWithUser,
@@ -79,6 +82,7 @@ export class AuthController {
 
   @Public()
   @Post('login')
+  @AuthThrottle('login')
   @HttpCode(200)
   async login(
     @Body() dto: LoginDto,
@@ -100,6 +104,7 @@ export class AuthController {
    */
   @Public()
   @Post('logout')
+  @AuthThrottle('logout')
   @HttpCode(204)
   async logout(
     @Req() request: RequestWithUser,
@@ -127,6 +132,7 @@ export class AuthController {
 
   /** Renvoie le lien de confirmation au titulaire du compte connecté. */
   @Post('email/verification')
+  @AuthThrottle('verification')
   @HttpCode(204)
   async resendVerification(@CurrentUser() user: PublicUser): Promise<void> {
     const record = await this.prisma.user.findUniqueOrThrow({
@@ -152,6 +158,7 @@ export class AuthController {
   // --------------------------------------------------- Mot de passe oublié
 
   @Post('email/change')
+  @AuthThrottle('credential')
   @HttpCode(204)
   requestEmailChange(@CurrentUser() user: PublicUser, @Body() dto: ChangeEmailDto) {
     return this.account.requestEmailChange(user.id, dto.email, dto.currentPassword);
@@ -160,20 +167,27 @@ export class AuthController {
   @Public()
   @Post('email/change/confirm')
   @HttpCode(200)
-  async confirmEmailChange(@Body() dto: VerifyEmailDto, @Res({ passthrough: true }) response: Response) {
+  async confirmEmailChange(
+    @Body() dto: VerifyEmailDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
     const result = await this.account.confirmEmailChange(dto.token);
-    response.clearCookie(this.config.get<string>('auth.cookieName', 'bail_session'), this.cookieOptions());
+    response.clearCookie(
+      this.config.get<string>('auth.cookieName', 'bail_session'),
+      this.cookieOptions(),
+    );
     return result;
   }
 
   /**
    * Demande de réinitialisation.
    *
-   * Répond 204 dans tous les cas, y compris pour une adresse inconnue : une
-   * réponse différente ferait de ce formulaire public un annuaire des comptes.
+   * Hors limitation de débit, répond 204 pour une adresse connue comme inconnue.
+   * Le guard applique les mêmes quotas aux deux, sans révéler les comptes.
    */
   @Public()
   @Post('password/forgot')
+  @AuthThrottle('recovery')
   @HttpCode(204)
   async forgotPassword(
     @Body() dto: ForgotPasswordDto,
@@ -207,6 +221,7 @@ export class AuthController {
    * reconnecte avec son nouveau mot de passe.
    */
   @Post('password/change')
+  @AuthThrottle('credential')
   @HttpCode(204)
   async changePassword(
     @CurrentUser() user: PublicUser,

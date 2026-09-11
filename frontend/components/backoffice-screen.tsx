@@ -13,14 +13,10 @@ import type {
   ProviderRow,
 } from '@/lib/api';
 import * as fmt from '@/lib/format';
-import {
-  assignVisit,
-  decideDocument,
-  decideFile,
-  decideProperty,
-  adminDocumentFileUrl,
-  type AdminFailure,
-} from '@/lib/admin-client';
+import { assignVisit, decideDocument, decideFile, type AdminFailure } from '@/lib/admin-client';
+
+import { AdminDocumentReview } from './admin-document-review';
+import { AdminPropertyReview } from './admin-property-review';
 
 type Pane = 'dossiers' | 'biens' | 'baux' | 'journal';
 
@@ -41,15 +37,6 @@ const FILE_STATUS: Record<string, { label: string; tone: string }> = {
   VERIFIED: { label: 'Vérifié', tone: 'badge badge--ok' },
   INCOMPLETE: { label: 'Incomplet', tone: 'badge badge--reject' },
   REJECTED: { label: 'Refusé', tone: 'badge badge--reject' },
-};
-
-const PROPERTY_STATUS: Record<string, { label: string; tone: string }> = {
-  DRAFT: { label: 'Brouillon', tone: 'badge badge--mute' },
-  PENDING_REVIEW: { label: 'À contrôler', tone: 'badge badge--pending' },
-  ONLINE: { label: 'En ligne', tone: 'badge badge--ok' },
-  VISITS_IN_PROGRESS: { label: 'En visite', tone: 'badge badge--ok' },
-  RENTED: { label: 'Loué', tone: 'badge badge--mute' },
-  ARCHIVED: { label: 'Archivé', tone: 'badge badge--mute' },
 };
 
 const LEASE_STATUS: Record<string, string> = {
@@ -239,7 +226,7 @@ export function BackofficeScreen({
 
       {/* ------------------------------------------------------- Dossiers */}
       {pane === 'dossiers' ? (
-        <div className="split split--wide">
+        <div className="admin-file-review">
           <div>
             <div className="tbl__scroll">
               <table className="tbl">
@@ -247,9 +234,7 @@ export function BackofficeScreen({
                   <tr>
                     <th>Dossier</th>
                     <th>Pièces</th>
-                    <th>Identité</th>
                     <th>Statut</th>
-                    <th className="r">Déposé</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -262,7 +247,11 @@ export function BackofficeScreen({
                         <button
                           type="button"
                           className="tbl__pick"
-                          onClick={() => setSelectedFile(row.reference)}
+                          onClick={() => {
+                            setSelectedFile(row.reference);
+                            setReason('');
+                            setError(null);
+                          }}
                         >
                           <span className="mono-av">{row.initials}</span>
                           <span>
@@ -281,21 +270,9 @@ export function BackofficeScreen({
                         </span>
                       </td>
                       <td>
-                        <span
-                          className={`badge badge--${
-                            row.identityVerified ? 'ok' : 'pending'
-                          } badge--nodot`}
-                        >
-                          {row.identityVerified ? 'Validée' : 'En attente'}
-                        </span>
-                      </td>
-                      <td>
                         <span className={FILE_STATUS[row.status].tone}>
                           {FILE_STATUS[row.status].label}
                         </span>
-                      </td>
-                      <td className="r n">
-                        {row.submittedAt ? fmt.relativeAge(row.submittedAt) : '—'}
                       </td>
                     </tr>
                   ))}
@@ -303,8 +280,8 @@ export function BackofficeScreen({
               </table>
             </div>
             <p className="field__hint mt-10">
-              Les pièces en attente sont celles qu’aucun contrôle automatique ne tranche — un
-              justificatif de domicile se lit à l’œil. Elles demandent une décision humaine.
+              Sélectionnez un dossier, puis examinez chaque pièce. La validation du dossier reste
+              distincte de celle des justificatifs.
             </p>
           </div>
 
@@ -319,6 +296,7 @@ export function BackofficeScreen({
                         <div className="h-sm">{file.holderName}</div>
                         <div className="doc__m">
                           {file.reference} · Version {file.revision}
+                          {file.submittedAt ? ` · Déposé ${fmt.relativeAge(file.submittedAt)}` : ''}
                         </div>
                       </div>
                     </div>
@@ -337,7 +315,10 @@ export function BackofficeScreen({
                           ? 'Non renseignés'
                           : fmt.euros(file.profile.netMonthlyIncomeCents),
                       ],
-                      ['Situation', EMPLOYMENT_LABELS[file.profile.contractType ?? ''] ?? 'Non renseignée'],
+                      [
+                        'Situation',
+                        EMPLOYMENT_LABELS[file.profile.contractType ?? ''] ?? 'Non renseignée',
+                      ],
                       ['Employeur', file.profile.employerName ?? 'Non renseigné'],
                       [
                         'Période d’essai',
@@ -363,29 +344,6 @@ export function BackofficeScreen({
                       </div>
                     ))}
                   </dl>
-                  {file.documents.length ? (
-                    <details className="mb-16">
-                      <summary>Consulter les justificatifs ({file.documents.length})</summary>
-                      <ul className="checklist mt-10">
-                        {file.documents.map((document) => (
-                          <li key={document.id}>
-                            {document.hasFile ? (
-                              <a
-                                className="link"
-                                href={adminDocumentFileUrl(document.id)}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                {document.label} — {document.fileName ?? 'Ouvrir la pièce'} ↗
-                              </a>
-                            ) : (
-                              <span>{document.label} — fichier non disponible</span>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                    </details>
-                  ) : null}
                   {file.missingLabels.length > 0 ? (
                     <div className="mb-16">
                       <span className="label label--ink">Éléments à vérifier ou compléter</span>
@@ -397,59 +355,18 @@ export function BackofficeScreen({
                     </div>
                   ) : null}
 
-                  {file.pendingDocuments.length === 0 ? (
-                    <p className="p-sm">
-                      {file.missingLabels.length > 0
-                        ? 'Aucune pièce déposée n’attend de décision : celles qui manquent sont à réclamer au locataire.'
-                        : 'Aucune pièce en attente de décision.'}
-                    </p>
-                  ) : (
-                    file.pendingDocuments.map((document) => (
-                      <div key={document.id} className="kv" style={{ display: 'block' }}>
-                        <div className="flex jc-b ai-c gap-12 wrap">
-                          <span className="kv__k">{document.label}</span>
-                          <span className="label">{fmt.relativeAge(document.uploadedAt)}</span>
-                        </div>
-                        {document.note ? <div className="doc__m">{document.note}</div> : null}
-                        <div className="flex gap-10 wrap mt-8">
-                          <button
-                            type="button"
-                            className="btn btn-sm"
-                            disabled={pending !== null}
-                            onClick={() =>
-                              run(document.id, async () =>
-                                setFiles(
-                                  await decideDocument(document.id, 'VERIFY', file.revision),
-                                ),
-                              )
-                            }
-                          >
-                            {pending === document.id ? 'Envoi…' : 'Vérifier'}
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn--ghost btn-sm"
-                            disabled={pending !== null || reason.trim() === ''}
-                            title={reason.trim() === '' ? 'Saisissez d’abord un motif' : undefined}
-                            onClick={() =>
-                              run(document.id, async () =>
-                                setFiles(
-                                  await decideDocument(
-                                    document.id,
-                                    'REJECT',
-                                    file.revision,
-                                    reason,
-                                  ),
-                                ),
-                              )
-                            }
-                          >
-                            Refuser
-                          </button>
-                        </div>
-                      </div>
-                    ))
-                  )}
+                  <AdminDocumentReview
+                    key={`${file.reference}:${file.revision}`}
+                    kind="tenant"
+                    revision={file.revision}
+                    documents={file.documents}
+                    onError={setError}
+                    onDecision={async (id, review) =>
+                      setFiles(
+                        await decideDocument(id, review.decision, file.revision, review.reason),
+                      )
+                    }
+                  />
                 </div>
 
                 <div className="pad wash" style={{ borderTop: '1px solid var(--line-softer)' }}>
@@ -516,9 +433,7 @@ export function BackofficeScreen({
                           <li key={`${entry.at}-${index}`}>
                             <strong>{entry.title}</strong>
                             <p className="p-sm">{entry.note}</p>
-                            <span className="doc__m">
-                              {fmt.logStamp(entry.at)}
-                            </span>
+                            <span className="doc__m">{fmt.logStamp(entry.at)}</span>
                           </li>
                         ))}
                       </ul>
@@ -560,102 +475,7 @@ export function BackofficeScreen({
       {/* ---------------------------------------------------------- Biens */}
       {pane === 'biens' ? (
         <>
-          {/* Le motif précède la liste : il doit rester sous les yeux au
-              moment de cliquer « Renvoyer », pas dix lignes plus bas. */}
-          <div className="panel pad mb-16">
-            <label className="field">
-              <span className="label label--ink">
-                Motif de renvoi <span className="doc__opt">transmis au propriétaire</span>
-              </span>
-              <textarea
-                className="field__box"
-                rows={2}
-                maxLength={400}
-                value={reason}
-                onChange={(event) => setReason(event.target.value)}
-                placeholder="DPE expiré depuis 2024."
-              />
-            </label>
-            <p className="field__hint mt-10">
-              Un bien n’est publié qu’après contrôle des diagnostics et de la cohérence surface /
-              loyer. La publication rejoue les mêmes contrôles que ceux affichés au propriétaire :
-              cliquer plus vite ne les contourne pas. Un bien renvoyé repasse en brouillon,
-              corrigeable et resoumettable.
-            </p>
-          </div>
-
-          <div className="panel panel--strong">
-            {properties.map((property) => (
-              <div key={property.reference} className="doc">
-                <div className="doc__head">
-                  <div>
-                    <div className="doc__n">
-                      {property.reference} — {property.title}
-                    </div>
-                    <div className="doc__m">
-                      {property.ownerName} · {property.district} ·{' '}
-                      {fmt.surfaceLower(property.surfaceM2)} · {fmt.euros(property.totalRentCents)}{' '}
-                      CC
-                    </div>
-                  </div>
-
-                  <div className="doc__c">
-                    {property.blockers.length > 0
-                      ? property.blockers.join(' · ')
-                      : property.warnings.length > 0
-                        ? property.warnings.join(' · ')
-                        : 'Contrôles passés'}
-                    {/* Un bien à zéro sauvegarde après plusieurs jours en ligne
-                        est un bien à retravailler avec son propriétaire.
-                        Agrégat, jamais nominatif. */}
-                    <span className="doc__m">
-                      {property.savedCount} sauvegarde
-                      {property.savedCount > 1 ? 's' : ''}
-                    </span>
-                  </div>
-
-                  <div className="doc__a">
-                    <span className={PROPERTY_STATUS[property.status].tone}>
-                      {PROPERTY_STATUS[property.status].label}
-                    </span>
-                    {property.status === 'PENDING_REVIEW' ? (
-                      <>
-                        <button
-                          type="button"
-                          className="btn btn-sm"
-                          disabled={pending !== null || property.blockers.length > 0}
-                          title={
-                            property.blockers.length > 0 ? property.blockers.join(' · ') : undefined
-                          }
-                          onClick={() =>
-                            run(property.reference, async () =>
-                              setProperties(await decideProperty(property.reference, 'PUBLISH')),
-                            )
-                          }
-                        >
-                          {pending === property.reference ? 'Envoi…' : 'Publier'}
-                        </button>
-                        <button
-                          type="button"
-                          className="link"
-                          disabled={pending !== null || reason.trim() === ''}
-                          onClick={() =>
-                            run(property.reference, async () =>
-                              setProperties(
-                                await decideProperty(property.reference, 'REJECT', reason),
-                              ),
-                            )
-                          }
-                        >
-                          Renvoyer
-                        </button>
-                      </>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <AdminPropertyReview properties={properties} onChange={setProperties} />
 
           <h2 className="h mt-32 mb-12">Visites à affecter</h2>
           {visits.length === 0 ? (

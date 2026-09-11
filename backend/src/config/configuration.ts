@@ -13,6 +13,11 @@ export default () => ({
   appEnv: (process.env.APP_ENV ?? 'development') as AppEnvironment,
   port: parseInt(process.env.PORT ?? '4000', 10),
   apiPrefix: process.env.API_PREFIX ?? 'api/v1',
+  // Aucune confiance implicite dans X-Forwarded-For en accès direct.
+  trustedProxyCidrs: (process.env.TRUSTED_PROXY_CIDRS ?? '')
+    .split(',')
+    .map((cidr) => cidr.trim())
+    .filter(Boolean),
   corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:3000')
     .split(',')
     .map((origin) => origin.trim())
@@ -20,6 +25,13 @@ export default () => ({
 
   database: {
     url: process.env.DATABASE_URL,
+  },
+
+  documentAnalysis: {
+    workerEnabled: process.env.DOCUMENT_ANALYSIS_WORKER_ENABLED !== 'false',
+    driver: process.env.DOCUMENT_ANALYSIS_DRIVER ?? 'disabled',
+    apiKey: process.env.OPENAI_API_KEY,
+    model: process.env.DOCUMENT_ANALYSIS_MODEL,
   },
 
   /**

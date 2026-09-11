@@ -1,12 +1,43 @@
-import type { PropertyDocumentType } from '@prisma/client';
+import type { DocumentStatus, PropertyDocumentType } from '@prisma/client';
+
+export interface ReviewableDiagnostic {
+  type: PropertyDocumentType;
+  status: DocumentStatus;
+  expiresAt: Date | null;
+}
+
+export function isCurrentDiagnostic(document: ReviewableDiagnostic, now = new Date()): boolean {
+  return (
+    document.status === 'VERIFIED' &&
+    (document.expiresAt !== null
+      ? document.expiresAt.getTime() > now.getTime()
+      : document.type !== 'DPE')
+  );
+}
+
+export function diagnosticStatus(document: ReviewableDiagnostic, now = new Date()): DocumentStatus {
+  return document.status === 'VERIFIED' && document.expiresAt && document.expiresAt <= now
+    ? 'EXPIRED'
+    : document.status;
+}
+
+/** Le propriétaire peut soumettre un DPE en attente ; seul l'agent peut le publier. */
+export function publicationChecks(
+  property: Omit<CheckableProperty, 'documents'> & { documents: ReviewableDiagnostic[] },
+): PropertyChecks {
+  const checks = propertyChecks(property);
+  const dpe = property.documents.filter((document) => document.type === 'DPE');
+  if (dpe.length > 0 && !dpe.some((document) => isCurrentDiagnostic(document))) {
+    checks.blockers.push(
+      'DPE à valider : un diagnostic vérifié et en cours de validité est requis',
+    );
+  }
+  return checks;
+}
 
 /**
- * Ce qui empêche de publier une annonce, et ce qui la dessert seulement.
- *
- * Fonction pure et partagée, volontairement : le propriétaire la voit avant de
- * soumettre, l'API l'applique à la soumission, et le back-office l'applique
- * encore avant de mettre en ligne. Trois endroits, une seule règle — la
- * dupliquer serait le plus sûr moyen de publier un jour un bien sans DPE.
+ * Prérequis partagés de l'annonce. La soumission accepte les pièces à contrôler ;
+ * publicationChecks ajoute la validation et la validité du DPE avant diffusion.
  */
 export interface PropertyChecks {
   blockers: string[];

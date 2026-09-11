@@ -4,6 +4,8 @@ import { AccountService } from './account.service';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { SessionGuard } from './session.guard';
+import { AuthProtectionGuard } from './auth-protection.guard';
+import { AuthRateLimitService } from './auth-rate-limit.service';
 
 /**
  * Authentification par session serveur + cookie `httpOnly` (docs/tech-stack.md).
@@ -19,7 +21,13 @@ import { SessionGuard } from './session.guard';
 @Global()
 @Module({
   controllers: [AuthController],
-  providers: [AuthService, AccountService, { provide: APP_GUARD, useClass: SessionGuard }],
-  exports: [AuthService, AccountService],
+  providers: [
+    AuthService,
+    AccountService,
+    AuthProtectionGuard,
+    AuthRateLimitService,
+    { provide: APP_GUARD, useClass: SessionGuard },
+  ],
+  exports: [AuthService, AccountService, AuthRateLimitService],
 })
 export class AuthModule {}

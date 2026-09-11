@@ -1,10 +1,26 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Res, StreamableFile } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  ParseIntPipe,
+  Post,
+  Query,
+  Res,
+  StreamableFile,
+} from '@nestjs/common';
 import type { Response } from 'express';
 import { UserRole } from '@prisma/client';
 import { CurrentUser, Roles } from '../auth/session.guard';
 import type { PublicUser } from '../auth/auth.service';
 import { BackofficeService } from './backoffice.service';
-import { AssignVisitDto, PropertyDecisionDto, ReviewDecisionDto } from './dto/decision.dto';
+import {
+  AssignVisitDto,
+  DiagnosticDecisionDto,
+  PropertyDecisionDto,
+  ReviewDecisionDto,
+} from './dto/decision.dto';
 
 /**
  * Back-office — registre de l'agence.
@@ -62,11 +78,16 @@ export class BackofficeController {
     @Param('documentId') documentId: string,
     @CurrentUser() user: PublicUser,
     @Res({ passthrough: true }) response: Response,
+    @Query('revision', new ParseIntPipe({ optional: true })) revision?: number,
   ) {
-    const document = await this.backoffice.readTenantDocument(documentId, {
-      id: user.id,
-      label: `${user.firstName} ${user.lastName}`,
-    });
+    const document = await this.backoffice.readTenantDocument(
+      documentId,
+      {
+        id: user.id,
+        label: `${user.firstName} ${user.lastName}`,
+      },
+      revision,
+    );
     response.set({
       'Content-Type': document.mimeType,
       'Content-Disposition': `inline; filename="${encodeURIComponent(document.fileName)}"`,
@@ -101,8 +122,55 @@ export class BackofficeController {
 
   @Post('properties/:reference/decision')
   @HttpCode(200)
-  decideProperty(@Param('reference') reference: string, @Body() dto: PropertyDecisionDto) {
-    return this.backoffice.decideProperty(reference, dto.decision, dto.reason);
+  decideProperty(
+    @Param('reference') reference: string,
+    @Body() dto: PropertyDecisionDto,
+    @CurrentUser() user: PublicUser,
+  ) {
+    return this.backoffice.decideProperty(
+      reference,
+      dto.decision,
+      dto.expectedRevision,
+      { id: user.id, label: `${user.firstName} ${user.lastName}` },
+      dto.reason,
+    );
+  }
+
+  @Get('property-documents/:documentId/file')
+  async readPropertyDocument(
+    @Param('documentId') documentId: string,
+    @CurrentUser() user: PublicUser,
+    @Res({ passthrough: true }) response: Response,
+    @Query('revision', new ParseIntPipe({ optional: true })) revision?: number,
+  ) {
+    const document = await this.backoffice.readPropertyDocument(
+      documentId,
+      {
+        id: user.id,
+        label: `${user.firstName} ${user.lastName}`,
+      },
+      revision,
+    );
+    response.set({
+      'Content-Type': document.mimeType,
+      'Content-Disposition': `inline; filename="${encodeURIComponent(document.fileName)}"`,
+      'Cache-Control': 'private, no-store',
+      'X-Content-Type-Options': 'nosniff',
+    });
+    return new StreamableFile(document.stream);
+  }
+
+  @Post('property-documents/:documentId/decision')
+  @HttpCode(200)
+  decidePropertyDocument(
+    @Param('documentId') documentId: string,
+    @Body() dto: DiagnosticDecisionDto,
+    @CurrentUser() user: PublicUser,
+  ) {
+    return this.backoffice.decidePropertyDocument(documentId, dto, {
+      id: user.id,
+      label: `${user.firstName} ${user.lastName}`,
+    });
   }
 
   // --- Baux et visites ---------------------------------------------------

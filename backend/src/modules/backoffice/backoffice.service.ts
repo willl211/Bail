@@ -17,7 +17,14 @@ import {
   VisitStatus,
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { propertyChecks } from '../owner/property.checks';
+import { publicationChecks, diagnosticStatus } from '../owner/property.checks';
+import {
+  advancePropertyRevision,
+  recordPropertyEvent,
+  propertyEventView,
+  PROPERTY_CHANGED,
+} from '../owner/property-review';
+import type { DiagnosticDecisionDto } from './dto/decision.dto';
 import { SubscriptionService } from '../payments/subscription.service';
 import { EVENT } from '../mail/event.templates';
 import { MailService } from '../mail/mail.service';
@@ -35,6 +42,7 @@ import {
   type FileActor,
 } from '../tenant/tenant-file.revision';
 import { StorageService } from '../storage/storage.service';
+import { signatureProgress } from '../lease/lease-signature.policy';
 import type { EmploymentContractType, GuarantorKind } from '@prisma/client';
 
 export interface BackofficeSummary {
@@ -62,10 +70,13 @@ export interface AdminFileRow {
   };
   documents: {
     id: string;
+    type: DocumentType;
     label: string;
     status: DocumentStatus;
     fileName: string | null;
     hasFile: boolean;
+    note: string | null;
+    uploadedAt: string;
   }[];
   history: JournalEntry[];
   holderName: string;
@@ -95,6 +106,22 @@ export interface AdminFileRow {
 
 export interface AdminPropertyRow {
   reference: string;
+  revision: number;
+  addressLine: string;
+  energyRating: string | null;
+  reviewNote: string | null;
+  documents: {
+    id: string;
+    type: string;
+    status: DocumentStatus;
+    fileName: string | null;
+    hasFile: boolean;
+    issuedAt: string | null;
+    expiresAt: string | null;
+    note: string | null;
+    uploadedAt: string;
+  }[];
+  history: JournalEntry[];
   title: string;
   ownerName: string;
   district: string;
@@ -302,10 +329,13 @@ export class BackofficeService {
         },
         documents: file.documents.map((document) => ({
           id: document.id,
+          type: document.type,
           label: DOCUMENT_LABELS[document.type] ?? document.type,
           status: document.status,
           fileName: document.fileName,
           hasFile: document.storageKey !== null,
+          note: document.rejectionReason ?? document.verificationNote,
+          uploadedAt: document.createdAt.toISOString(),
         })),
         pendingDocuments: file.documents
           .filter(
@@ -332,9 +362,14 @@ export class BackofficeService {
   }
 
   /** Consultation privée par un agent ; aucune route propriétaire n'est élargie. */
-  async readTenantDocument(documentId: string, actor: FileActor) {
-    const document = await this.prisma.tenantDocument.findUnique({ where: { id: documentId } });
+  async readTenantDocument(documentId: string, actor: FileActor, revision?: number) {
+    const document = await this.prisma.tenantDocument.findUnique({
+      where: { id: documentId },
+      include: { tenantFile: true },
+    });
     if (!document?.storageKey) throw new NotFoundException('Pièce introuvable.');
+    if (revision !== undefined && document.tenantFile.revision !== revision)
+      throw new ConflictException(FILE_CHANGED);
     const stream = await this.storage.read('private', document.storageKey);
     this.logger.log('Consultation de pièce ' + document.id + ' par agent ' + actor.id);
     return {
@@ -364,6 +399,8 @@ export class BackofficeService {
       throw new ConflictException('Cette pièce est déjà vérifiée.');
     if (decision === 'REJECT' && !reason?.trim())
       throw new BadRequestException('Un refus doit être motivé.');
+
+    if (decision === 'VERIFY') await this.assertReadable(document.storageKey);
 
     const event = await this.prisma.$transaction(async (tx) => {
       const revision = await advanceFileRevision(
@@ -468,15 +505,137 @@ export class BackofficeService {
 
   // ------------------------------------------------------------------ Biens
 
+  private async assertReadable(key: string | null) {
+    if (!key) throw new BadRequestException('Fichier indisponible : demandez un nouveau dépôt.');
+    try {
+      const stream = await this.storage.read('private', key);
+      let size = 0;
+      for await (const chunk of stream) size += (chunk as Buffer).length;
+      if (size === 0) throw new Error('Empty document');
+    } catch {
+      throw new BadRequestException('Fichier indisponible : demandez un nouveau dépôt.');
+    }
+  }
+
+  async readPropertyDocument(documentId: string, actor: FileActor, revision?: number) {
+    const document = await this.prisma.propertyDocument.findUnique({
+      where: { id: documentId },
+      include: { property: true },
+    });
+    if (
+      !document ||
+      (document.property.status === PropertyStatus.DRAFT && !document.property.reviewNote)
+    )
+      throw new NotFoundException('Diagnostic introuvable ou non transmis au contrôle.');
+    if (revision !== undefined && document.property.reviewRevision !== revision)
+      throw new ConflictException(PROPERTY_CHANGED);
+    const stream = await this.storage.read('private', document.storageKey);
+    this.logger.log('Consultation du diagnostic ' + document.id + ' par agent ' + actor.id);
+    return {
+      stream,
+      mimeType: document.mimeType ?? 'application/octet-stream',
+      fileName: document.fileName ?? 'diagnostic',
+    };
+  }
+
+  async decidePropertyDocument(documentId: string, dto: DiagnosticDecisionDto, actor: FileActor) {
+    const document = await this.prisma.propertyDocument.findUnique({
+      where: { id: documentId },
+      include: { property: true },
+    });
+    if (!document) throw new NotFoundException('Diagnostic introuvable.');
+    const property = document.property;
+    if (property.reviewRevision !== dto.expectedRevision)
+      throw new ConflictException(PROPERTY_CHANGED);
+    if (property.status !== PropertyStatus.PENDING_REVIEW)
+      throw new ConflictException(
+        'Ce bien doit être soumis au contrôle pour décider sur ses diagnostics.',
+      );
+    const verified = dto.decision === 'VERIFY';
+    if (!verified && !dto.reason?.trim())
+      throw new BadRequestException('Un refus doit être motivé.');
+    if (verified && document.status === DocumentStatus.VERIFIED)
+      throw new ConflictException('Ce diagnostic est déjà vérifié.');
+
+    const date = (value: string | undefined) => {
+      if (!value) return null;
+      const parsed = new Date(value + 'T00:00:00.000Z');
+      if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value)
+        throw new BadRequestException('Date de diagnostic invalide.');
+      return parsed;
+    };
+    const issuedAt = date(dto.issuedAt);
+    // Une date de fin inclut la journée indiquée. Aucun délai légal n'est deviné.
+    const expiryDay = date(dto.expiresAt);
+    const expiresAt = expiryDay ? new Date(expiryDay.getTime() + 86_400_000 - 1) : null;
+    if (verified) {
+      if (document.type === 'DPE' && (!issuedAt || !expiresAt))
+        throw new BadRequestException(
+          'Renseignez les dates de réalisation et de fin de validité du DPE.',
+        );
+      if (issuedAt && issuedAt.getTime() > Date.now())
+        throw new BadRequestException('La date de réalisation ne peut pas être dans le futur.');
+      if (expiresAt && (expiresAt.getTime() <= Date.now() || (issuedAt && expiresAt < issuedAt)))
+        throw new BadRequestException('Le diagnostic est expiré ou ses dates sont incohérentes.');
+      if (
+        document.type === 'DPE' &&
+        (!dto.energyRating || dto.energyRating !== property.energyRating)
+      )
+        throw new BadRequestException(
+          'La classe lue sur le DPE doit correspondre à celle de l’annonce. Renvoyez le bien au propriétaire en cas d’écart.',
+        );
+      await this.assertReadable(document.storageKey);
+    }
+    await this.prisma.$transaction(async (tx) => {
+      const revision = await advancePropertyRevision(tx, property);
+      await tx.propertyDocument.update({
+        where: { id: document.id },
+        data: verified
+          ? {
+              status: DocumentStatus.VERIFIED,
+              verifiedAt: new Date(),
+              issuedAt,
+              expiresAt,
+              rejectionReason: null,
+              verificationNote: 'Contrôle manuel par un agent whoma',
+            }
+          : {
+              status: DocumentStatus.REJECTED,
+              verifiedAt: null,
+              rejectionReason: dto.reason!.trim(),
+              verificationNote: null,
+            },
+      });
+      await recordPropertyEvent(tx, property.id, revision, actor, {
+        action: verified ? 'DOCUMENT_VERIFIED' : 'DOCUMENT_REJECTED',
+        title: verified ? 'Diagnostic validé' : 'Diagnostic refusé',
+        note: `${document.type} · ${document.fileName ?? 'Document'}${dto.reason?.trim() ? ' · ' + dto.reason.trim() : ''}`,
+        snapshot: {
+          documentId,
+          type: document.type,
+          fileName: document.fileName,
+          reviewedRevision: dto.expectedRevision,
+          addressLine: property.addressLine,
+          energyRating: property.energyRating,
+          surfaceM2: property.surfaceM2,
+          issuedAt: issuedAt?.toISOString() ?? null,
+          expiresAt: expiresAt?.toISOString() ?? null,
+        },
+      });
+    });
+    return this.listProperties();
+  }
+
   async listProperties(): Promise<AdminPropertyRow[]> {
     const properties = await this.prisma.property.findMany({
-      where: { status: { not: PropertyStatus.DRAFT } },
+      where: { OR: [{ status: { not: PropertyStatus.DRAFT } }, { reviewNote: { not: null } }] },
       orderBy: [{ status: 'asc' }, { updatedAt: 'asc' }],
       include: {
         owner: { select: { firstName: true, lastName: true } },
         district: { select: { name: true } },
         photos: { select: { id: true } },
-        documents: { select: { type: true } },
+        documents: true,
+        reviewEvents: { orderBy: { revision: 'desc' }, take: 30 },
       },
     });
 
@@ -484,6 +643,22 @@ export class BackofficeService {
 
     return properties.map((property) => ({
       reference: property.reference,
+      revision: property.reviewRevision,
+      addressLine: property.addressLine,
+      energyRating: property.energyRating,
+      reviewNote: property.reviewNote,
+      documents: property.documents.map((document) => ({
+        id: document.id,
+        type: document.type,
+        status: diagnosticStatus(document),
+        fileName: document.fileName,
+        hasFile: Boolean(document.storageKey),
+        issuedAt: document.issuedAt?.toISOString() ?? null,
+        expiresAt: document.expiresAt?.toISOString() ?? null,
+        note: document.rejectionReason ?? document.verificationNote,
+        uploadedAt: document.updatedAt.toISOString(),
+      })),
+      history: property.reviewEvents.map(propertyEventView),
       title: property.title,
       ownerName: `${property.owner.firstName} ${property.owner.lastName}`,
       district: property.district.name,
@@ -491,7 +666,7 @@ export class BackofficeService {
       totalRentCents: property.rentCents + property.chargesCents,
       surfaceM2: property.surfaceM2,
       savedCount: saved.get(property.id) ?? 0,
-      ...propertyChecks(property),
+      ...publicationChecks(property),
       submittedAt: property.updatedAt.toISOString(),
     }));
   }
@@ -499,30 +674,32 @@ export class BackofficeService {
   /**
    * Met une annonce en ligne, ou la renvoie à son propriétaire.
    *
-   * La publication rejoue **les mêmes contrôles** que ceux affichés au
-   * propriétaire : un agent pressé ne doit pas pouvoir publier un bien sans
-   * DPE en cliquant plus vite que la règle.
+   * Rejoue les prérequis de soumission, exige un DPE contrôlé et protège la
+   * décision contre les changements intervenus depuis le chargement de l'écran.
    */
   async decideProperty(
     reference: string,
     decision: 'PUBLISH' | 'REJECT',
+    expectedRevision: number,
+    actor: FileActor,
     reason?: string,
   ): Promise<AdminPropertyRow[]> {
     const property = await this.prisma.property.findUnique({
       where: { reference },
       include: {
         photos: { select: { id: true } },
-        documents: { select: { type: true } },
+        documents: true,
       },
     });
     if (!property) throw new NotFoundException('Bien introuvable.');
+    if (property.reviewRevision !== expectedRevision) throw new ConflictException(PROPERTY_CHANGED);
 
     if (property.status !== PropertyStatus.PENDING_REVIEW) {
       throw new ConflictException('Ce bien n’est pas en attente de contrôle.');
     }
 
     if (decision === 'PUBLISH') {
-      const { blockers } = propertyChecks(property);
+      const { blockers } = publicationChecks(property);
       if (blockers.length > 0) {
         throw new BadRequestException({
           statusCode: 400,
@@ -531,9 +708,17 @@ export class BackofficeService {
         });
       }
 
-      await this.prisma.property.update({
-        where: { id: property.id },
-        data: { status: PropertyStatus.ONLINE, publishedAt: new Date(), reviewNote: null },
+      await this.prisma.$transaction(async (tx) => {
+        const revision = await advancePropertyRevision(tx, property, {
+          status: PropertyStatus.ONLINE,
+          publishedAt: new Date(),
+          reviewNote: null,
+        });
+        await recordPropertyEvent(tx, property.id, revision, actor, {
+          action: 'PROPERTY_PUBLISHED',
+          title: 'Annonce publiée',
+          note: 'Diagnostics contrôlés et publication validée.',
+        });
       });
 
       // Le bien entre dans l'assiette facturée : sans cet appel, un bien
@@ -561,9 +746,16 @@ export class BackofficeService {
       // Le motif est **stocké**, pas seulement journalisé : le back-office
       // annonce au contrôleur qu'il est « transmis au propriétaire ». Sans ce
       // champ, la phrase serait fausse.
-      await this.prisma.property.update({
-        where: { id: property.id },
-        data: { status: PropertyStatus.DRAFT, reviewNote: reason.trim() },
+      await this.prisma.$transaction(async (tx) => {
+        const revision = await advancePropertyRevision(tx, property, {
+          status: PropertyStatus.DRAFT,
+          reviewNote: reason.trim(),
+        });
+        await recordPropertyEvent(tx, property.id, revision, actor, {
+          action: 'PROPERTY_REJECTED',
+          title: 'Annonce renvoyée au propriétaire',
+          note: reason.trim(),
+        });
       });
       await this.mail.enqueue({
         template: EVENT.propertyReturned,
@@ -590,7 +782,7 @@ export class BackofficeService {
     });
 
     return leases.map((lease) => {
-      const events = (lease.signatureEvents ?? []) as { type?: string }[];
+      const progress = signatureProgress(lease.signatureEvents);
       const fee = lease.payments[0] ?? null;
 
       return {
@@ -598,7 +790,7 @@ export class BackofficeService {
         propertyReference: lease.property.reference,
         tenantName: `${lease.tenant.firstName} ${lease.tenant.lastName}`,
         status: lease.status,
-        signedCount: events.filter((event) => event.type === 'signed').length,
+        signedCount: progress.count,
         feeStatus: fee?.status ?? null,
         feeAmountCents: fee?.amountCents ?? null,
         fundsStatus: fee?.fundsStatus ?? null,
@@ -671,7 +863,7 @@ export class BackofficeService {
    * un journal qui mentirait sur ce qui s'est passé n'a aucune valeur d'audit.
    */
   async journal(limit = 40): Promise<JournalEntry[]> {
-    const [properties, applications, documents, visits, leases] = await Promise.all([
+    const [properties, applications, documents, visits, leases, diagnostics] = await Promise.all([
       this.prisma.property.findMany({
         where: { publishedAt: { not: null } },
         orderBy: { publishedAt: 'desc' },
@@ -701,9 +893,18 @@ export class BackofficeService {
         take: 15,
         select: { reference: true, status: true, updatedAt: true, createdAt: true },
       }),
+      this.prisma.propertyReviewEvent.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        include: { property: { select: { reference: true } } },
+      }),
     ]);
 
     const entries: JournalEntry[] = [
+      ...diagnostics.map((event) => ({
+        ...propertyEventView(event),
+        title: `${event.property.reference} — ${event.title}`,
+      })),
       ...properties.map((property) => ({
         at: (property.publishedAt as Date).toISOString(),
         tone: 'ok' as const,

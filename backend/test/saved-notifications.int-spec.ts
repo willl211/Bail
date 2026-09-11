@@ -62,6 +62,9 @@ describe('Notifications sur un bien mis de côté', () => {
         propertyId,
         type: PropertyDocumentType.DPE,
         storageKey: `tests/${propertyId}/dpe.pdf`,
+        status: 'VERIFIED',
+        issuedAt: new Date('2026-01-01'),
+        expiresAt: new Date('2035-01-01'),
       },
     });
     await h.prisma.property.update({
@@ -76,10 +79,11 @@ describe('Notifications sur un bien mis de côté', () => {
 
   const publish = async (reference: string) => {
     const agent = await createUser(h.prisma, UserRole.AGENT);
+    const property = await h.prisma.property.findUniqueOrThrow({ where: { reference } });
     await api()
       .post(`/api/v1/admin/properties/${reference}/decision`)
       .set('Cookie', await loginAs(agent.email))
-      .send({ decision: 'PUBLISH' })
+      .send({ decision: 'PUBLISH', expectedRevision: property.reviewRevision })
       .expect(200);
   };
 

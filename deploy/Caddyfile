@@ -51,6 +51,9 @@ www.{$SITE_DOMAIN} {
 	encode zstd gzip
 
 	reverse_proxy api:4000 {
+		# L'API n'accepte que l'adresse observée par notre proxy, jamais un
+		# X-Forwarded-For choisi par le client. Adapter si un CDN est ajouté.
+		header_up X-Forwarded-For {remote_host}
 		# Le webhook de signature et celui de paiement vérifient leur signature
 		# **octet pour octet**. Toute réécriture du corps invaliderait le
 		# contrôle : le proxy transmet, il ne touche à rien.

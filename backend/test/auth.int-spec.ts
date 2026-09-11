@@ -192,6 +192,16 @@ describe('Comptes et jetons', () => {
       await signup('awa@bail.test').expect(201);
 
       for (let i = 0; i < 6; i += 1) {
+        if (i === 3) {
+          // Le quota HTTP de 15 minutes est testé séparément. On simule ici
+          // son expiration pour vérifier que le plafond d'envoi horaire
+          // continue de s'appliquer au-delà de la première fenêtre.
+          const key = hashSecret(JSON.stringify(['recovery:email', 'awa@bail.test']));
+          await h.prisma.$executeRaw`
+            UPDATE "auth_rate_limits" SET "expiresAt" = CURRENT_TIMESTAMP - INTERVAL '1 second'
+            WHERE "key" = ${key}
+          `;
+        }
         await api()
           .post('/api/v1/auth/password/forgot')
           .send({ email: 'awa@bail.test' })

@@ -20,7 +20,8 @@ import { UpdateOwnerContactDto } from './dto/owner-contact.dto';
 import { toPublicUser } from '../auth/auth.service';
 import { accountBlockers } from '../auth/account.checks';
 import { isAddressComplete } from './address.checks';
-import { propertyChecks } from './property.checks';
+import { propertyChecks, diagnosticStatus } from './property.checks';
+import { advancePropertyRevision, recordPropertyEvent } from './property-review';
 import { SavedService } from '../saved/saved.service';
 import {
   DOCUMENT_TYPES,
@@ -75,8 +76,7 @@ export interface OwnerPropertyItem {
 }
 
 /** Bien complet pour le formulaire de dépôt. */
-export interface OwnerPropertyDetail
-  extends Omit<OwnerPropertyItem, 'addressLine' | 'district'> {
+export interface OwnerPropertyDetail extends Omit<OwnerPropertyItem, 'addressLine' | 'district'> {
   propertyType: Property['propertyType'];
   description: string;
   addressLine: string;
@@ -100,6 +100,8 @@ export interface OwnerPropertyDetail
     fileName: string | null;
     fileSize: number | null;
     issuedAt: string | null;
+    expiresAt: string | null;
+    verificationNote: string | null;
     rejectionReason: string | null;
   }[];
 }
@@ -133,10 +135,7 @@ export interface OwnerSummary {
 }
 
 /** Statuts pour lesquels l'abonnement est facturé : le bien est diffusé. */
-const BILLABLE: PropertyStatus[] = [
-  PropertyStatus.ONLINE,
-  PropertyStatus.VISITS_IN_PROGRESS,
-];
+const BILLABLE: PropertyStatus[] = [PropertyStatus.ONLINE, PropertyStatus.VISITS_IN_PROGRESS];
 
 @Injectable()
 export class OwnerService {
@@ -181,14 +180,22 @@ export class OwnerService {
       IMAGE_TYPES,
     );
 
-    const photo = await this.prisma.propertyPhoto.create({
-      data: {
-        propertyId: property.id,
-        storageKey: stored.key,
-        caption: caption?.trim() || null,
-        position: count,
-      },
-    });
+    const photo = await this.prisma
+      .$transaction(async (tx) => {
+        await advancePropertyRevision(tx, property);
+        return tx.propertyPhoto.create({
+          data: {
+            propertyId: property.id,
+            storageKey: stored.key,
+            caption: caption?.trim() || null,
+            position: count,
+          },
+        });
+      })
+      .catch(async (error: unknown) => {
+        await this.storage.remove('public', stored.key);
+        throw error;
+      });
 
     return {
       id: photo.id,
@@ -216,24 +223,19 @@ export class OwnerService {
     });
     if (!photo) throw new NotFoundException('Photo introuvable.');
 
-    await this.prisma.propertyPhoto.delete({ where: { id: photo.id } });
-    await this.storage.remove('public', photo.storageKey);
-
-    // Les positions restent contiguës, sinon l'ordre d'affichage se dégrade à
-    // chaque suppression.
-    const remaining = await this.prisma.propertyPhoto.findMany({
-      where: { propertyId: property.id },
-      orderBy: { position: 'asc' },
-      select: { id: true },
+    await this.prisma.$transaction(async (tx) => {
+      await advancePropertyRevision(tx, property);
+      await tx.propertyPhoto.delete({ where: { id: photo.id } });
+      const remaining = await tx.propertyPhoto.findMany({
+        where: { propertyId: property.id },
+        orderBy: { position: 'asc' },
+        select: { id: true },
+      });
+      for (const [index, entry] of remaining.entries()) {
+        await tx.propertyPhoto.update({ where: { id: entry.id }, data: { position: index } });
+      }
     });
-    await this.prisma.$transaction(
-      remaining.map((entry, index) =>
-        this.prisma.propertyPhoto.update({
-          where: { id: entry.id },
-          data: { position: index },
-        }),
-      ),
-    );
+    await this.storage.remove('public', photo.storageKey);
   }
 
   /**
@@ -269,9 +271,7 @@ export class OwnerService {
         throw new BadRequestException('Date de réalisation invalide.');
       }
       if (issued.getTime() > Date.now()) {
-        throw new BadRequestException(
-          'La date de réalisation ne peut pas être dans le futur.',
-        );
+        throw new BadRequestException('La date de réalisation ne peut pas être dans le futur.');
       }
     }
 
@@ -286,31 +286,54 @@ export class OwnerService {
       where: { propertyId: property.id, type },
     });
 
-    const document = previous
-      ? await this.prisma.propertyDocument.update({
-          where: { id: previous.id },
-          data: {
-            status: DocumentStatus.PENDING,
-            fileName: file.originalname.slice(0, 200),
-            mimeType: stored.mimeType,
-            fileSize: stored.size,
-            storageKey: stored.key,
-            issuedAt: issued ?? null,
-            rejectionReason: null,
-            verificationNote: null,
+    const document = await this.prisma
+      .$transaction(async (tx) => {
+        const revision = await advancePropertyRevision(tx, property);
+        const document = previous
+          ? await tx.propertyDocument.update({
+              where: { id: previous.id },
+              data: {
+                status: DocumentStatus.PENDING,
+                fileName: file.originalname.slice(0, 200),
+                mimeType: stored.mimeType,
+                fileSize: stored.size,
+                storageKey: stored.key,
+                issuedAt: issued ?? null,
+                expiresAt: null,
+                verifiedAt: null,
+                rejectionReason: null,
+                verificationNote: null,
+              },
+            })
+          : await tx.propertyDocument.create({
+              data: {
+                propertyId: property.id,
+                type,
+                fileName: file.originalname.slice(0, 200),
+                mimeType: stored.mimeType,
+                fileSize: stored.size,
+                storageKey: stored.key,
+                issuedAt: issued ?? null,
+              },
+            });
+        await recordPropertyEvent(
+          tx,
+          property.id,
+          revision,
+          { id: ownerId, label: 'Propriétaire' },
+          {
+            action: 'DOCUMENT_UPLOADED',
+            title: previous ? 'Diagnostic remplacé' : 'Diagnostic déposé',
+            note: `${type} · ${document.fileName}`,
+            snapshot: { documentId: document.id, type, fileName: document.fileName },
           },
-        })
-      : await this.prisma.propertyDocument.create({
-          data: {
-            propertyId: property.id,
-            type,
-            fileName: file.originalname.slice(0, 200),
-            mimeType: stored.mimeType,
-            fileSize: stored.size,
-            storageKey: stored.key,
-            issuedAt: issued ?? null,
-          },
-        });
+        );
+        return document;
+      })
+      .catch(async (error: unknown) => {
+        await this.storage.remove('private', stored.key);
+        throw error;
+      });
 
     if (previous) await this.storage.remove('private', previous.storageKey);
 
@@ -329,7 +352,22 @@ export class OwnerService {
     });
     if (!document) throw new NotFoundException('Diagnostic introuvable.');
 
-    await this.prisma.propertyDocument.delete({ where: { id: document.id } });
+    await this.prisma.$transaction(async (tx) => {
+      const revision = await advancePropertyRevision(tx, property);
+      await tx.propertyDocument.delete({ where: { id: document.id } });
+      await recordPropertyEvent(
+        tx,
+        property.id,
+        revision,
+        { id: ownerId, label: 'Propriétaire' },
+        {
+          action: 'DOCUMENT_REMOVED',
+          title: 'Diagnostic retiré',
+          note: `${document.type} · ${document.fileName}`,
+          snapshot: { documentId: document.id, type: document.type, fileName: document.fileName },
+        },
+      );
+    });
     await this.storage.remove('private', document.storageKey);
   }
 
@@ -358,7 +396,6 @@ export class OwnerService {
       fileName: document.fileName ?? `${document.type.toLowerCase()}.pdf`,
     };
   }
-
 
   async listProperties(ownerId: string): Promise<OwnerPropertyItem[]> {
     const [properties, owner] = await Promise.all([
@@ -399,7 +436,9 @@ export class OwnerService {
         chargesCents: property.chargesCents,
         totalRentCents: property.rentCents + property.chargesCents,
         photoCount: property.photos.length,
-        photoUrl: property.photos[0] ? this.storage.publicUrl('public', property.photos[0].storageKey) : null,
+        photoUrl: property.photos[0]
+          ? this.storage.publicUrl('public', property.photos[0].storageKey)
+          : null,
         applicationCount: property._count.applications,
         savedCount: saved.get(property.id) ?? 0,
         publishedAt: property.publishedAt?.toISOString() ?? null,
@@ -463,14 +502,18 @@ export class OwnerService {
       documents: property.documents.map((document) => ({
         id: document.id,
         type: document.type,
-        status: document.status,
+        status: diagnosticStatus(document),
         fileName: document.fileName,
         fileSize: document.fileSize,
         issuedAt: document.issuedAt?.toISOString() ?? null,
+        expiresAt: document.expiresAt?.toISOString() ?? null,
+        verificationNote: document.verificationNote,
         rejectionReason: document.rejectionReason,
       })),
       photoCount: property.photos.length,
-      photoUrl: property.photos[0] ? this.storage.publicUrl('public', property.photos[0].storageKey) : null,
+      photoUrl: property.photos[0]
+        ? this.storage.publicUrl('public', property.photos[0].storageKey)
+        : null,
       applicationCount: property._count.applications,
       savedCount: (await this.saved.countsByProperty([property.id])).get(property.id) ?? 0,
       publishedAt: property.publishedAt?.toISOString() ?? null,
@@ -645,7 +688,51 @@ export class OwnerService {
     }
 
     const data = await this.toData(dto);
-    await this.prisma.property.update({ where: { id: property.id }, data });
+    await this.prisma.$transaction(async (tx) => {
+      const revision = await advancePropertyRevision(tx, property);
+      await tx.property.update({ where: { id: property.id }, data });
+      // Les diagnostics doivent correspondre au logement et aux données affichées.
+      const diagnosticFields = [
+        'addressLine',
+        'districtSlug',
+        'surfaceM2',
+        'energyRating',
+        'gesRating',
+        'constructionYear',
+      ] as const;
+      const diagnosticChanged = diagnosticFields.some(
+        (key) =>
+          dto[key] !== undefined &&
+          (key === 'districtSlug'
+            ? data.district !== undefined &&
+              (data.district as { connect: { id: string } }).connect.id !== property.districtId
+            : dto[key] !== property[key]),
+      );
+      if (diagnosticChanged) {
+        await tx.propertyDocument.updateMany({
+          where: { propertyId: property.id, status: DocumentStatus.VERIFIED },
+          data: {
+            status: DocumentStatus.PENDING,
+            verifiedAt: null,
+            verificationNote:
+              'Les caractéristiques du bien ont changé. Nouveau contrôle nécessaire.',
+          },
+        });
+      }
+      await recordPropertyEvent(
+        tx,
+        property.id,
+        revision,
+        { id: ownerId, label: 'Propriétaire' },
+        {
+          action: 'PROPERTY_UPDATED',
+          title: 'Annonce modifiée',
+          note: diagnosticChanged
+            ? 'Diagnostics à contrôler à nouveau après modification des caractéristiques.'
+            : 'Informations de l’annonce mises à jour.',
+        },
+      );
+    });
     return { reference: property.reference };
   }
 
@@ -691,14 +778,25 @@ export class OwnerService {
       });
     }
 
-    const updated = await this.prisma.property.update({
-      where: { id: property.id },
-      // Le motif du dernier renvoi s'efface à la resoumission : le garder
-      // afficherait un reproche déjà traité.
-      data: { status: PropertyStatus.PENDING_REVIEW, reviewNote: null },
+    await this.prisma.$transaction(async (tx) => {
+      const revision = await advancePropertyRevision(tx, property, {
+        status: PropertyStatus.PENDING_REVIEW,
+        reviewNote: null,
+      });
+      await recordPropertyEvent(
+        tx,
+        property.id,
+        revision,
+        { id: ownerId, label: 'Propriétaire' },
+        {
+          action: 'PROPERTY_SUBMITTED',
+          title: 'Annonce transmise au contrôle',
+          note: 'Documents et annonce prêts à être examinés.',
+        },
+      );
     });
 
-    return { status: updated.status };
+    return { status: PropertyStatus.PENDING_REVIEW };
   }
 
   /** Coordonnées du bailleur. Obligatoires au bail (loi n° 89-462, article 3). */
@@ -711,16 +809,15 @@ export class OwnerService {
   }
 
   async updateContact(ownerId: string, dto: UpdateOwnerContactDto) {
-    return toPublicUser(await this.prisma.user.update({
-      where: { id: ownerId },
-      data: { firstName: dto.firstName, lastName: dto.lastName, phone: dto.phone || null },
-    }));
+    return toPublicUser(
+      await this.prisma.user.update({
+        where: { id: ownerId },
+        data: { firstName: dto.firstName, lastName: dto.lastName, phone: dto.phone || null },
+      }),
+    );
   }
 
-  async updateProfile(
-    ownerId: string,
-    dto: UpdateOwnerProfileDto,
-  ): Promise<OwnerProfile> {
+  async updateProfile(ownerId: string, dto: UpdateOwnerProfileDto): Promise<OwnerProfile> {
     const owner = await this.prisma.user.update({
       where: { id: ownerId },
       data: {

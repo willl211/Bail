@@ -249,6 +249,7 @@ describe('Dossier locataire : versions, contrôles et confidentialité', () => {
 
   it('n’écrase pas une invalidation par le retour tardif du prestataire', async () => {
     const { file, tenantCookie } = await ready();
+    await h.prisma.tenantDocument.deleteMany({ where: { tenantFileId: file.id, type: 'EMPLOYMENT_CONTRACT' } });
     let release!: (outcome: VerificationOutcome) => void;
     let entered!: () => void;
     const started = new Promise<void>((resolve) => {
@@ -265,7 +266,7 @@ describe('Dossier locataire : versions, contrôles et confidentialité', () => {
     const upload = api()
       .post('/api/v1/tenant/file/documents')
       .set('Cookie', tenantCookie)
-      .field('type', 'PAYSLIP')
+      .field('type', 'EMPLOYMENT_CONTRACT')
       .attach('file', Buffer.from('%PDF-1.4\nDocument de test'), {
         filename: 'bulletin.pdf',
         contentType: 'application/pdf',

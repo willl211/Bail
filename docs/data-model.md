@@ -9,6 +9,7 @@ Ces entités sont confirmées comme périmètre de base. Étendre si besoin tech
 - **Visite** — RDV, type (accompagnée / visio), statut
 - **Bail** — document généré à partir d'un modèle légal, statut de signature
 - **Paiement / honoraire** — montant, statut, méthode
+- **Analyse de bulletin** — extension du 10 septembre 2026 : travail asynchrone lié à une pièce, source/version, résultat de lecture structuré, état et tentatives. Suppression en cascade avec la pièce. Aucune décision de validation ni modification du revenu déclaré dans cette entité ; voir [le fonctionnement](payslip-analysis.md).
 
 ## Points d'attention
 

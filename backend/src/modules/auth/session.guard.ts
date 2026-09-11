@@ -58,7 +58,8 @@ export class SessionGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<RequestWithUser>();
 
     const cookieName = this.config.get<string>('auth.cookieName', 'bail_session');
-    const token = (request.cookies as Record<string, string> | undefined)?.[cookieName];
+    const cookie: unknown = request.cookies?.[cookieName];
+    const token = typeof cookie === 'string' ? cookie : undefined;
     request.sessionToken = token;
 
     // La session est toujours résolue, même sur une route publique : l'accueil

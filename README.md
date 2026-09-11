@@ -69,7 +69,7 @@ prestataire. Sans Mailpit démarré, l'API le signale au lancement et les envois
 ## Tests
 
 ```bash
-npm test          # tout : 438 tests
+npm test          # tout : 545 tests
 ```
 
 Deux campagnes, séparées par ce qu'elles exigent pour tourner.

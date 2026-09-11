@@ -24,6 +24,9 @@ process.env.SIGNATURE_DRIVER = 'mock';
 process.env.VIDEO_DRIVER = 'mock';
 process.env.PUBLIC_SITE_URL = 'http://localhost:3000';
 process.env.SESSION_COOKIE_SECURE = 'false';
+process.env.TRUSTED_PROXY_CIDRS = '';
+process.env.DOCUMENT_ANALYSIS_DRIVER = 'disabled';
+process.env.DOCUMENT_ANALYSIS_WORKER_ENABLED = 'false';
 // Le hachage bcrypt est le poste le plus coûteux d'une campagne qui crée des
 // dizaines de comptes. 4 tours suffisent à exercer le code ; la valeur réelle
 // (12) reste celle de la configuration applicative.

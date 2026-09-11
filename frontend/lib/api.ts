@@ -328,6 +328,8 @@ export interface OwnerPropertyDetail extends Omit<OwnerProperty, 'district'> {
     fileName: string | null;
     fileSize: number | null;
     issuedAt: string | null;
+    expiresAt: string | null;
+    verificationNote: string | null;
     rejectionReason: string | null;
   }[];
 }
@@ -978,10 +980,13 @@ export interface AdminFileRow {
   };
   documents: {
     id: string;
+    type: DocumentType;
     label: string;
     status: DocumentStatus;
     fileName: string | null;
     hasFile: boolean;
+    note: string | null;
+    uploadedAt: string;
   }[];
   history: JournalEntry[];
   holderName: string;
@@ -1005,6 +1010,22 @@ export interface AdminFileRow {
 
 export interface AdminPropertyRow {
   reference: string;
+  revision: number;
+  addressLine: string;
+  energyRating: string | null;
+  reviewNote: string | null;
+  documents: {
+    id: string;
+    type: string;
+    status: DocumentStatus;
+    fileName: string | null;
+    hasFile: boolean;
+    issuedAt: string | null;
+    expiresAt: string | null;
+    note: string | null;
+    uploadedAt: string;
+  }[];
+  history: JournalEntry[];
   title: string;
   ownerName: string;
   district: string;

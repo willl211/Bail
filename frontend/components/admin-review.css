@@ -1,0 +1,379 @@
+.admin-file-review {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.5fr);
+  gap: 24px;
+  align-items: start;
+}
+.admin-file-review > *,
+.admin-property-review > * {
+  min-width: 0;
+}
+.admin-file-review .tbl {
+  min-width: 0;
+}
+.admin-file-review .tbl__name {
+  white-space: normal;
+}
+.admin-property-review {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.65fr) minmax(0, 2fr);
+  border: 1px solid var(--line);
+  align-items: start;
+}
+.admin-property-review__list {
+  background: var(--surface-sage);
+}
+.admin-property-review__filters {
+  padding: 24px;
+  border-bottom: 1px solid var(--line);
+}
+.admin-property-review__pick {
+  display: grid;
+  gap: 7px;
+  width: 100%;
+  padding: 20px 24px;
+  text-align: left;
+  color: var(--ink);
+  border: 0;
+  border-bottom: 1px solid var(--line-softer);
+  border-left: 3px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background 180ms ease,
+    border-color 180ms ease;
+}
+.admin-property-review__pick:hover {
+  background: rgba(113, 131, 66, 0.07);
+}
+.admin-property-review__pick[aria-current='true'] {
+  background: rgba(113, 131, 66, 0.13);
+  border-left-color: var(--accent);
+}
+.admin-property-review__pick strong {
+  font-weight: 600;
+  line-height: 1.4;
+}
+.admin-property-review__pick small {
+  color: var(--ink-3);
+}
+.admin-property-review__detail {
+  border-left: 1px solid var(--line);
+}
+.admin-property-review__head,
+.admin-property-review__publication,
+.admin-property-review__history {
+  padding: 24px 28px;
+}
+.admin-property-review__head {
+  background: rgba(113, 131, 66, 0.07);
+  border-bottom: 1px solid var(--line-softer);
+}
+.admin-property-review__publication {
+  border-top: 1px solid var(--line);
+}
+.admin-property-review__history {
+  border-top: 1px solid var(--line-softer);
+}
+.admin-property-review__history summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.admin-review-history {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0 0;
+}
+.admin-review-history li {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line-softer);
+}
+.admin-review-history strong {
+  display: block;
+  margin: 5px 0;
+}
+.admin-review-history p {
+  font-size: 13px;
+  color: var(--ink-3);
+}
+.admin-review-empty {
+  padding: 36px 28px;
+  color: var(--ink-3);
+  line-height: 1.6;
+}
+.document-review {
+  container-type: inline-size;
+}
+.document-review__selector {
+  padding: 20px 24px;
+}
+.document-review__selector select {
+  max-width: 100%;
+  text-overflow: ellipsis;
+}
+.document-review__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+}
+.document-review__preview {
+  min-width: 0;
+  min-height: 350px;
+  background: #eee9dd;
+  background-image:
+    linear-gradient(rgba(104, 113, 67, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(104, 113, 67, 0.045) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+.document-review__preview-bar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px;
+  font-size: 12px;
+  background: #e6e9d9;
+}
+.document-review__preview img {
+  display: block;
+  width: 100%;
+  max-height: 650px;
+  object-fit: contain;
+}
+.document-review__preview object {
+  display: block;
+  width: 100%;
+  height: 600px;
+  border: 0;
+}
+.document-review__placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 350px;
+  height: 100%;
+  gap: 16px;
+  padding: 32px 24px;
+  text-align: center;
+}
+.document-review__placeholder p {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+.document-review__paper {
+  display: grid;
+  place-items: center;
+  width: 66px;
+  height: 88px;
+  border: 1px solid #b6b89b;
+  border-radius: 2px 14px 2px 2px;
+  background: #f9f6ed;
+  color: #636e41;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+.document-review__decision {
+  padding: 22px;
+  min-width: 0;
+}
+.document-review__filename {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  color: var(--ink-3);
+  margin: 10px 0 16px;
+}
+.document-review__note {
+  padding: 12px 14px;
+  margin: 12px 0;
+  border-left: 2px solid #939b70;
+  background: rgba(113, 131, 66, 0.07);
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.payslip-analysis {
+  border-block: 1px solid var(--line);
+  background: var(--surface, #f6f2e8);
+  padding: 18px 0;
+  margin: 20px 0;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.payslip-analysis__heading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.payslip-analysis h4 {
+  font-size: 15px;
+  margin: 0;
+}
+.payslip-analysis h4 span {
+  margin-left: 6px;
+  font: 11px var(--mono);
+  color: var(--accent);
+}
+.payslip-analysis__status {
+  font-size: 11px;
+  color: var(--accent);
+}
+.payslip-analysis > p {
+  margin: 10px 0;
+}
+.payslip-analysis__message {
+  padding-left: 12px;
+  border-left: 2px solid var(--accent);
+}
+.payslip-analysis__fields {
+  margin: 16px 0;
+}
+.payslip-analysis__fields > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+}
+.payslip-analysis__fields dt {
+  color: var(--ink-2, #626851);
+}
+.payslip-analysis__fields dd {
+  margin: 0;
+  font-weight: 600;
+  text-align: right;
+}
+.payslip-analysis__evidence summary {
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.payslip-analysis__evidence ul,
+.payslip-analysis__checks ul {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0;
+}
+.payslip-analysis__evidence li {
+  padding: 8px 0;
+}
+.payslip-analysis__evidence strong,
+.payslip-analysis__evidence q,
+.payslip-analysis__checks span {
+  display: block;
+}
+.payslip-analysis__evidence q {
+  color: var(--ink-2, #626851);
+  white-space: pre-wrap;
+}
+.payslip-analysis__checks h5 {
+  font-size: 13px;
+  margin: 18px 0 10px;
+}
+.payslip-analysis__checks li {
+  border-left: 2px solid var(--line);
+  padding: 5px 0 5px 12px;
+  margin-block: 10px;
+}
+.payslip-analysis__checks li[data-tone='attention'] {
+  border-left-color: #a16e3c;
+}
+.payslip-analysis__checks li[data-tone='match'] {
+  border-left-color: var(--accent);
+}
+.payslip-analysis__date,
+.payslip-analysis small {
+  color: var(--ink-2, #626851);
+  font-size: 11px;
+}
+.payslip-analysis small {
+  display: block;
+  margin-top: 8px;
+}
+.document-review__dates {
+  display: grid;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  margin: 0 0 18px;
+  min-width: 0;
+}
+.document-review__dates legend {
+  font-size: 13px;
+  margin-bottom: 14px;
+  font-weight: 600;
+}
+.document-review__dates label > span {
+  font-size: 13px;
+}
+.document-review__dates input {
+  min-width: 0;
+}
+.document-review__confirm {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 18px 0;
+  font-size: 13px;
+  line-height: 1.55;
+  cursor: pointer;
+}
+.document-review__confirm input {
+  flex-shrink: 0;
+  margin-top: 4px;
+  accent-color: var(--accent);
+}
+.document-review .btn {
+  white-space: normal;
+}
+.admin-property-review button:focus-visible,
+.document-review button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+@container (max-width: 580px) {
+  .document-review__body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .document-review__placeholder,
+  .document-review__preview {
+    min-height: 260px;
+  }
+}
+@media (max-width: 1100px) {
+  .admin-file-review {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .admin-property-review {
+    grid-template-columns: minmax(210px, 0.75fr) minmax(0, 1.5fr);
+  }
+}
+@media (max-width: 720px) {
+  .admin-file-review .tbl .mono-av {
+    display: none;
+  }
+  .admin-file-review .tbl td,
+  .admin-file-review .tbl th {
+    padding-inline: 7px;
+  }
+  .admin-property-review {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .admin-property-review__list nav {
+    max-height: 270px;
+    overflow: auto;
+  }
+  .admin-property-review__detail {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+  .admin-property-review__head,
+  .admin-property-review__publication,
+  .admin-property-review__history,
+  .document-review__selector {
+    padding: 20px;
+  }
+}
