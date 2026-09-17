@@ -62,6 +62,13 @@ export async function createHarness(
   );
 
   await app.init();
+  // Le serveur écoute une fois pour toute la suite. Sans ça, supertest ouvre le
+  // serveur pour une requête et le referme dès qu'elle se termine ; sous Linux,
+  // fermer un socket d'écoute renvoie un RST aux connexions encore dans la file
+  // d'acceptation du noyau. Des requêtes simultanées perdaient alors leur
+  // connexion (`read ECONNRESET`) — 240 sur 300 mesurées sous Node 22, zéro sous
+  // Windows, d'où une CI rouge sur un test vert en local.
+  await app.listen(0);
 
   const prisma = app.get(PrismaService);
   return { app, prisma, close: () => app.close() };
