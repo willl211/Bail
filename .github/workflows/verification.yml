@@ -91,12 +91,43 @@ jobs:
           npm test --workspace frontend
 
       - name: Tests d'intégration
-        run: npm run test:int --workspace backend
+        shell: bash
+        # `pipefail` : le code de sortie reste celui de Jest, pas celui de `tee`.
+        run: |
+          set -o pipefail
+          npm run test:int --workspace backend 2>&1 | tee integration.log
         env:
           # Le contrat de stockage est joué contre MinIO, pas seulement contre
           # le disque : c'est ce qui prouve que passer en objet ne change rien
           # au comportement attendu.
           S3_ENDPOINT: http://localhost:9000
+
+      # Les journaux d'Actions ne se lisent que connecté à GitHub, même sur un
+      # dépôt public. Les annotations, elles, sont exposées sans authentification
+      # par l'API des check runs. Chaque test en échec y remonte avec la première
+      # ligne de son erreur : on sait ce qui casse sans ouvrir le journal.
+      - name: Signaler les tests d'intégration en échec
+        if: failure()
+        shell: bash
+        run: |
+          [ -f integration.log ] || exit 0
+          sed 's/\x1b\[[0-9;]*m//g' integration.log > integration.clean.log
+          awk '/^[[:space:]]*● /{
+                 t=$0; sub(/^[[:space:]]*● /, "", t)
+                 m=""
+                 while ((getline line) > 0) { if (line !~ /^[[:space:]]*$/) { m=line; break } }
+                 sub(/^[[:space:]]+/, "", m)
+                 print t " — " m
+               }' integration.clean.log \
+            | sort -u | head -10 \
+            | while IFS= read -r entry; do
+                entry=${entry//'%'/'%25'}
+                echo "::error title=Test d'intégration en échec::${entry:0:400}"
+              done
+          grep -E '^(Tests|Test Suites):' integration.clean.log \
+            | while IFS= read -r entry; do
+                echo "::notice title=Bilan des tests d'intégration::$entry"
+              done
 
       - name: Compilation
         run: npm run build
