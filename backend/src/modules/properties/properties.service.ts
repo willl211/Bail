@@ -9,7 +9,7 @@ import {
   compatibilityScore,
   type CompatibilityFile,
 } from './compatibility';
-import { VISIBLE_STATUSES, visiblePropertyWhere } from './property-visibility';
+import { visiblePropertyWhere } from './property-visibility';
 import {
   FurnishedFilter,
   PropertySort,
@@ -235,7 +235,7 @@ export class PropertiesService {
     // surface habitable. Ils ne sont jamais codés en dur.
     const [property, feeSchedule] = await Promise.all([
       this.prisma.property.findFirst({
-        where: { reference, status: { in: VISIBLE_STATUSES } },
+        where: { reference, ...visiblePropertyWhere() },
         include: propertyPublicInclude,
       }),
       this.prisma.feeSchedule.findFirst({

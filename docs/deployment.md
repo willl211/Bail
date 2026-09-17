@@ -1,5 +1,10 @@
 # Mise en ligne
 
+Avant déploiement de l’étape 7, renseigner `MFA_ENCRYPTION_KEY`, appliquer la
+migration `20260916160000_admin_operations` et organiser l’enrôlement des agents.
+La clé doit être sauvegardée séparément des données et conservée entre déploiements.
+Voir [les procédures d’exploitation et leurs limites](operations.md).
+
 Ce document décrit comment whoma passe d'un poste de développement à une machine
 accessible au public. Il est écrit pour être suivi ligne à ligne le jour où le
 compte d'hébergement et le domaine existent.

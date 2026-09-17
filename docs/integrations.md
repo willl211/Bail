@@ -6,11 +6,24 @@ Ces prestataires peuvent être branchés en mode test/sandbox pendant tout le d�
 |---|---|---|
 | KYC / vérification des pièces (dossier locataire, avant visite) | Non choisi | **Interface en place, driver `mock` seul accepté** (voir ci-dessous) |
 | Aide à la lecture des bulletins de salaire | OpenAI Responses | **Connecteur écrit, désactivé par défaut, contrôle humain obligatoire** — [activation et limites](payslip-analysis.md) |
-| Signature électronique du bail | DocuSign | Confirmé — **interface en place, driver non écrit** (voir ci-dessous) |
-| Paiement (abonnements propriétaires, honoraires) | Stripe | Confirmé — **code complet, aucun compte branché** (voir ci-dessous) |
+| Signature électronique du bail | DocuSign | Driver sandbox implémenté — **recette externe à faire** (voir ci-dessous) |
+| Paiement (abonnements propriétaires, honoraires) | Stripe | **Checkout et portail implémentés, recette sandbox à effectuer** — [configuration et limites](payments.md) |
 | Visio pour les visites à distance | Non choisi formellement | **Interface en place, driver `mock` seul accepté.** Recommandation : Daily.co (le plus simple à intégrer et le moins cher pour démarrer, comparé à Twilio) |
 
-## Stripe — précision du 2 septembre 2026
+## Stripe — mise à jour du 14 septembre 2026
+
+Les honoraires et l'abonnement ouvrent désormais un Checkout hébergé, avec
+tentatives persistantes et confirmation vérifiée auprès de Stripe. L'abonnement
+à zéro bien utilise l'enregistrement d'une carte sans débit. Le portail permet
+la gestion de carte et des factures. La reprise annule effectivement la
+résiliation distante. Les notifications simulées exigent un agent connecté.
+
+La synchronisation du nombre de biens diffusés est branchée et reprise après
+échec depuis l'étape publication. Les clés réelles sont refusées pendant le
+développement. La recette avec de vraies requêtes **sandbox** reste à effectuer,
+les clés étant absentes. Voir [le guide de recette](payments.md).
+
+### Intention initiale du 2 septembre 2026
 
 Le paiement se construit **comme si Stripe était branché** : service dédié,
 types, montants, création des enregistrements `Payment` et `Subscription`,
@@ -24,7 +37,7 @@ variables d'environnement (`PAYMENT_DRIVER=stripe`, `STRIPE_SECRET_KEY`,
 métier. Si une décision d'implémentation oblige à toucher au code pour brancher
 Stripe, c'est que l'abstraction est mauvaise.
 
-### État au 3 septembre 2026
+### Historique au 3 septembre 2026 (remplacé par la mise à jour ci-dessus)
 
 Écrit et vérifié en mode simulé :
 
@@ -39,7 +52,7 @@ Stripe, c'est que l'abstraction est mauvaise.
   type non traité renvoie 200 sans effet plutôt qu'une erreur qui le ferait
   rejouer indéfiniment.
 
-Deux points restent ouverts :
+Deux points étaient ouverts :
 
 - `STRIPE_PRODUCT_ID` désigne un produit à créer **une fois** dans le tableau de
   bord. Le prix, lui, n'est pas dans le catalogue : il est construit à chaque
@@ -88,26 +101,29 @@ Le contrat prévoit aussi un régime **différé** (verdict rendu plus tard par
 webhook) dont le mock ne se sert pas : une intégration réelle en dépendra, et
 l'ajouter après coup obligerait à retoucher le code métier.
 
-## Signature — précision du 3 septembre 2026
+## Signature — mise à jour du 15 septembre 2026
 
-Le contrat du prestataire est écrit (`SignatureDriver`) et tout le module bail
-passe par lui : création d'enveloppe sur un document figé et son empreinte,
-annulation, notifications signées, récupération du document signé.
+Le driver DocuSign sandbox est implémenté : JWT RSA, PDF issu du modèle verrouillé,
+diagnostics annexés, tentative persistée et identifiant de transaction réutilisé,
+Connect JSON signé par HMAC, relecture des signataires auprès du prestataire et
+téléchargement du PDF combiné avec certificat. Les appels REST sont simulés dans
+les tests ; **aucun compte DocuSign n'est encore branché ni validé de bout en bout**.
 
-**Le driver DocuSign n'est pas écrit**, et c'est délibéré. Le driver Stripe a pu
-l'être sans compte parce que son SDK typé rend l'intégration vérifiable : le
-typage a d'ailleurs attrapé une vraie erreur. Une intégration DocuSign écrite à
-l'aveugle — authentification JWT, gabarits d'enveloppe, positionnement des
-onglets de signature — ne serait vérifiable par rien et donnerait une fausse
-impression d'avancement. Elle s'écrira contre le bac à sable, le jour où le
-compte existe. Les variables `DOCUSIGN_*` sont déjà prévues dans `env/`.
-
-Le simulateur ne signe rien tout seul : les enveloppes restent « envoyées »
-jusqu'à ce qu'un événement arrive, comme chez un vrai prestataire où c'est le
-signataire qui agit. Et `downloadSigned` échoue explicitement plutôt que de
-fabriquer un document qui ressemblerait à une preuve sans en être une.
+Voir [la configuration, les scénarios de recette et les limites](signatures.md).
+Le mode local reste `mock`. Le simulateur ne fabrique aucun PDF signé. Les modèles
+légaux non publiés et la désactivation de la génération continuent à bloquer l'envoi.
 
 ## Protocole de visite (v0)
+
+**Mise à jour du 16 septembre :** la visio simulée n’est plus réservable et aucun
+lien permanent de salle n’est exposé. La disponibilité au lancement reste à
+confirmer avant une intégration fournisseur. Le parcours accompagné comprend
+désormais les contrôles de concurrence, les notifications des parties et agents,
+les rappels et une purge qui reprend réellement les échecs. Voir [visites](visits.md).
+La réservation avec empreinte bancaire reste bloquée tant que le parcours Stripe
+correspondant n’est pas terminé. Une annulation n’invente plus sa libération.
+
+Les états historiques ci-dessous décrivent les versions précédentes.
 
 Éléments de sécurité à prévoir dans le flux de prise de RDV, même en mode mock :
 - Vérification d'identité (KYC) du visiteur avant le RDV
@@ -161,7 +177,7 @@ Le contrat du prestataire est écrit (`MailDriver`) et deux drivers existent :
 | `smtp` | envoi réel, via nodemailer. |
 
 C'est la **seule intégration réelle écrite avant qu'un compte n'existe**, et
-c'est assumé : contrairement à DocuSign, SMTP est un protocole, pas une API
+c'est assumé : SMTP est un protocole, pas une API
 propriétaire. Le driver se vérifie de bout en bout contre
 [Mailpit](https://github.com/axllent/mailpit) — `npm run mail:up`, interface sur
 http://localhost:8025 — connexion, en-têtes, encodage, rendu compris. La même

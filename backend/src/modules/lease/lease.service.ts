@@ -1,3 +1,4 @@
+import { requiredDiagnostics, diagnosticFactBlockers, energyBlockers, DIAGNOSTIC_LABELS } from '../owner/diagnostic-policy';
 import { isCurrentDiagnostic, diagnosticStatus } from '../owner/property.checks';
 import {
   BadRequestException,
@@ -14,13 +15,15 @@ import {
   DocumentType,
   LeaseStatus,
   LeaseType,
-  PreauthorizationStatus,
   Prisma,
   PropertyDocumentType,
   PropertyStatus,
   VisitStatus,
 } from '@prisma/client';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { StorageService } from '../storage/storage.service';
+import { renderLeasePdf } from './lease.pdf';
+import type { SignatureEnvelopeInput } from '../signature/signature.driver';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ATTRIBUTION_REASON, ATTRIBUTION_VISIT_REASON } from '../applications/attribution';
 import { EVENT } from '../mail/event.templates';
@@ -104,14 +107,6 @@ export interface LeaseView {
   signedAt: string | null;
 }
 
-/** Annexes obligatoires d'un bail d'habitation, dans l'ordre de la maquette. */
-const EXPECTED_ANNEXES: { type: PropertyDocumentType; label: string }[] = [
-  { type: PropertyDocumentType.DPE, label: 'Diagnostic de performance énergétique' },
-  { type: PropertyDocumentType.LEAD, label: 'CREP (plomb)' },
-  { type: PropertyDocumentType.ERP, label: 'État des risques et pollutions' },
-  { type: PropertyDocumentType.ASBESTOS, label: 'Amiante' },
-];
-
 @Injectable()
 export class LeaseService {
   private readonly logger = new Logger(LeaseService.name);
@@ -121,6 +116,7 @@ export class LeaseService {
     @Inject(SIGNATURE_DRIVER) private readonly signature: SignatureDriver,
     private readonly mail: MailService,
     private readonly saved: SavedService,
+    private readonly storage: StorageService,
   ) {}
 
   // ---------------------------------------------------------------- Réglages
@@ -230,6 +226,7 @@ export class LeaseService {
     const fieldValues = await this.buildFieldValues(application.id, startDate, durationMonths);
 
     const attribution = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT "id" FROM "properties" WHERE "id" = ${property.id} FOR UPDATE`;
       const leaseReference = await this.nextReference(tx);
 
       await tx.lease.create({
@@ -303,9 +300,15 @@ export class LeaseService {
             in: [VisitStatus.REQUESTED, VisitStatus.PENDING_CHECKS, VisitStatus.CONFIRMED],
           },
         },
-        select: { id: true },
+        select: { id: true, tenantId: true, agentId: true, property: { select: { ownerId: true } } },
       });
 
+      for (const visit of visits) {
+        for (const userId of [visit.tenantId, visit.property.ownerId, visit.agentId].filter((id): id is string => !!id)) {
+          await this.mail.enqueueInTransaction(tx, { template: EVENT.visitCancelled, userId, subjectRef: visit.id,
+            dedupeKey: 'visit-cancelled:' + visit.id + ':' + userId });
+        }
+      }
       if (visits.length > 0) {
         const visitIds = visits.map((visit) => visit.id);
         await tx.visit.updateMany({
@@ -314,7 +317,7 @@ export class LeaseService {
             status: VisitStatus.CANCELLED,
             cancelledAt: new Date(),
             cancellationReason: ATTRIBUTION_VISIT_REASON,
-            preauthorizationStatus: PreauthorizationStatus.RELEASED,
+            videoRoomUrl: null,
           },
         });
         // Le créneau redevient libre : le bien sort de la diffusion, mais le
@@ -402,7 +405,7 @@ export class LeaseService {
     const euros = (cents: number) =>
       `${(cents / 100).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 
-    const annexes = EXPECTED_ANNEXES.filter((annexe) =>
+    const annexes = requiredDiagnostics(property).map((type) => ({ type, label: DIAGNOSTIC_LABELS[type] })).filter((annexe) =>
       property.documents.some(
         (document) => document.type === annexe.type && isCurrentDiagnostic(document),
       ),
@@ -428,7 +431,7 @@ export class LeaseService {
       bailleurAdresse: formatAddress(owner),
       locataireNomComplet: `${application.tenant.firstName} ${application.tenant.lastName}`,
       logementAdresse: `${property.addressLine}, ${property.postalCode} ${property.city}`,
-      logementTypeHabitat: 'immeuble collectif',
+      logementTypeHabitat: property.propertyType === 'HOUSE' ? 'maison individuelle' : 'immeuble collectif',
       logementSurfaceM2: String(property.surfaceM2),
       logementNombrePieces: String(property.rooms),
       bailDateDebut: startDate.toLocaleDateString('fr-FR'),
@@ -533,9 +536,15 @@ export class LeaseService {
       blockers.push('La génération de baux est désactivée en attendant la validation juridique.');
     }
     blockers.push(...validation.anomalies, ...validation.unverifiable);
+    blockers.push(...energyBlockers(lease.property.energyRating, lease.startDate > new Date() ? lease.startDate : new Date()), ...diagnosticFactBlockers(lease.property));
+    for (const type of requiredDiagnostics(lease.property)) {
+      if (!lease.property.documents.some((doc) => doc.type === type && isCurrentDiagnostic(doc)))
+        blockers.push(`${DIAGNOSTIC_LABELS[type]} : diagnostic vérifié et valide requis avant signature`);
+    }
 
     const events = signatureEventsOf(lease.signatureEvents);
     const progress = signatureProgress(events);
+    const snapshot = lease.signatureRequest as { view?: Pick<LeaseView, 'document' | 'annexes' | 'signers'> } | null;
 
     return {
       reference: lease.reference,
@@ -554,16 +563,16 @@ export class LeaseService {
       rentCents: lease.rentCents,
       chargesCents: lease.chargesCents,
       depositCents: lease.depositCents,
-      document: renderTemplate(lease.template.body, fieldValues),
+      document: snapshot?.view?.document ?? renderTemplate(lease.template.body, fieldValues),
       validation,
       signers: progress.signers.map((signer) => ({
         ...signer,
-        fullName:
+        fullName: snapshot?.view?.signers.find(frozen => frozen.role === signer.role)?.fullName ?? (
           signer.role === 'LANDLORD'
             ? `${lease.property.owner.firstName} ${lease.property.owner.lastName}`
-            : `${lease.tenant.firstName} ${lease.tenant.lastName}`,
+            : `${lease.tenant.firstName} ${lease.tenant.lastName}`),
       })),
-      annexes: EXPECTED_ANNEXES.map((annexe) => {
+      annexes: snapshot?.view?.annexes ?? requiredDiagnostics(lease.property).map((type) => ({ type, label: DIAGNOSTIC_LABELS[type] })).map((annexe) => {
         const document = lease.property.documents.find((entry) => entry.type === annexe.type);
         return {
           type: annexe.type,
@@ -694,84 +703,128 @@ export class LeaseService {
    * bail sans clauses ne se rattrape pas après coup.
    */
   async sendForSignature(reference: string, ownerId: string): Promise<LeaseView> {
+    const lease = await this.prisma.lease.findFirst({ where: { reference, property: { ownerId } },
+      include: { template: true, property: { include: { owner: true, documents: true } }, tenant: true },
+    });
+    if (!lease) throw new NotFoundException('Bail introuvable.');
+    if (lease.signatureEnvelopeId) return this.getByReference(reference, ownerId, 'OWNER');
+    // Une tentative déjà préparée a pu être acceptée par le prestataire avant
+    // la perte de réponse. La reprendre ne doit pas reconstruire un autre acte.
+    if (lease.signatureRequest) {
+      if (lease.signatureProvider !== this.signature.name) throw new ConflictException('Le prestataire a changé depuis la préparation du bail.');
+      if (!['DRAFT', 'FIELDS_VALIDATED'].includes(lease.status)) throw new ConflictException('Ce bail ne peut plus être envoyé.');
+      const envelope = await this.signature.createEnvelope(this.signatureInput(lease.signatureRequest));
+      await this.attachEnvelope(lease.id, envelope.id);
+      return this.getByReference(reference, ownerId, 'OWNER');
+    }
     const view = await this.getByReference(reference, ownerId, 'OWNER');
+    if (view.blockers.length) throw new BadRequestException({ message: 'Ce bail ne peut pas être envoyé en signature.', blockers: view.blockers });
+    if (!['DRAFT', 'FIELDS_VALIDATED'].includes(lease.status)) throw new ConflictException('Ce bail ne peut plus être envoyé.');
 
-    if (view.blockers.length > 0) {
-      throw new BadRequestException({
-        statusCode: 400,
-        message: 'Ce bail ne peut pas être envoyé en signature.',
-        blockers: view.blockers,
-      });
-    }
-    if (view.status !== LeaseStatus.DRAFT && view.status !== LeaseStatus.FIELDS_VALIDATED) {
-      throw new ConflictException('Ce bail est déjà parti en signature.');
-    }
-
-    const lease = await this.prisma.lease.findFirstOrThrow({
-      where: { reference },
-      include: { template: true, property: { include: { owner: true } }, tenant: true },
-    });
-
-    const text = renderPlainText(
-      lease.template.body,
-      (lease.fieldValues ?? {}) as Record<string, unknown>,
-    );
-    const content = Buffer.from(text, 'utf8');
-    const checksum = createHash('sha256').update(content).digest('hex');
-
-    const envelope = await this.signature.createEnvelope({
-      reference: lease.reference,
-      subject: `Bail ${lease.reference} — ${lease.property.reference}`,
-      document: {
-        fileName: `${lease.reference}.txt`,
-        content,
-        mimeType: 'text/plain',
-      },
-      checksum,
-      signers: [
-        {
-          id: 'LANDLORD',
-          fullName: `${lease.property.owner.firstName} ${lease.property.owner.lastName}`,
-          email: lease.property.owner.email,
-          role: 'LANDLORD',
-        },
-        {
-          id: 'TENANT',
-          fullName: `${lease.tenant.firstName} ${lease.tenant.lastName}`,
-          email: lease.tenant.email,
-          role: 'TENANT',
-        },
-      ],
-      expiresInDays: SIGNATURE_VALIDITY_DAYS,
-    });
-
-    await this.prisma.lease.update({
-      where: { id: lease.id },
-      data: {
-        status: LeaseStatus.SENT_FOR_SIGNATURE,
-        signatureProvider: this.signature.name,
-        signatureEnvelopeId: envelope.id,
-        sentForSignatureAt: new Date(),
-        validatedAt: new Date(),
-        validationReport: view.validation as unknown as Prisma.InputJsonValue,
-        signatureEvents: [
-          { type: 'sent', signerId: null, occurredAt: new Date().toISOString() },
-        ] as unknown as Prisma.InputJsonValue,
-      },
-    });
-
-    // Les deux parties sont prévenues. Le lien de signature, lui, vient du
-    // prestataire : il ne transite pas par la file, qui ne porte aucun secret.
-    for (const userId of [lease.property.ownerId, lease.tenantId]) {
-      await this.mail.enqueue({
-        template: EVENT.leaseReadyToSign,
-        userId,
-        subjectRef: lease.id,
-        dedupeKey: `${EVENT.leaseReadyToSign}:${lease.id}:${userId}`,
-      });
-    }
-
+    const reserved = await this.prisma.$transaction(async tx => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'signature:' + lease.id}))`;
+      await tx.$executeRaw`SELECT "id" FROM "properties" WHERE "id" = ${lease.propertyId} FOR UPDATE`;
+      const current = await tx.lease.findUniqueOrThrow({ where: { id: lease.id } });
+      if (current.signatureRequest) return current;
+      if (current.updatedAt.getTime() !== lease.updatedAt.getTime()) throw new ConflictException('Le bail a changé. Actualisez la page.');
+      const template = await tx.leaseTemplate.findUniqueOrThrow({ where: { id: lease.templateId } });
+      if (!template.isActive || !template.publishedAt || template.checksum !== lease.templateChecksum || createHash('sha256').update(template.body).digest('hex') !== lease.templateChecksum) throw new ConflictException('Le modèle légal a changé.');
+      let pdf;
+      try { pdf = await renderLeasePdf(renderPlainText(template.body, lease.fieldValues as Record<string, unknown>), reference); }
+      catch { throw new BadRequestException('Le texte du bail ne peut pas être mis en PDF sans perte. Contrôle du modèle nécessaire.'); }
+      const annexes = [];
+      let total = pdf.content.length;
+      for (const type of requiredDiagnostics(lease.property)) {
+        const document = lease.property.documents.find(d => d.type === type && isCurrentDiagnostic(d));
+        if (!document?.storageKey) throw new BadRequestException('Annexe obligatoire indisponible.');
+        const content = await this.readPrivateBytes(document.storageKey, 12 * 1024 * 1024 - total);
+        total += content.length;
+        const mimeType = content.subarray(0, 5).toString() === '%PDF-' ? 'application/pdf'
+          : content[0] === 0xff && content[1] === 0xd8 ? 'image/jpeg'
+          : content.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10])) ? 'image/png' : '';
+        if (!mimeType) throw new BadRequestException('Une annexe doit être remplacée par un PDF, JPEG ou PNG lisible.');
+        annexes.push({ fileName: type + (mimeType === 'application/pdf' ? '.pdf' : mimeType === 'image/jpeg' ? '.jpg' : '.png'), mimeType, content: content.toString('base64') });
+      }
+      const property = await tx.property.findUniqueOrThrow({ where: { id: lease.propertyId } });
+      if (property.reviewRevision !== lease.property.reviewRevision) throw new ConflictException('Les diagnostics du bien ont changé. Actualisez la page.');
+      const transactionId = randomUUID(); const requestedAt = new Date();
+      const snapshot = { reference, subject: 'Bail ' + reference + ' — ' + lease.property.reference,
+        view: { document: view.document, annexes: view.annexes, signers: view.signers },
+        transactionId, requestedAt: requestedAt.toISOString(), expiresInDays: SIGNATURE_VALIDITY_DAYS,
+        checksum: createHash('sha256').update(pdf.content).digest('hex'),
+        document: { fileName: reference + '.pdf', content: pdf.content.toString('base64'), mimeType: 'application/pdf', signaturePage: pdf.signaturePage }, annexes,
+        signers: [
+          { id: 'LANDLORD', role: 'LANDLORD', fullName: lease.property.owner.firstName + ' ' + lease.property.owner.lastName, email: lease.property.owner.email },
+          { id: 'TENANT', role: 'TENANT', fullName: lease.tenant.firstName + ' ' + lease.tenant.lastName, email: lease.tenant.email },
+        ],
+      };
+      return tx.lease.update({ where: { id: lease.id }, data: { signatureRequestId: transactionId, signatureRequestedAt: requestedAt,
+        signatureProvider: this.signature.name, signatureRequest: snapshot as unknown as Prisma.InputJsonValue, validationReport: view.validation as unknown as Prisma.InputJsonValue } });
+    }, { timeout: 20_000 });
+    if (reserved.signatureProvider !== this.signature.name) throw new ConflictException('Le prestataire a changé depuis la préparation du bail.');
+    const envelope = await this.signature.createEnvelope(this.signatureInput(reserved.signatureRequest));
+    await this.attachEnvelope(lease.id, envelope.id);
     return this.getByReference(reference, ownerId, 'OWNER');
+  }
+
+  private signatureInput(value: Prisma.JsonValue | null): SignatureEnvelopeInput {
+    const raw = value as unknown as Omit<SignatureEnvelopeInput, 'document' | 'annexes'> & {
+      document: { fileName: string; mimeType: string; content: string; signaturePage: number };
+      annexes: { fileName: string; mimeType: string; content: string }[];
+    };
+    if (!raw?.transactionId || !raw.document) throw new ConflictException('Instantané de signature absent.');
+    return { ...raw, document: { ...raw.document, content: Buffer.from(raw.document.content, 'base64') },
+      annexes: raw.annexes.map(file => ({ ...file, content: Buffer.from(file.content, 'base64') })) };
+  }
+
+  private async readPrivateBytes(key: string, limit: number): Promise<Buffer> {
+    const chunks: Buffer[] = []; let size = 0;
+    try {
+      const stream = await this.storage.read('private', key);
+      for await (const value of stream) { const chunk = Buffer.from(value); size += chunk.length;
+        if (size > limit) { stream.destroy(); throw new Error('size'); } chunks.push(chunk); }
+    } catch { throw new BadRequestException('Fichier privé indisponible ou dossier supérieur à 12 Mo.'); }
+    if (!size) throw new BadRequestException('Annexe vide.');
+    return Buffer.concat(chunks);
+  }
+
+  private async attachEnvelope(leaseId: string, envelopeId: string): Promise<void> {
+    await this.prisma.$transaction(async tx => {
+      await tx.$executeRaw`SELECT "id" FROM "leases" WHERE "id" = ${leaseId} FOR UPDATE`;
+      const current = await tx.lease.findUniqueOrThrow({ where: { id: leaseId }, include: { property: true } });
+      if (current.signatureEnvelopeId) {
+        if (current.signatureEnvelopeId !== envelopeId) throw new ConflictException('Deux enveloppes différentes détectées : rapprochement nécessaire.');
+        return;
+      }
+      if (!['DRAFT', 'FIELDS_VALIDATED'].includes(current.status)) throw new ConflictException('Le bail ne peut plus être envoyé.');
+      await tx.lease.update({ where: { id: leaseId }, data: { signatureEnvelopeId: envelopeId, status: 'SENT_FOR_SIGNATURE', sentForSignatureAt: new Date(), validatedAt: new Date(),
+        signatureEvents: [{ type: 'sent', signerId: null, occurredAt: new Date().toISOString() }] } });
+      for (const userId of [current.property.ownerId, current.tenantId]) await this.mail.enqueueInTransaction(tx, {
+        template: EVENT.leaseReadyToSign, userId, subjectRef: leaseId, dedupeKey: EVENT.leaseReadyToSign + ':' + leaseId + ':' + userId,
+      });
+    });
+  }
+
+  async receiveSignatureEvent(event: SignatureEvent): Promise<boolean> {
+    if (this.signature.name !== 'docusign' || !this.signature.readEvents) return this.applySignatureEvent(event);
+    let lease = await this.prisma.lease.findFirst({ where: { signatureEnvelopeId: event.envelopeId } });
+    if (!lease && this.signature.requestIdFor) {
+      const requestId = await this.signature.requestIdFor(event.envelopeId);
+      if (requestId) lease = await this.prisma.lease.findUnique({ where: { signatureRequestId: requestId } });
+    }
+    if (!lease || lease.signatureProvider !== 'docusign') return false;
+    const input = this.signatureInput(lease.signatureRequest);
+    const events = await this.signature.readEvents(event.envelopeId, input.signers);
+    await this.attachEnvelope(lease.id, event.envelopeId);
+    for (const update of events) await this.applySignatureEvent(update);
+    return true;
+  }
+
+  async downloadSigned(reference: string, userId: string, role: 'OWNER' | 'TENANT' | 'AGENT') {
+    const view = await this.getByReference(reference, userId, role);
+    const lease = await this.prisma.lease.findUniqueOrThrow({ where: { reference } });
+    if (view.status !== 'SIGNED' || !lease.signatureEnvelopeId || lease.signatureProvider !== this.signature.name) throw new ConflictException('Le bail signé n’est pas disponible.');
+    return this.signature.downloadSigned(lease.signatureEnvelopeId);
   }
 
   /**
@@ -830,7 +883,8 @@ export class LeaseService {
         reason: event.reason,
       };
       events.push(stored);
-      const status = nextSignatureStatus(events, stored);
+      let status = nextSignatureStatus(events, stored);
+      if (this.signature.name === 'docusign' && status === LeaseStatus.SIGNED && !events.some(entry => entry.type === 'completed')) status = LeaseStatus.PARTIALLY_SIGNED;
       await tx.lease.update({
         where: { id: lease.id },
         data: {

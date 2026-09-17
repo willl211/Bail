@@ -53,6 +53,10 @@ export class PropertyDecisionDto {
 
 export class DiagnosticDecisionDto extends ReviewDecisionDto {
   @IsOptional()
+  @IsIn(['BELOW_THRESHOLD', 'REQUIRES_RENEWAL'])
+  leadResult?: 'BELOW_THRESHOLD' | 'REQUIRES_RENEWAL';
+
+  @IsOptional()
   @Matches(/^\d{4}-\d{2}-\d{2}$/)
   issuedAt?: string;
 

@@ -1,3 +1,5 @@
+import { visiblePropertyWhere } from '../properties/property-visibility';
+import { CheckoutService } from './checkout.service';
 import {
   BadRequestException,
   ConflictException,
@@ -74,12 +76,6 @@ const readFailureReason = (invoice: InvoiceShape): string | null => {
   return readString(error?.message);
 };
 
-/** Statuts pour lesquels le bien est diffusé, donc facturé. */
-const BILLABLE: PropertyStatus[] = [
-  PropertyStatus.ONLINE,
-  PropertyStatus.VISITS_IN_PROGRESS,
-];
-
 /** Ligne de facturation : un bien du portefeuille, facturé ou non. */
 export interface SubscriptionLine {
   reference: string;
@@ -148,6 +144,7 @@ export interface SubscriptionOverview {
 }
 
 const STATUS_FROM_DRIVER: Record<DriverSubscription['status'], SubscriptionStatus> = {
+  incomplete: SubscriptionStatus.INCOMPLETE,
   trialing: SubscriptionStatus.TRIALING,
   active: SubscriptionStatus.ACTIVE,
   past_due: SubscriptionStatus.PAST_DUE,
@@ -171,6 +168,7 @@ export class SubscriptionService {
     private readonly config: ConfigService,
     @Inject(PAYMENT_DRIVER) private readonly driver: PaymentDriver,
     private readonly mail: MailService,
+    private readonly checkout: CheckoutService,
   ) {}
 
   // ---------------------------------------------------------------- Lectures
@@ -198,7 +196,7 @@ export class SubscriptionService {
    */
   async billableCount(ownerId: string): Promise<number> {
     return this.prisma.property.count({
-      where: { ownerId, status: { in: BILLABLE } },
+      where: { ownerId, ...visiblePropertyWhere() },
     });
   }
 
@@ -211,8 +209,9 @@ export class SubscriptionService {
       select: { reference: true, title: true, status: true },
     });
 
+    const visible = new Set((await this.prisma.property.findMany({ where: { ownerId, ...visiblePropertyWhere() }, select: { reference: true } })).map((property) => property.reference));
     return properties.map((property) => {
-      const billed = BILLABLE.includes(property.status);
+      const billed = visible.has(property.reference);
       return {
         reference: property.reference,
         label: property.title,
@@ -263,7 +262,7 @@ export class SubscriptionService {
 
     const [billable, lettings, agencyLettingFeeMonths, mandateRate] = await Promise.all([
       this.prisma.property.findMany({
-        where: { ownerId, status: { in: BILLABLE } },
+        where: { ownerId, ...visiblePropertyWhere() },
         select: { rentCents: true, chargesCents: true },
       }),
       this.prisma.property.count({
@@ -301,15 +300,18 @@ export class SubscriptionService {
 
   /** État complet de l'écran « Abonnement ». */
   async getOverview(ownerId: string): Promise<SubscriptionOverview> {
-    const [subscription, feeSchedule] = await Promise.all([
+    const [subscription, activeSchedule] = await Promise.all([
       this.prisma.subscription.findFirst({
         where: { ownerId },
         orderBy: { createdAt: 'desc' },
+        include: { feeSchedule: true },
       }),
       this.activeFeeSchedule(),
     ]);
 
-    const unitAmountCents = feeSchedule?.ownerSubscriptionMonthlyCents ?? null;
+    const ongoing = subscription && subscription.status !== 'CANCELLED';
+    const feeSchedule = ongoing ? subscription.feeSchedule ?? activeSchedule : activeSchedule;
+    const unitAmountCents = ongoing ? subscription.monthlyAmountCents : feeSchedule?.ownerSubscriptionMonthlyCents ?? null;
     const lines = await this.lines(ownerId, unitAmountCents ?? 0);
     const billableCount = lines.filter((line) => line.billed).length;
     const monthlyTotalCents = (unitAmountCents ?? 0) * billableCount;
@@ -335,7 +337,7 @@ export class SubscriptionService {
       invoices,
       benchmark,
       paymentMethod:
-        subscription === null
+        subscription === null || driver !== 'mock'
           ? null
           : {
               // Aucun compte Stripe n'est branché : la carte affichée est celle
@@ -352,6 +354,23 @@ export class SubscriptionService {
   }
 
   // -------------------------------------------------------------- Écritures
+
+  /** Même verrou propriétaire que la résiliation effective : une publication
+   * concurrente ne peut pas contourner le retrait des annonces. */
+  async assertPublicationAllowed(tx: Prisma.TransactionClient, ownerId: string): Promise<void> {
+    if (this.driver.name !== 'stripe') return;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`billing-owner:${ownerId}`}))`;
+    const subscription = await tx.subscription.findFirst({ where: { ownerId }, orderBy: { createdAt: 'desc' } });
+    if (!subscription?.stripeSubscriptionId || !['ACTIVE', 'TRIALING', 'PAST_DUE'].includes(subscription.status)) {
+      throw new BadRequestException('Le propriétaire doit finaliser son abonnement dans Stripe avant la publication.');
+    }
+  }
+
+  async portal(ownerId: string): Promise<{ url: string }> {
+    const subscription = await this.prisma.subscription.findFirst({ where: { ownerId, stripeCustomerId: { not: null } }, orderBy: { createdAt: 'desc' } });
+    if (!subscription?.stripeCustomerId) throw new NotFoundException('Aucun compte de facturation Stripe.');
+    return this.driver.createPortal(subscription.stripeCustomerId, this.checkout.returnUrl('/proprietaires/abonnement'));
+  }
 
   private async nextPaymentReference(tx: Prisma.TransactionClient): Promise<string> {
     const year = new Date().getFullYear();
@@ -372,7 +391,8 @@ export class SubscriptionService {
    * diffusés. S'abonner sans annonce en ligne est un cas normal — c'est même
    * l'ordre du parcours : on s'abonne, puis on publie.
    */
-  async subscribe(ownerId: string): Promise<SubscriptionOverview> {
+  async subscribe(ownerId: string): Promise<SubscriptionOverview | { checkoutUrl: string }> {
+    if (this.driver.name === 'stripe') return this.checkout.startSubscription(ownerId);
     const existing = await this.prisma.subscription.findFirst({
       where: { ownerId, status: { not: SubscriptionStatus.CANCELLED } },
     });
@@ -486,12 +506,7 @@ export class SubscriptionService {
     }
 
     if (subscription.stripeSubscriptionId) {
-      // Repasser la quantité à jour remet `cancel_at_period_end` à faux côté
-      // prestataire ; on en profite pour resynchroniser l'assiette.
-      await this.driver.updateSubscriptionQuantity(
-        subscription.stripeSubscriptionId,
-        await this.billableCount(ownerId),
-      );
+      await this.driver.resumeSubscription(subscription.stripeSubscriptionId);
     }
 
     await this.prisma.subscription.update({
@@ -544,6 +559,7 @@ export class SubscriptionService {
    * qu'à la structure, qu'on relit défensivement.
    */
   async handleWebhook(event: WebhookEvent): Promise<boolean> {
+    if (this.driver.name === 'stripe') return this.checkout.handleBillingWebhook(event);
     switch (event.type) {
       case 'invoice.created':
         await this.onInvoiceCreated(event);
@@ -681,6 +697,7 @@ export class SubscriptionService {
     if (!subscription) return;
 
     const payment = await this.findInvoicePayment(subscription.id, readString(invoice.id));
+    if (payment?.status === PaymentStatus.PAID || payment?.status === PaymentStatus.REFUNDED) return;
     if (payment && payment.status !== PaymentStatus.FAILED) {
       await this.prisma.payment.update({
         where: { id: payment.id },

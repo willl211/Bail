@@ -13,6 +13,7 @@ import { ATTRIBUTION_REASON, ATTRIBUTION_VISIT_REASON } from '../applications/at
 import { SIGNATURE_VALIDITY_DAYS } from '../lease/signature.validity';
 import * as tpl from './event.templates';
 import { EVENT } from './event.templates';
+import { LIVE_VISIT } from '../visits/visit.policy';
 import type { RenderedTemplate } from './mail.templates';
 
 /** Le bail attend encore une ou deux signatures. */
@@ -142,7 +143,10 @@ export class EventResolver {
 
       case EVENT.visitBooked:
       case EVENT.visitCancelled:
-        return this.visit(template, ref, firstName);
+      case EVENT.visitAssigned:
+      case EVENT.visitUnassigned:
+      case EVENT.visitReminder:
+        return this.visit(template, ref, firstName, recipientId);
 
       default:
         this.logger.error(`Gabarit d'événement inconnu : ${template}`);
@@ -472,35 +476,39 @@ export class EventResolver {
   }
 
   private async visit(
-    template: string,
-    id: string,
-    firstName: string,
+    template: string, id: string, firstName: string, recipientId: string | null,
   ): Promise<RenderedTemplate | null> {
     const visit = await this.prisma.visit.findUnique({
-      where: { id },
-      select: {
-        scheduledAt: true,
-        type: true,
-        property: { select: { reference: true } },
-      },
+      where: { id }, include: { property: { select: { reference: true, ownerId: true } } },
     });
-    if (!visit) return null;
-
+    if (!visit || !recipientId) return null;
+    const owner = recipientId === visit.property.ownerId;
+    const tenant = recipientId === visit.tenantId;
+    const agent = recipientId === visit.agentId;
+    if (template === EVENT.visitUnassigned) {
+      const notice = await this.prisma.emailMessage.findFirst({ where: { template, subjectRef: id, recipientId } });
+      if (agent || !notice) return null;
+      return tpl.visitUpdate({ firstName, propertyReference: visit.property.reference, scheduledAt: visit.scheduledAt,
+        heading: 'Affectation de visite retirée', detail: 'Vous n’êtes plus affecté à ce rendez-vous. Consultez votre planning.', url: this.site + '/back-office' });
+    }
+    if (!owner && !tenant && !agent) return null;
+    if (template === EVENT.visitCancelled ? visit.status !== 'CANCELLED' : !LIVE_VISIT.includes(visit.status)) return null;
+    if (template !== EVENT.visitCancelled && visit.scheduledAt.getTime() <= Date.now()) return null;
+    if (template === EVENT.visitAssigned && !visit.agentId) return null;
+    if (template === EVENT.visitReminder && visit.status !== 'CONFIRMED') return null;
     const reference = visit.property.reference;
-
-    return template === EVENT.visitBooked
-      ? tpl.visitBooked({
-          ownerFirstName: firstName,
-          propertyReference: reference,
-          scheduledAt: visit.scheduledAt,
-          isVideo: visit.type === 'VIDEO',
-          url: `${this.site}/proprietaires/biens/${encodeURIComponent(reference)}/visites`,
-        })
-      : tpl.visitCancelled({
-          firstName,
-          propertyReference: reference,
-          scheduledAt: visit.scheduledAt,
-          url: `${this.site}/proprietaires/biens/${encodeURIComponent(reference)}/visites`,
-        });
+    const url = owner
+      ? this.site + '/proprietaires/biens/' + encodeURIComponent(reference) + '/visites'
+      : tenant ? this.site + '/biens/' + encodeURIComponent(reference) + '/visite'
+      : this.site + '/back-office';
+    const heading = template === EVENT.visitCancelled ? 'Visite annulée'
+      : template === EVENT.visitAssigned ? 'Agent affecté à votre visite'
+      : template === EVENT.visitReminder ? 'Rappel de votre visite' : 'Visite réservée';
+    const detail = template === EVENT.visitCancelled ? 'Ce rendez-vous est annulé. Consultez votre espace pour la suite.'
+      : visit.status === 'PENDING_CHECKS' ? 'La réservation attend encore les contrôles préalables. Consultez votre espace.'
+      : agent ? 'Vous accompagnez cette visite. Consultez le rendez-vous dans votre espace.'
+      : visit.agentId ? 'Un agent est affecté au rendez-vous. Retrouvez les informations dans votre espace.'
+      : 'La réservation est enregistrée. L’affectation d’un agent reste à effectuer.';
+    return tpl.visitUpdate({ firstName, propertyReference: reference, scheduledAt: visit.scheduledAt, heading, detail, url });
   }
 }

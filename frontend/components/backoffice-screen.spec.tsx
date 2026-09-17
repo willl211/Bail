@@ -59,6 +59,7 @@ const fileIncomplet: AdminFileRow = {
 };
 
 const propertyEnAttente: AdminPropertyRow = {
+  diagnosticContext: ['Construction : 2005'],
   revision: 1,
   addressLine: '12 rue du Pont',
   energyRating: 'C',

@@ -31,6 +31,9 @@ export const EVENT = {
   propertyReturned: 'property-returned',
   visitBooked: 'visit-booked',
   visitCancelled: 'visit-cancelled',
+  visitAssigned: 'visit-assigned',
+  visitUnassigned: 'visit-unassigned',
+  visitReminder: 'visit-reminder',
   savedPropertyPriceDrop: 'saved-property-price-drop',
   savedPropertyRented: 'saved-property-rented',
   leaseReadyToSign: 'lease-ready-to-sign',
@@ -156,6 +159,17 @@ export function visitCancelled(p: {
       `La visite de ${p.propertyReference} prévue ${appointment(p.scheduledAt)} est annulée. Le créneau redevient disponible.`,
     ],
     action: { label: 'Voir les créneaux', url: p.url },
+  });
+}
+
+export function visitUpdate(p: {
+  firstName: string; propertyReference: string; scheduledAt: Date;
+  heading: string; detail: string; url: string;
+}): RenderedTemplate {
+  return build(`${p.heading} — ${p.propertyReference}`, {
+    heading: p.heading,
+    paragraphs: [`Bonjour ${p.firstName},`, `${p.propertyReference} : ${appointment(p.scheduledAt)}.`, p.detail],
+    action: { label: 'Voir le rendez-vous', url: p.url },
   });
 }
 

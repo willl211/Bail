@@ -20,8 +20,9 @@ import { UpdateOwnerContactDto } from './dto/owner-contact.dto';
 import { toPublicUser } from '../auth/auth.service';
 import { accountBlockers } from '../auth/account.checks';
 import { isAddressComplete } from './address.checks';
-import { propertyChecks, diagnosticStatus } from './property.checks';
+import { propertyChecks, publicationChecks, diagnosticStatus } from './property.checks';
 import { advancePropertyRevision, recordPropertyEvent } from './property-review';
+import { visiblePropertyWhere } from '../properties/property-visibility';
 import { SavedService } from '../saved/saved.service';
 import {
   DOCUMENT_TYPES,
@@ -86,6 +87,11 @@ export interface OwnerPropertyDetail extends Omit<OwnerPropertyItem, 'addressLin
   floor: string | null;
   gesRating: string | null;
   constructionYear: number | null;
+  electricalDiagnostic: string;
+  gasDiagnostic: string;
+  riskDiagnostic: string;
+  noiseDiagnostic: string;
+
   depositCents: number;
   availableFrom: string | null;
   availableImmediately: boolean;
@@ -135,7 +141,7 @@ export interface OwnerSummary {
 }
 
 /** Statuts pour lesquels l'abonnement est facturé : le bien est diffusé. */
-const BILLABLE: PropertyStatus[] = [PropertyStatus.ONLINE, PropertyStatus.VISITS_IN_PROGRESS];
+
 
 @Injectable()
 export class OwnerService {
@@ -301,6 +307,7 @@ export class OwnerService {
                 issuedAt: issued ?? null,
                 expiresAt: null,
                 verifiedAt: null,
+                leadNoRisk: false,
                 rejectionReason: null,
                 verificationNote: null,
               },
@@ -404,7 +411,7 @@ export class OwnerService {
         include: {
           district: true,
           photos: { select: { id: true, storageKey: true }, orderBy: { position: 'asc' } },
-          documents: { select: { type: true } },
+          documents: true,
           _count: { select: { applications: true } },
         },
         orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
@@ -421,7 +428,7 @@ export class OwnerService {
     const saved = await this.saved.countsByProperty(properties.map((p) => p.id));
 
     return properties.map((property) => {
-      const checks = propertyChecks(property);
+      const checks = property.status === 'DRAFT' ? propertyChecks(property) : publicationChecks(property);
       return {
         reference: property.reference,
         title: property.title,
@@ -484,6 +491,11 @@ export class OwnerService {
       energyRating: property.energyRating,
       gesRating: property.gesRating,
       constructionYear: property.constructionYear,
+      electricalDiagnostic: property.electricalDiagnostic,
+      gasDiagnostic: property.gasDiagnostic,
+      riskDiagnostic: property.riskDiagnostic,
+      noiseDiagnostic: property.noiseDiagnostic,
+
       rentCents: property.rentCents,
       chargesCents: property.chargesCents,
       depositCents: property.depositCents,
@@ -519,7 +531,7 @@ export class OwnerService {
       publishedAt: property.publishedAt?.toISOString() ?? null,
       reviewNote: property.reviewNote,
       ...(() => {
-        const checks = propertyChecks(property);
+        const checks = property.status === 'DRAFT' ? propertyChecks(property) : publicationChecks(property);
         return {
           blockers: [...accountBlockers(owner), ...checks.blockers],
           warnings: checks.warnings,
@@ -576,6 +588,10 @@ export class OwnerService {
     if (dto.floor !== undefined) data.floor = dto.floor || null;
     if (dto.energyRating !== undefined) data.energyRating = dto.energyRating;
     if (dto.gesRating !== undefined) data.gesRating = dto.gesRating;
+    if (dto.electricalDiagnostic !== undefined) data.electricalDiagnostic = dto.electricalDiagnostic;
+    if (dto.gasDiagnostic !== undefined) data.gasDiagnostic = dto.gasDiagnostic;
+    if (dto.riskDiagnostic !== undefined) data.riskDiagnostic = dto.riskDiagnostic;
+    if (dto.noiseDiagnostic !== undefined) data.noiseDiagnostic = dto.noiseDiagnostic;
     if (dto.constructionYear !== undefined) data.constructionYear = dto.constructionYear;
     if (dto.rentCents !== undefined) data.rentCents = dto.rentCents;
     if (dto.chargesCents !== undefined) data.chargesCents = dto.chargesCents;
@@ -699,6 +715,12 @@ export class OwnerService {
         'energyRating',
         'gesRating',
         'constructionYear',
+        'propertyType',
+        'electricalDiagnostic',
+        'gasDiagnostic',
+        'riskDiagnostic',
+        'noiseDiagnostic',
+
       ] as const;
       const diagnosticChanged = diagnosticFields.some(
         (key) =>
@@ -714,6 +736,7 @@ export class OwnerService {
           data: {
             status: DocumentStatus.PENDING,
             verifiedAt: null,
+            leadNoRisk: false,
             verificationNote:
               'Les caractéristiques du bien ont changé. Nouveau contrôle nécessaire.',
           },
@@ -755,7 +778,7 @@ export class OwnerService {
         where: { id: property.id },
         include: {
           photos: { select: { id: true } },
-          documents: { select: { type: true } },
+          documents: true,
         },
       }),
       this.prisma.user.findUniqueOrThrow({
@@ -841,7 +864,7 @@ export class OwnerService {
       }),
     ]);
 
-    const billable = properties.filter((p) => BILLABLE.includes(p.status)).length;
+    const billable = await this.prisma.property.count({ where: { ownerId, ...visiblePropertyWhere() } });
     const monthly = feeSchedule?.ownerSubscriptionMonthlyCents ?? null;
 
     const countOf = (status: PropertyStatus) =>

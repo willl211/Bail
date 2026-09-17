@@ -10,13 +10,13 @@ export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
   title: 'Créer mon espace propriétaire',
   description:
-    'Publiez votre bien à Metz avec un abonnement mensuel, sans commission sur le loyer. Dossiers vérifiés, bail et signature inclus.',
+    'Publiez votre bien à Metz avec un abonnement mensuel, sans commission sur le loyer. Retrouvez vos annonces et les candidatures dans votre espace.',
 };
 
 const BENEFITS = [
   {
     n: '01',
-    title: '39 € par mois et par bien',
+    title: 'Un abonnement par bien',
     text: 'Sans engagement. Aucune commission sur le loyer.',
   },
   {
@@ -26,13 +26,13 @@ const BENEFITS = [
   },
   {
     n: '03',
-    title: 'Bail et signature inclus',
-    text: 'Modèle légal verrouillé, signé en ligne par les deux parties.',
+    title: 'Les étapes jusqu’au bail',
+    text: 'Suivez les candidatures et préparez la mise en location.',
   },
   {
     n: '04',
     title: 'Visites organisées pour vous',
-    text: 'Un agent s’en charge, sur place ou en visio.',
+    text: 'Des créneaux de visite accompagnée, selon les disponibilités.',
   },
 ];
 
@@ -99,13 +99,14 @@ export default async function OwnersPage() {
                   <span className="label">Biens en ligne</span>
                   <div className="stat__value">{onlineCount}</div>
                 </div>
-                {market?.metrics.slice(0, 2).map((metric) => (
+                {market?.metrics.filter((metric) => metric.source === 'computed').map((metric) => (
                   <div key={metric.key}>
                     <span className="label">{metric.label}</span>
                     <div className="stat__value">{metric.value}</div>
                   </div>
                 ))}
               </div>
+              <p className="p-sm mt-12">Chiffres des annonces WHOMA en ligne, loyers charges comprises.</p>
             </div>
           ) : null}
         </AuthScenery>

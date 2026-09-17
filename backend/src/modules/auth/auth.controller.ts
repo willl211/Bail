@@ -13,7 +13,7 @@ import {
   ResetPasswordDto,
   VerifyEmailDto,
 } from './dto/account.dto';
-import { CurrentUser, Public, RequestWithUser } from './session.guard';
+import { AllowMfaPending, CurrentUser, Public, RequestWithUser } from './session.guard';
 import { AuthProtectionGuard, AuthThrottle } from './auth-protection.guard';
 
 @Controller('auth')
@@ -82,6 +82,7 @@ export class AuthController {
 
   @Public()
   @Post('login')
+  @AllowMfaPending()
   @AuthThrottle('login')
   @HttpCode(200)
   async login(
@@ -104,6 +105,7 @@ export class AuthController {
    */
   @Public()
   @Post('logout')
+  @AllowMfaPending()
   @AuthThrottle('logout')
   @HttpCode(204)
   async logout(
@@ -124,6 +126,7 @@ export class AuthController {
    */
   @Public()
   @Get('me')
+  @AllowMfaPending()
   me(@CurrentUser() user: PublicUser | null): { user: PublicUser | null } {
     return { user };
   }

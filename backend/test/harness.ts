@@ -6,6 +6,8 @@ import { ConfigService } from '@nestjs/config';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { PAYSLIP_DRIVER, type PayslipDriver } from '../src/modules/payslip-analysis/payslip.driver';
+import { PAYMENT_DRIVER, type PaymentDriver } from '../src/modules/payments/payment.driver';
+import { SIGNATURE_DRIVER, type SignatureDriver } from '../src/modules/signature/signature.driver';
 
 /**
  * Application de test.
@@ -28,9 +30,11 @@ export interface Harness {
 }
 
 export async function createHarness(
-  options: { payslipDriver?: PayslipDriver } = {},
+  options: { payslipDriver?: PayslipDriver; paymentDriver?: PaymentDriver; signatureDriver?: SignatureDriver } = {},
 ): Promise<Harness> {
   const builder = Test.createTestingModule({ imports: [AppModule] });
+  if (options.signatureDriver) builder.overrideProvider(SIGNATURE_DRIVER).useValue(options.signatureDriver);
+  if (options.paymentDriver) builder.overrideProvider(PAYMENT_DRIVER).useValue(options.paymentDriver);
   if (options.payslipDriver)
     builder.overrideProvider(PAYSLIP_DRIVER).useValue(options.payslipDriver);
   const moduleRef = await builder.compile();

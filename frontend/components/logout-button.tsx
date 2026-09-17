@@ -13,23 +13,28 @@ import { logout } from '@/lib/auth-client';
 export function LogoutButton() {
   const router = useRouter();
   const [pending, setPending] = useState(false);
+  const [error, setError] = useState('');
 
   const submit = async () => {
+    if (pending) return;
     setPending(true);
-    // La déconnexion ne peut pas échouer côté API (elle est idempotente) : même
-    // en cas de coupure réseau, on ramène l'utilisateur à l'accueil plutôt que
-    // de le laisser sur un écran qu'il croit encore authentifié.
+    setError('');
     try {
       await logout();
-    } finally {
       router.replace('/');
       router.refresh();
+    } catch {
+      setError('La déconnexion n’a pas abouti. Vérifiez votre connexion puis réessayez.');
+      setPending(false);
     }
   };
 
   return (
-    <button type="button" className="link mt-12" onClick={submit} disabled={pending}>
-      {pending ? 'Déconnexion…' : 'Se déconnecter'}
-    </button>
+    <>
+      <button type="button" className="link mt-12" onClick={submit} disabled={pending}>
+        {pending ? 'Déconnexion…' : 'Se déconnecter'}
+      </button>
+      {error ? <span className="logout-error p-sm" role="alert">{error}</span> : null}
+    </>
   );
 }

@@ -5,6 +5,7 @@ import { SlotsService } from './slots.service';
 import { VisitsController } from './visits.controller';
 import { VisitsService } from './visits.service';
 import { RecordingPurge } from './recording.purge';
+import { VisitReminders } from './visit.reminders';
 
 /**
  * Visites — écran 5 du build-order.
@@ -17,6 +18,6 @@ import { RecordingPurge } from './recording.purge';
 @Module({
   imports: [TenantModule],
   controllers: [VisitsController, SlotsController],
-  providers: [VisitsService, SlotsService, RecordingPurge],
+  providers: [VisitsService, SlotsService, RecordingPurge, VisitReminders],
 })
 export class VisitsModule {}

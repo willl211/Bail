@@ -157,8 +157,8 @@ describe('Attribution d’un logement', () => {
     expect(apres.status).toBe(VisitStatus.CANCELLED);
     expect(apres.cancellationReason).toBe(ATTRIBUTION_VISIT_REASON);
     expect(apres.cancelledAt).not.toBeNull();
-    // L'empreinte bancaire est rendue : rien n'a été consommé.
-    expect(apres.preauthorizationStatus).toBe(PreauthorizationStatus.RELEASED);
+    // L’annulation locale ne confirme pas une libération bancaire distante.
+    expect(apres.preauthorizationStatus).toBe(PreauthorizationStatus.AUTHORIZED);
 
     const creneau = await h.prisma.visitSlot.findUniqueOrThrow({ where: { id: slot.id } });
     expect(creneau.visitId).toBeNull();

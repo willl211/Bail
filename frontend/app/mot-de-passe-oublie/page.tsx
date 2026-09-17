@@ -5,8 +5,8 @@ export const metadata: Metadata = { title: 'Mot de passe oublié' };
 
 export default function ForgotPasswordPage() {
   return (
-    <div className="page page--narrow">
+    <main className="page page--narrow">
       <ForgotPasswordForm />
-    </div>
+    </main>
   );
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { SignedLeaseDownload } from './signed-lease-download';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import type { LeaseCheck, LeaseStatus, LeaseView, RenderedBlock } from '@/lib/api';
@@ -50,9 +51,7 @@ function flowSteps(lease: LeaseView) {
       detail: lease.validation
         ? `${lease.validation.fieldCount - lease.validation.missingFields.length} / ${lease.validation.fieldCount}`
         : '—',
-      state: (lease.validation?.missingFields.length === 0 ? 'done' : 'now') as
-        | 'done'
-        | 'now',
+      state: (lease.validation?.missingFields.length === 0 ? 'done' : 'now') as 'done' | 'now',
     },
     {
       n: '03',
@@ -69,9 +68,7 @@ function flowSteps(lease: LeaseView) {
       title: 'Signature',
       detail: sent ? `${signedCount} / 2 signée` : 'Pas encore envoyée',
       state: (lease.status === 'SIGNED' ? 'done' : sent ? 'now' : 'next') as
-        | 'done'
-        | 'now'
-        | 'next',
+        'done' | 'now' | 'next',
     },
     {
       n: '05',
@@ -97,9 +94,7 @@ function DocumentBlock({ block }: { block: RenderedBlock }) {
       <span
         key={index}
         // Un marqueur resté tel quel est un champ vide : signalé, pas masqué.
-        className={
-          segment.text.startsWith('{{') ? 'slotv slotv--empty' : 'slotv'
-        }
+        className={segment.text.startsWith('{{') ? 'slotv slotv--empty' : 'slotv'}
         title={`Champ injecté : ${segment.field}`}
       >
         {segment.text}
@@ -132,24 +127,31 @@ function DocumentBlock({ block }: { block: RenderedBlock }) {
 export function LeaseScreen({
   initial,
   canSend,
+  canPay = false,
 }: {
   initial: LeaseView;
   /** Seul le propriétaire du bien envoie l'acte en signature. */
   canSend: boolean;
+  /** Le paiement est réservé au locataire, pas à un agent qui consulte le bail. */
+  canPay?: boolean;
 }) {
   const router = useRouter();
-  const [lease, setLease] = useState(initial);
+  const [local, setLocal] = useState<{ source: LeaseView; value: LeaseView } | null>(null);
+  const lease = local?.source === initial ? local.value : initial;
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<LeaseFailure | null>(null);
 
-  const status = STATUS[lease.status];
+  const status =
+    lease.status === 'PARTIALLY_SIGNED' && lease.signers.every((signer) => signer.signed)
+      ? { label: 'Finalisation en cours', tone: 'badge badge--pending' }
+      : STATUS[lease.status];
   const blocked = lease.blockers.length > 0;
 
   const send = async () => {
     setPending(true);
     setError(null);
     try {
-      setLease(await sendLeaseForSignature(lease.reference));
+      setLocal({ source: initial, value: await sendLeaseForSignature(lease.reference) });
       router.refresh();
     } catch (failure) {
       setError(failure as LeaseFailure);
@@ -195,8 +197,8 @@ export function LeaseScreen({
                 </span>
                 <div className="h mt-8">{lease.templateLabel}</div>
                 <p className="p-sm mt-6">
-                  Aucune clause rédigée par la plateforme. Les champs surlignés sont
-                  injectés depuis les dossiers, puis contrôlés.
+                  Aucune clause rédigée par la plateforme. Les champs surlignés sont injectés depuis
+                  les dossiers, puis contrôlés.
                 </p>
               </div>
               <span
@@ -240,9 +242,9 @@ export function LeaseScreen({
                 <span className="badge badge--pending badge--nodot">Avis</span>
                 <p className="p-sm" style={{ color: 'var(--ink-2)' }}>
                   Le texte affiché est un <b>squelette de champs</b>, pas un contrat : il ne
-                  contient aucune clause. Le modèle définitif sera fourni par l’avocat en
-                  droit immobilier, puis publié. Jusque-là, aucun bail ne peut partir en
-                  signature — un acte sans clauses n’engagerait personne.
+                  contient aucune clause. Le modèle définitif sera fourni par l’avocat en droit
+                  immobilier, puis publié. Jusque-là, aucun bail ne peut partir en signature — un
+                  acte sans clauses n’engagerait personne.
                 </p>
               </div>
             </div>
@@ -314,7 +316,7 @@ export function LeaseScreen({
                 </div>
               ) : null}
 
-              {blocked ? (
+              {blocked && ['DRAFT', 'FIELDS_VALIDATED'].includes(lease.status) ? (
                 <>
                   <span className="label label--ink">Envoi impossible</span>
                   <ul className="checklist mt-10">
@@ -323,14 +325,9 @@ export function LeaseScreen({
                     ))}
                   </ul>
                 </>
-              ) : canSend && lease.sentForSignatureAt === null ? (
+              ) : canSend && ['DRAFT', 'FIELDS_VALIDATED'].includes(lease.status) ? (
                 <>
-                  <button
-                    type="button"
-                    className="btn btn-block"
-                    onClick={send}
-                    disabled={pending}
-                  >
+                  <button type="button" className="btn btn-block" onClick={send} disabled={pending}>
                     {pending ? 'Envoi…' : 'Envoyer en signature'}
                   </button>
                   <p className="field__hint mt-10">
@@ -342,12 +339,20 @@ export function LeaseScreen({
                   <p className="p-sm">
                     {lease.status === 'SIGNED'
                       ? 'Bail signé par les deux parties.'
-                      : 'En attente de la signature des parties.'}
+                      : lease.status === 'DECLINED'
+                        ? 'Une partie a refusé de signer ce bail.'
+                        : lease.status === 'CANCELLED'
+                          ? 'Cette demande de signature a été annulée.'
+                          : lease.status === 'EXPIRED'
+                            ? 'Cette demande de signature a expiré.'
+                            : lease.signers.every((signer) => signer.signed)
+                              ? 'Les deux parties ont signé. Finalisation par le prestataire en cours.'
+                              : 'En attente de la signature des parties.'}
                   </p>
                   {/* Les honoraires se règlent après signature : le lien
                       n'apparaît qu'une fois l'acte signé, et l'écran de
                       règlement refuse de toute façon avant. */}
-                  {lease.status === 'SIGNED' && !canSend ? (
+                  {lease.status === 'SIGNED' && canPay ? (
                     <Link
                       href={`/baux/${lease.reference}/honoraires`}
                       className="btn btn-block mt-12"
@@ -355,16 +360,24 @@ export function LeaseScreen({
                       Régler les honoraires
                     </Link>
                   ) : null}
+                  {lease.status === 'SIGNED' && lease.signatureDriver === 'docusign' ? (
+                    <SignedLeaseDownload reference={lease.reference} />
+                  ) : null}
+                  {['SENT_FOR_SIGNATURE', 'PARTIALLY_SIGNED'].includes(lease.status) ? (
+                    <button type="button" className="link mt-12" onClick={() => router.refresh()}>
+                      Actualiser les signatures
+                    </button>
+                  ) : null}
                 </>
               )}
 
-              {lease.signatureDriver === 'mock' ? (
+              {lease.signatureDriver === 'docusign' ? (
+                <p className="field__hint mt-10">DocuSign · environnement de test</p>
+              ) : lease.signatureDriver === 'mock' ? (
                 <p className="field__hint mt-10">
-                  <span className="badge badge--pending badge--nodot">
-                    Prestataire simulé
-                  </span>{' '}
-                  Aucun compte de signature n’est branché : rien de ce qui est signé ici
-                  n’a de valeur juridique.
+                  <span className="badge badge--pending badge--nodot">Prestataire simulé</span>{' '}
+                  Aucun compte de signature n’est branché : rien de ce qui est signé ici n’a de
+                  valeur juridique.
                 </p>
               ) : null}
             </div>

@@ -8,7 +8,6 @@ import {
   ApplicationStatus,
   GuarantorRequirement,
   Prisma,
-  PropertyStatus,
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { accountBlockers } from '../auth/account.checks';
@@ -28,12 +27,7 @@ import {
   type TenantFileView,
 } from '../tenant/tenant.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
-
-/** Statuts pour lesquels un bien accepte encore des candidatures. */
-const OPEN_STATUSES: PropertyStatus[] = [
-  PropertyStatus.ONLINE,
-  PropertyStatus.VISITS_IN_PROGRESS,
-];
+import { visiblePropertyWhere } from '../properties/property-visibility';
 
 /** Champs du bien nécessaires à l'évaluation d'une candidature et à son aperçu. */
 const CANDIDACY_SELECT = {
@@ -147,7 +141,7 @@ export class ApplicationsService {
 
   private async propertyForCandidacy(reference: string): Promise<CandidacyProperty> {
     const property = await this.prisma.property.findFirst({
-      where: { reference, status: { in: OPEN_STATUSES } },
+      where: { reference, ...visiblePropertyWhere() },
       select: CANDIDACY_SELECT,
     });
     // 404 plutôt que « ce bien n'accepte plus de candidature » : un bien loué

@@ -16,3 +16,21 @@ Ces entités sont confirmées comme périmètre de base. Étendre si besoin tech
 - Le **bail** doit être généré à partir d'un template légal verrouillé (bail nu ou meublé selon le type de bien) — pas de génération libre. Le champ de statut de signature doit refléter le cycle DocuSign (envoyé, signé, refusé).
 - Le **paiement/honoraire** doit pouvoir distinguer la part propriétaire et la part locataire dans le barème d'honoraires (encore non figé — voir `legal-context.md`), et le statut du circuit des fonds (la plateforme encaisse pour le compte du propriétaire, donc prévoir un état "reversé au propriétaire").
 - Le **dossier locataire** doit prévoir un état de vérification par un prestataire KYC externe, actuellement mocké (voir `integrations.md`).
+
+## Extensions d’exploitation — septembre 2026
+
+L’étape 7 ajoute `Session.mfaVerifiedAt` et quatre tables :
+
+- `MfaCredential` : facteur admin chiffré, dernière période TOTP utilisée,
+  empreintes des secours, expiration de l’enrôlement ; relation unique au compte.
+- `SecurityEvent` : action, date et identifiants techniques des acteurs, sans
+  secret ni document ; conservation technique de 90 jours.
+- `ErasureRequest` : demande unique par compte, état, motif, responsable de revue,
+  date de fin et clés des fichiers restant à retirer. Les clés sont vidées à la fin.
+- `OperationalIncident` : agrégation des erreurs serveur par gabarit de route et
+  code HTTP, référence de requête, compteur et prise en charge.
+
+Les identifiants du registre de suppression et du journal n’ont pas de clé
+étrangère vers le compte : une trace minimale subsiste après l’effacement.
+Les durées métier et celles des preuves de suppression doivent encore être
+validées. Procédures et limites : [operations.md](operations.md).

@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
   title: 'Biens à louer à Metz',
   description:
-    'Studios, deux et trois pièces meublés ou nus à Metz, centre-ville et quartiers proches. Location en direct, sans frais d’agence.',
+    'Appartements et maisons à louer à Metz. Filtrez par budget, quartier et nombre de pièces. Honoraires précisés avant de candidater.',
 };
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -104,7 +104,9 @@ export default async function SearchPage({
 
         {results.items.length === 0 ? (
           <div className="results__empty">
-            Aucun bien ne correspond à ces critères. Modifiez vos filtres pour élargir la recherche.
+            <h2 className="h">Aucun bien ne correspond à ces critères</h2>
+            <p className="p-sm mt-8">Élargissez le budget ou choisissez d’autres quartiers.</p>
+            <Link href="/recherche" className="btn btn--ghost mt-16">Voir tous les biens</Link>
           </div>
         ) : (
           results.items.map((property) => (

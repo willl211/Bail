@@ -2,6 +2,8 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type {
   CustomerInput,
+  CheckoutInput,
+  DriverCheckout,
   DriverPaymentIntent,
   DriverSubscription,
   PaymentDriver,
@@ -23,7 +25,7 @@ import type {
  */
 @Injectable()
 export class MockPaymentDriver implements PaymentDriver {
-  readonly name = 'mock';
+  readonly name: string = 'mock';
 
   private readonly logger = new Logger(MockPaymentDriver.name);
 
@@ -134,6 +136,34 @@ export class MockPaymentDriver implements PaymentDriver {
       status: 'requires_payment_method',
       amountCents: input.amountCents,
     };
+  }
+
+  async resumeSubscription(id: string): Promise<DriverSubscription> {
+    return this.updateSubscriptionQuantity(id, this.subscriptions.get(id)?.quantity ?? 0);
+  }
+
+  async createCheckout(_input: CheckoutInput, _key: string): Promise<DriverCheckout> {
+    throw new BadRequestException('Le paiement Stripe est indisponible en mode simulé.');
+  }
+
+  async retrieveCheckout(_id: string): Promise<DriverCheckout> {
+    throw new BadRequestException('Aucune session Stripe en mode simulé.');
+  }
+
+  async subscriptionFromCheckout(_session: DriverCheckout, _input: CheckoutInput, _key: string): Promise<DriverSubscription> {
+    throw new BadRequestException('Aucune session Stripe en mode simulé.');
+  }
+
+  async retrieveSubscription(id: string): Promise<DriverSubscription> {
+    return this.updateSubscriptionQuantity(id, this.subscriptions.get(id)?.quantity ?? 0);
+  }
+
+  async retrieveInvoice(_id: string): Promise<Record<string, unknown>> {
+    throw new BadRequestException('Aucune facture Stripe en mode simulé.');
+  }
+
+  async createPortal(_id: string, _returnUrl: string): Promise<{ url: string }> {
+    throw new BadRequestException('Le portail Stripe est indisponible en mode simulé.');
   }
 
   parseWebhook(payload: Buffer): WebhookEvent {

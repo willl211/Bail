@@ -4,14 +4,14 @@ import { AccountRegistrationForm } from '@/components/account-registration-form'
 import { AuthScenery } from '@/components/auth-scenery';
 import { accountEntry } from '@/lib/account-navigation';
 import { TenantFileScreen } from '@/components/tenant-file-screen';
-import { getCurrentUser, getMarketSnapshot, getTenantFile } from '@/lib/api';
+import { getCurrentUser, getTenantFile } from '@/lib/api';
 
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: 'Mon dossier',
   description:
-    'Déposez vos pièces une seule fois. whoma les vérifie, puis chaque candidature part en un clic — vos documents ne quittent jamais la plateforme.',
+    'Rassemblez vos justificatifs, suivez leur examen par l’équipe et retrouvez votre dossier pour chaque candidature. Vos pièces restent privées.',
 };
 
 const STEPS = [
@@ -28,7 +28,7 @@ const STEPS = [
   {
     n: '3',
     title: 'Un garant, si vous en avez un',
-    text: 'La plupart des propriétaires à Metz en demandent un.',
+    text: 'Ajoutez ses informations et justificatifs si vous présentez un garant.',
   },
 ];
 
@@ -69,11 +69,6 @@ export default async function TenantFilePage({
     return <TenantFileScreen user={user} initial={file} />;
   }
 
-  const market = await getMarketSnapshot().catch(() => null);
-  const applicants = market?.metrics.find((metric) =>
-    metric.key.includes('applicantsPerProperty'),
-  );
-
   return (
     <main className="page">
       <div className="auth auth--welcome">
@@ -99,7 +94,7 @@ export default async function TenantFilePage({
           />
 
           <p className="field__hint mt-16">
-            Documents hébergés en France, jamais transmis aux propriétaires.
+            Vos justificatifs sont accessibles à l’équipe chargée du contrôle. Les propriétaires reçoivent une synthèse du dossier.
           </p>
         </div>
 
@@ -117,16 +112,13 @@ export default async function TenantFilePage({
             ))}
           </div>
 
-          {applicants ? (
             <div className="panel pad mt-24 wash" style={{ maxWidth: 440 }}>
-              <span className="label label--accent">Marché tendu</span>
+              <span className="label label--accent">Un dossier facile à examiner</span>
               <p className="p-sm mt-8">
-                À Metz, un bien reçoit en moyenne <b className="mono">{applicants.value}</b>{' '}
-                candidatures. Un dossier déjà vérifié passe devant : le propriétaire n’a rien à
-                contrôler lui-même.
+                Un dossier complet aide le propriétaire à examiner votre
+                candidature ; il reste libre de sa sélection.
               </p>
             </div>
-          ) : null}
         </AuthScenery>
       </div>
     </main>

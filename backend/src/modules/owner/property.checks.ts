@@ -1,36 +1,48 @@
 import type { DocumentStatus, PropertyDocumentType } from '@prisma/client';
+import { addMonths, diagnosticMonths, diagnosticFactBlockers, energyBlockers, requiredDiagnostics, DIAGNOSTIC_LABELS, type DiagnosticFacts } from './diagnostic-policy';
 
 export interface ReviewableDiagnostic {
   type: PropertyDocumentType;
   status: DocumentStatus;
   expiresAt: Date | null;
+  issuedAt?: Date | null;
+  leadNoRisk?: boolean;
 }
 
 export function isCurrentDiagnostic(document: ReviewableDiagnostic, now = new Date()): boolean {
+  const months = diagnosticMonths(document.type, document.leadNoRisk);
   return (
     document.status === 'VERIFIED' &&
+    (!months || (document.issuedAt != null && addMonths(document.issuedAt, months) > now)) &&
+    (['ASBESTOS', 'OTHER'].includes(document.type) || (document.issuedAt != null && document.issuedAt <= now)) &&
+    (document.type !== 'DPE' || (document.issuedAt != null && document.issuedAt >= new Date('2021-07-01') && document.issuedAt <= now)) &&
     (document.expiresAt !== null
       ? document.expiresAt.getTime() > now.getTime()
-      : document.type !== 'DPE')
+      : ['ASBESTOS', 'NOISE', 'OTHER'].includes(document.type) || (document.type === 'LEAD' && document.leadNoRisk === true))
   );
 }
 
 export function diagnosticStatus(document: ReviewableDiagnostic, now = new Date()): DocumentStatus {
-  return document.status === 'VERIFIED' && document.expiresAt && document.expiresAt <= now
-    ? 'EXPIRED'
-    : document.status;
+  if (document.status !== 'VERIFIED') return document.status;
+  const months = diagnosticMonths(document.type, document.leadNoRisk);
+  const expired = (document.expiresAt && document.expiresAt <= now)
+    || (months && document.issuedAt && addMonths(document.issuedAt, months) <= now)
+    || (document.type === 'DPE' && document.issuedAt && document.issuedAt < new Date('2021-07-01'));
+  if (expired) return 'EXPIRED';
+  return isCurrentDiagnostic(document, now) ? 'VERIFIED' : 'PENDING';
 }
 
 /** Le propriétaire peut soumettre un DPE en attente ; seul l'agent peut le publier. */
 export function publicationChecks(
   property: Omit<CheckableProperty, 'documents'> & { documents: ReviewableDiagnostic[] },
+  now = new Date(),
 ): PropertyChecks {
-  const checks = propertyChecks(property);
-  const dpe = property.documents.filter((document) => document.type === 'DPE');
-  if (dpe.length > 0 && !dpe.some((document) => isCurrentDiagnostic(document))) {
-    checks.blockers.push(
-      'DPE à valider : un diagnostic vérifié et en cours de validité est requis',
-    );
+  const checks = propertyChecks(property, now);
+  for (const type of requiredDiagnostics(property)) {
+    const docs = property.documents.filter((document) => document.type === type);
+    if (docs.length > 0 && !docs.some((document) => isCurrentDiagnostic(document, now))) {
+      checks.blockers.push(`${DIAGNOSTIC_LABELS[type]} à valider : un diagnostic vérifié et en cours de validité est requis`);
+    }
   }
   return checks;
 }
@@ -44,7 +56,7 @@ export interface PropertyChecks {
   warnings: string[];
 }
 
-export interface CheckableProperty {
+export interface CheckableProperty extends DiagnosticFacts {
   energyRating: string | null;
   photos: unknown[];
   documents?: { type: PropertyDocumentType }[];
@@ -55,16 +67,15 @@ export interface CheckableProperty {
   rentCents: number;
 }
 
-export function propertyChecks(property: CheckableProperty): PropertyChecks {
-  const blockers: string[] = [];
+export function propertyChecks(property: CheckableProperty, now = new Date()): PropertyChecks {
+  const blockers = [...energyBlockers(property.energyRating, now), ...diagnosticFactBlockers(property)];
   const warnings: string[] = [];
 
   // Deux exigences distinctes : le **fichier** du DPE, obligatoire pour
   // diffuser une annonce, et la **classe** affichée sur la fiche. Fournir
   // l'une sans l'autre ne suffit pas.
-  if (!property.energyRating) blockers.push('Classe DPE manquante');
-  if (property.documents && !property.documents.some((d) => d.type === 'DPE')) {
-    blockers.push('DPE manquant');
+  for (const type of requiredDiagnostics(property)) {
+    if (property.documents && !property.documents.some((d) => d.type === type)) blockers.push(`${DIAGNOSTIC_LABELS[type]} manquant`);
   }
   if (!property.addressLine.trim()) blockers.push('Adresse manquante');
   if (!property.title.trim() || property.title === 'Nouveau bien') {

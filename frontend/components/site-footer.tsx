@@ -11,6 +11,7 @@ export function SiteFooter() {
         <Link href="/dossier">Locataires</Link>
         <Link href="/verification">Vérification</Link>
         <Link href="/mentions-legales">Mentions légales</Link>
+        <Link href="/mes-donnees">Mes données</Link>
       </span>
     </footer>
   );

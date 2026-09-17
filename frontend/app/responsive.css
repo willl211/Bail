@@ -1,0 +1,166 @@
+/* Finitions communes : les détails propres à chaque écran restent dans globals.css. */
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 12px;
+  z-index: 100;
+  padding: 12px 18px;
+  background: var(--surface);
+  border: 2px solid var(--accent);
+  transform: translateY(-150%);
+}
+.skip-link:focus { transform: none; }
+#page-content { scroll-margin-top: 90px; }
+.site-navigation { margin-left: auto; min-width: 0; }
+.site-navigation__toggle { display: none; }
+.site-header__account-name { white-space: normal; overflow-wrap: anywhere; max-width: 24ch; }
+.site-header__logout > button { min-height: 44px; }
+.form--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.field, .field__box, .results > section, .split > *, .panel > *, .app > * { min-width: 0; }
+.field__box { max-width: 100%; }
+.field__box:focus-visible, .searchbar :is(input, select):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+:is(.panel, .notice, .body, .listing, .property-row, .doc, .auth__error) {
+  overflow-wrap: anywhere;
+}
+.btn { white-space: normal; text-align: center; }
+.badge { max-width: 100%; white-space: normal; }
+.tbl__scroll { max-width: 100%; overscroll-behavior-x: contain; }
+.table-hint { margin-bottom: 8px; font-size: 12px; color: var(--ink-3); }
+.operation-page { padding-top: 32px; }
+.listing__photo { padding: 0; background-image: none; aspect-ratio: auto; }
+.listing__gallery:has(> :only-child) { grid-template-columns: minmax(0, 1fr); }
+.logout-error { display: block; color: var(--reject); max-width: 36ch; }
+
+@media (max-width: 1080px) {
+  .site-header__inner { flex-wrap: nowrap; min-height: 68px; }
+  .site-header__brand { flex-wrap: wrap; gap: 0 10px; min-width: 0; }
+  .site-navigation__toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    min-height: 44px;
+    padding: 8px 14px;
+    border: 1px solid var(--line-strong);
+    background: var(--surface);
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .site-navigation .site-header__nav {
+    display: none;
+    position: absolute;
+    inset: 100% 0 auto;
+    padding: 12px var(--page-pad) 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--line-strong);
+    max-height: calc(100dvh - 80px);
+    overflow-y: auto;
+    gap: 4px;
+  }
+  .site-navigation[data-expanded='true'] .site-header__nav { display: grid; }
+  .site-header__nav > :is(a, .site-header__logout) { width: 100%; }
+  .site-header__link { padding: 12px 8px; min-height: 48px; font-size: 16px; }
+  .site-header__account { margin-top: 8px; padding: 10px; }
+  .site-header__logout { border-top: 1px solid var(--line); margin-top: 8px; }
+  .site-header__logout > button { width: 100%; text-align: left; font-size: 12px; }
+  .filters__range-bounds button { min-height: 44px; }
+}
+
+@media (max-width: 720px) {
+  :root { --page-pad: 16px; }
+  .page { padding-bottom: 48px; }
+  .page--narrow { padding-top: 28px; }
+  .body { padding-bottom: 48px; }
+  .section { padding-block: 32px; }
+  .section__head { align-items: flex-start; flex-wrap: wrap; gap: 12px; }
+  .d1, .hero__title { font-size: clamp(34px, 8.5vw, 52px); line-height: 1.1; }
+  .hero__lead { font-size: 16px; }
+  .hero__reassurance { gap: 10px 18px; }
+  .owner-pitch { grid-template-columns: minmax(0, 1fr); margin-top: 32px; gap: 28px; }
+  .label, .searchbar__legend { font-size: 11px; letter-spacing: .09em; }
+  .results__count { font-size: 11px; letter-spacing: .04em; line-height: 1.7; }
+  .results__sort { width: 100%; }
+  .results__sort select { flex: 1; min-width: 0; }
+  .field__box, .searchbar__select, .searchbar__value, .results__sort select,
+  .applications-toolbar input, .applications-toolbar select {
+    font-size: 16px;
+    min-height: 44px;
+  }
+  input[type='file'] { max-width: 100%; }
+  .btn, .save, .slot, .admin__tab, .tenant-file-nav button,
+  .photo-tile__bar button, .doc-row__actions button, .doc__file button {
+    min-height: 44px;
+  }
+  .save--icon, .save--inline { min-width: 44px; }
+  .link { display: inline-flex; align-items: center; min-height: 44px; }
+  .form--2 { grid-template-columns: minmax(0, 1fr); }
+  .form__full { grid-column: 1; }
+  .pad, .notice { padding: 20px; }
+  .opts { grid-template-columns: minmax(0, 1fr); }
+  .listing__gallery { grid-template-rows: auto; grid-auto-rows: auto; }
+  .listing__gallery .photo { height: auto; aspect-ratio: 3 / 2; }
+  .listing__gallery .photo:first-child { height: auto; aspect-ratio: 16 / 10; }
+  .booking__body .btn { width: 100%; }
+  .tile { padding: 14px 12px; }
+  .tile__value { font-size: clamp(18px, 5vw, 26px); }
+  .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; width: 100%; }
+  .admin__tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin__tab { white-space: normal; padding-inline: 8px; letter-spacing: .04em; }
+  .tbl th { font-size: 11px; letter-spacing: .04em; }
+  .tbl .tbl__pick { min-height: 44px; }
+  .admin-file-review .tbl { min-width: 430px; }
+  .document-review__preview { max-width: 100%; }
+  .deed__head, .deed__body, .deed__foot { padding: 18px; }
+  .cmp { grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; }
+  .cmp__t { grid-column: 1 / -1; grid-row: 2; }
+  .flow { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .flow__s { min-width: 0; border-bottom: 1px solid var(--line); padding: 12px; }
+  .log__entry { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .kv { flex-wrap: wrap; gap: 4px 12px; }
+  .kv__v { flex-wrap: wrap; text-align: left; }
+  .criteria__row { flex-direction: column; gap: 6px; }
+  .criteria__value { flex-wrap: wrap; text-align: left; }
+  .pay__line { flex-wrap: wrap; gap: 8px; padding: 14px 16px; }
+  .owner-aside .aside__item, .tenant-aside .aside__item { min-height: 48px; font-size: 14px; }
+  .owner-aside .aside__block { flex-wrap: wrap; }
+  .tenant-aside .aside__block { grid-template-columns: minmax(0, 1fr); }
+  .tenant-aside .aside__block button { grid-column: 1; grid-row: auto; justify-self: start; }
+  .owner-aside .aside__block button, .tenant-aside .aside__block button {
+    min-height: 44px; font-size: 11px;
+  }
+  .owner-aside .aside__block p, .tenant-aside .aside__block p,
+  .tenant-aside .aside__meta { font-size: 12px; }
+  .tenant-aside .aside__block > .label { font-size: 11px; }
+  .applications-candidates { grid-template-columns: minmax(0, 1fr); }
+  .site-footer { align-items: flex-start; gap: 12px; }
+  .site-footer__links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; gap: 4px 12px; }
+  .site-footer__links a { min-height: 44px; display: flex; align-items: center; font-size: 11px; letter-spacing: .05em; }
+}
+
+@media (max-width: 430px) {
+  .site-header__locality, .site-header__tag { font-size: 9px; }
+  .site-header__brand { flex-direction: column; align-items: flex-start; }
+  .searchbar__field { flex-basis: 100%; border-right: 0; border-bottom: 1px solid var(--line); }
+  .searchbar__submit { width: 100%; min-height: 48px; }
+  .filters__intro { padding: 16px; min-height: 0; }
+  .filters__toggle { position: static; margin-top: 12px; width: 100%; justify-content: space-between; }
+  .filters__head { flex-wrap: wrap; }
+  .filters__legend { flex-wrap: wrap; gap: 6px; }
+  .filters__segmented button { padding-inline: 7px; font-size: 12px; }
+  .filters__hint, .filters__dossier p { font-size: 12px; }
+  .registry__row { flex-wrap: wrap; gap: 4px 12px; }
+  .registry__foot .badge { font-size: 10px; letter-spacing: .04em; }
+  .tenant-aside .aside__nav { grid-template-columns: minmax(0, 1fr); }
+  .tenant-form-panel { padding: 16px; }
+  .holding--photo { grid-template-columns: minmax(0, 1fr); padding: 0 0 16px; }
+  .holding--photo > .owner-property-photo { aspect-ratio: 16 / 10; border: 0; }
+  .holding--photo > div:not(.owner-property-photo) { padding-inline: 16px; }
+  .holding--photo > div:nth-child(3), .holding--photo > div:last-child { grid-column: 1; }
+  .document-review__body > *, .document-review__selector,
+  .admin-property-review__head, .admin-property-review__publication,
+  .admin-property-review__history { padding-inline: 14px; }
+  .days { grid-template-columns: minmax(0, 1fr); }
+}

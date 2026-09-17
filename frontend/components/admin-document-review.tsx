@@ -6,6 +6,7 @@ import { loadAdminDocument, type AdminFailure, type DiagnosticReview } from '@/l
 import { AdminPayslipAnalysis } from './admin-payslip-analysis';
 
 export const DIAGNOSTIC_LABELS: Record<string, string> = {
+  NOISE: 'Bruit des aéroports',
   DPE: 'Diagnostic de performance énergétique',
   ASBESTOS: 'Amiante',
   LEAD: 'Plomb (CREP)',
@@ -127,6 +128,7 @@ function DocumentControl({
   const [busy, setBusy] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [reason, setReason] = useState('');
+  const [leadResult, setLeadResult] = useState<'BELOW_THRESHOLD' | 'REQUIRES_RENEWAL' | ''>('');
   const [issuedAt, setIssuedAt] = useState(document.issuedAt?.slice(0, 10) ?? '');
   const [expiresAt, setExpiresAt] = useState(document.expiresAt?.slice(0, 10) ?? '');
   const [energyRating, setEnergyRating] = useState('');
@@ -168,6 +170,7 @@ function DocumentControl({
         reason: reason.trim() || undefined,
         ...(decision === 'VERIFY' && kind === 'property'
           ? {
+              leadResult: leadResult || undefined,
               issuedAt: issuedAt || undefined,
               expiresAt: expiresAt || undefined,
               energyRating: energyRating || undefined,
@@ -296,7 +299,7 @@ function DocumentControl({
               <fieldset className="document-review__dates" disabled={busy}>
                 <legend>Informations lues sur le diagnostic</legend>
                 <label className="field">
-                  <span>Réalisé le{dpe ? ' *' : ''}</span>
+                  <span>Réalisé le *</span>
                   <input
                     className="field__box"
                     type="date"
@@ -305,7 +308,7 @@ function DocumentControl({
                   />
                 </label>
                 <label className="field">
-                  <span>Valable jusqu’au{dpe ? ' *' : ''}</span>
+                  <span>Dernier jour de validité</span>
                   <input
                     className="field__box"
                     type="date"
@@ -313,6 +316,18 @@ function DocumentControl({
                     onChange={(event) => setExpiresAt(event.target.value)}
                   />
                 </label>
+                {document.type === 'LEAD' ? (
+                  <label className="field">
+                    <span>Résultat du CREP *</span>
+                    <select className="field__box" value={leadResult} onChange={(event) => setLeadResult(event.target.value as typeof leadResult)}>
+                      <option value="">Sélectionner le résultat lu</option>
+                      <option value="BELOW_THRESHOLD">Absence de plomb ou concentration inférieure à 1 mg/cm²</option>
+                      <option value="REQUIRES_RENEWAL">Validité limitée à 6 ans</option>
+                    </select>
+                    <span className="field__hint">Validité illimitée seulement sous le seuil. Des revêtements dégradés contenant du plomb nécessitent des travaux avant location.</span>
+                  </label>
+                ) : null}
+                <p className="p-sm">DPE : 10 ans maximum, établi depuis juillet 2021. Gaz, électricité et CREP avec plomb : 6 ans. État des risques : moins de 6 mois, à actualiser si les informations changent. Bruit : vérifier le plan en vigueur.</p>
                 {dpe ? (
                   <label className="field">
                     <span>Classe lue sur le DPE *</span>
@@ -350,7 +365,9 @@ function DocumentControl({
                 !preview ||
                 !confirmed ||
                 ['VERIFIED', 'EXPIRED'].includes(document.status) ||
-                (dpe && (!issuedAt || !expiresAt || !energyRating))
+                (kind === 'property' && !issuedAt) ||
+                (document.type === 'LEAD' && !leadResult) ||
+                (dpe && (!expiresAt || !energyRating))
               }
               onClick={() => decide('VERIFY')}
             >

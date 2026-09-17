@@ -82,6 +82,11 @@ export async function createProperty(
       furnished: false,
       leaseType: LeaseType.NU,
       energyRating: EnergyRating.C,
+      constructionYear: 2005,
+      electricalDiagnostic: 'NOT_REQUIRED', gasDiagnostic: 'NOT_REQUIRED', riskDiagnostic: 'NOT_REQUIRED', noiseDiagnostic: 'NOT_REQUIRED',
+      ...((overrides.status ?? 'ONLINE') === 'ONLINE' || overrides.status === 'VISITS_IN_PROGRESS' ? { documents: { create: {
+        type: 'DPE' as const, status: 'VERIFIED' as const, storageKey: `tests/dpe-${n}.pdf`, issuedAt: new Date('2026-01-10'), expiresAt: new Date('2036-01-09T23:59:59.999Z'),
+      } } } : {}),
       rentCents: 88_000,
       chargesCents: 8_500,
       depositCents: 88_000,

@@ -22,6 +22,6 @@
     // racine et la découverte implicite depuis `backend/` ne les y trouve pas.
     "types": ["node", "jest"]
   },
-  "include": ["src/**/*", "prisma/**/*", "test/**/*"],
+  "include": ["src/**/*", "prisma/**/*", "test/**/*", "evaluation/**/*"],
   "exclude": ["node_modules", "dist"]
 }

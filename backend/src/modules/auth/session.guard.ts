@@ -15,6 +15,8 @@ import { AuthService, PublicUser } from './auth.service';
 
 export const IS_PUBLIC = 'auth:isPublic';
 export const ROLES = 'auth:roles';
+export const ALLOW_MFA_PENDING = 'auth:allowMfaPending';
+export const AllowMfaPending = () => SetMetadata(ALLOW_MFA_PENDING, true);
 
 /** Route accessible sans compte (recherche, fiche annonce, santé). */
 export const Public = () => SetMetadata(IS_PUBLIC, true);
@@ -72,11 +74,15 @@ export class SessionGuard implements CanActivate {
       context.getHandler(),
       context.getClass(),
     ]);
+    if (user?.mfaRequired && !this.reflector.getAllAndOverride<boolean>(ALLOW_MFA_PENDING, [context.getHandler(), context.getClass()])) {
+      throw new ForbiddenException({ code: 'MFA_REQUIRED', message: 'Validez la double authentification pour continuer.' });
+    }
     if (isPublic) return true;
 
     if (!user) {
       throw new UnauthorizedException('Authentification requise.');
     }
+
 
     const roles = this.reflector.getAllAndOverride<UserRole[]>(ROLES, [
       context.getHandler(),

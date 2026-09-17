@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Controller,
   Headers,
   HttpCode,
@@ -13,6 +14,8 @@ import type { Request } from 'express';
 import { Public } from '../auth/session.guard';
 import { PAYMENT_DRIVER, type PaymentDriver } from './payment.driver';
 import { SubscriptionService } from './subscription.service';
+import { CheckoutService } from './checkout.service';
+import type { RequestWithUser } from '../auth/session.guard';
 
 /**
  * Réception des événements du prestataire de paiement.
@@ -33,6 +36,7 @@ export class PaymentWebhookController {
   constructor(
     @Inject(PAYMENT_DRIVER) private readonly driver: PaymentDriver,
     private readonly subscriptions: SubscriptionService,
+    private readonly checkout: CheckoutService,
   ) {}
 
   @Post()
@@ -41,6 +45,9 @@ export class PaymentWebhookController {
     @Req() request: RawBodyRequest<Request>,
     @Headers('stripe-signature') signature?: string,
   ) {
+    if (this.driver.name === 'mock' && (request as RequestWithUser).currentUser?.role !== 'AGENT') {
+      throw new ForbiddenException('Les notifications simulées sont réservées à un administrateur connecté.');
+    }
     const payload = request.rawBody;
     if (!payload) {
       throw new BadRequestException('Charge brute absente : signature invérifiable.');
@@ -51,7 +58,7 @@ export class PaymentWebhookController {
 
     // Répondre 200 même sur un événement ignoré : un 4xx ferait rejouer
     // indéfiniment un type dont on n'a que faire.
-    const handled = await this.subscriptions.handleWebhook(event);
+    const handled = await this.checkout.handleWebhook(event) || await this.subscriptions.handleWebhook(event);
     return { received: true, handled };
   }
 }

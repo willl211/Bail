@@ -1,4 +1,11 @@
-import { VisitType } from '@prisma/client';
+import { VisitStatus, VisitType } from '@prisma/client';
+
+export const LIVE_VISIT: VisitStatus[] = [
+  VisitStatus.REQUESTED,
+  VisitStatus.PENDING_CHECKS,
+  VisitStatus.CONFIRMED,
+  VisitStatus.IN_PROGRESS,
+];
 
 /**
  * Durée d'un rendez-vous selon son type, en minutes.

@@ -31,8 +31,8 @@ const OWNER_STEPS = [
   },
   {
     n: '03',
-    title: 'Signez le bail en ligne',
-    text: 'Modèle légal verrouillé, signature électronique, quittances.',
+    title: 'Suivez la mise en location',
+    text: 'Des candidatures au bail, retrouvez les étapes dans votre espace.',
   },
 ];
 
@@ -53,8 +53,8 @@ export default async function HomePage() {
   );
 
   return (
-    <>
-      <main className="home-intro">
+    <main>
+      <section className="home-intro" aria-label="Trouver votre logement">
         <div className="home-intro__backdrop" aria-hidden="true">
           <Image
             src="/images/whoma-mediterranean-hero.webp"
@@ -80,8 +80,8 @@ export default async function HomePage() {
               </h1>
 
               <p className="hero__lead anim-rise anim-rise-2">
-                À Metz, un studio part en 48 heures. Votre dossier est déjà vérifié quand vous
-                postulez.
+                Préparez votre dossier, suivez son examen par l’équipe et retrouvez-le pour
+                chaque candidature à Metz.
               </p>
 
               <div className="anim-rise anim-rise-3">
@@ -89,7 +89,7 @@ export default async function HomePage() {
               </div>
 
               <div className="hero__reassurance anim-rise anim-rise-4">
-                <span>Dossier vérifié sous 24 h</span>
+                <span>Dossier examiné par l’équipe</span>
                 <span>Aucune commission propriétaire</span>
                 <span>Honoraires annoncés avant de candidater</span>
               </div>
@@ -98,7 +98,7 @@ export default async function HomePage() {
             <aside className="hero__aside anim-rise anim-rise-2">
               <div className="panel panel--strong tick">
                 <div className="registry__head">
-                  <span className="label">Biens vérifiés · Moselle</span>
+                  <span className="label">Biens en ligne · Moselle</span>
                   <div className="registry__counter">
                     <AnimatedCounter target={market.verifiedPropertyCount} />
                   </div>
@@ -107,7 +107,7 @@ export default async function HomePage() {
                   </div>
                 </div>
 
-                {market.metrics.map((metric) => (
+                {market.metrics.filter((metric) => metric.source === 'computed').map((metric) => (
                   <div key={metric.key} className="registry__row">
                     <span className="registry__key">{metric.label}</span>
                     <span className="registry__value">{metric.value}</span>
@@ -115,13 +115,14 @@ export default async function HomePage() {
                 ))}
 
                 <div className="registry__foot">
-                  <span className="badge badge--ok anim-pop">Vérification automatisée active</span>
+                  <p className="p-sm mb-12">Chiffres calculés sur les annonces en ligne sur WHOMA. Loyers charges comprises.</p>
+                  <span className="badge badge--ok anim-pop">Validation finale par un agent</span>
                 </div>
               </div>
             </aside>
           </div>
         </div>
-      </main>
+      </section>
 
       {/* Registre d'activité : ce que la plateforme vient de traiter. */}
       <ActivityTicker items={buildTickerItems(all.items)} />
@@ -129,7 +130,7 @@ export default async function HomePage() {
       {/* Le parcours produit, station par station — cliquable. */}
       <PlanWalkthrough />
 
-      <main className="page" style={{ paddingTop: 0 }}>
+      <div className="page" style={{ paddingTop: 0 }}>
         <section className="section reveal">
           <div className="section__head">
             <h2 className="section__title">Biens en avant à Metz</h2>
@@ -148,6 +149,12 @@ export default async function HomePage() {
               />
             ))}
           </div>
+          {featured.length === 0 ? (
+            <div className="panel pad">
+              <p className="p">Aucun bien mis en avant pour le moment.</p>
+              <Link href="/recherche" className="link">Consulter les logements disponibles →</Link>
+            </div>
+          ) : null}
         </section>
 
         <section className="owner-pitch reveal">
@@ -159,8 +166,8 @@ export default async function HomePage() {
               pas une commission.
             </h2>
             <p className="p">
-              Vous gardez la main sur la sélection. Nous vérifions identité, revenus et cohérence
-              avant que le dossier arrive chez vous.
+              Vous gardez la main sur la sélection. Notre équipe examine les pièces et la
+              cohérence du dossier avant de vous transmettre sa synthèse.
             </p>
 
             {subscription.monthlyAmountCents !== null ? (
@@ -201,7 +208,7 @@ export default async function HomePage() {
             ))}
           </div>
         </section>
-      </main>
-    </>
+      </div>
+    </main>
   );
 }

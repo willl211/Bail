@@ -29,7 +29,10 @@ export interface SignatureEnvelopeInput {
   reference: string;
   subject: string;
   /** Document à signer. */
-  document: { fileName: string; content: Buffer; mimeType: string };
+  document: { fileName: string; content: Buffer; mimeType: string; signaturePage?: number };
+  annexes?: { fileName: string; content: Buffer; mimeType: string }[];
+  transactionId?: string;
+  requestedAt?: string;
   /** Empreinte SHA-256 du document : ce sur quoi la signature porte. */
   checksum: string;
   signers: SignatureSigner[];
@@ -81,4 +84,6 @@ export interface SignatureDriver {
 
   /** Récupère le document signé et sa preuve, une fois l'enveloppe complète. */
   downloadSigned(envelopeId: string): Promise<{ content: Buffer; mimeType: string }>;
+  readEvents?(envelopeId: string, signers: SignatureSigner[]): Promise<SignatureEvent[]>;
+  requestIdFor?(envelopeId: string): Promise<string | null>;
 }

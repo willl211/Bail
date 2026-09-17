@@ -1,10 +1,18 @@
 # Aide IA à la lecture des bulletins — 10 septembre 2026
 
+**Suivi du 16 septembre :** le [banc d’évaluation sur documents fictifs](document-ai-evaluation.md)
+est disponible. La campagne OpenAI réelle et l’activation restent à valider après
+configuration de la clé ; les tests locaux ne démontrent pas la qualité du modèle.
+
 La première version lit uniquement les nouveaux documents `PAYSLIP`. L’agent retrouve
 l’aide dans le back-office, dans le contrôle de la pièce sélectionnée. Le résultat
 présente salarié, employeur, période, net avant impôt, net payé et net imposable mensuel,
 avec une page et un court passage justificatif pour chaque valeur lue. Les valeurs
 incertaines restent absentes. L’agent doit comparer ces propositions à l’original.
+
+Depuis le 13 septembre, tous les nouveaux dépôts passent d'abord par la
+[validation commune des fichiers](file-upload-validation.md). Le contrôle avant
+appel IA est conservé en complément, notamment pour les pièces historiques.
 
 Les comparaisons avec l’identité, l’employeur et le revenu déclarés sont déterministes
 et recalculées sur le dossier courant. La comparaison de revenu utilise seulement le

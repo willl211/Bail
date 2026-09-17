@@ -52,6 +52,10 @@ async function send<T>(method: string, path: string, payload?: unknown): Promise
 
 // --- Locataire ---------------------------------------------------------------
 
+export function getVisitBooking(reference: string) {
+  return send<VisitBookingView>('GET', `/tenant/visits/property/${encodeURIComponent(reference)}`);
+}
+
 export function bookVisit(reference: string, slotId: string, type: VisitType) {
   return send<VisitBookingView>(
     'POST',

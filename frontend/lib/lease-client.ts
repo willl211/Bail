@@ -16,6 +16,26 @@ export interface LeaseFailure {
   blockers?: string[];
 }
 
+export async function downloadSignedLease(reference: string): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}/leases/${encodeURIComponent(reference)}/signed-document`, {
+      credentials: 'include',
+    });
+  } catch {
+    throw { message: 'Impossible de joindre le service.' } satisfies LeaseFailure;
+  }
+  if (!response.ok) throw await toFailure(response);
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'bail-signe.pdf';
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 async function toFailure(response: Response): Promise<LeaseFailure> {
   let body: unknown;
   try {
@@ -33,10 +53,10 @@ async function toFailure(response: Response): Promise<LeaseFailure> {
 export async function sendLeaseForSignature(reference: string): Promise<LeaseView> {
   let response: Response;
   try {
-    response = await fetch(
-      `${API_URL}/leases/${encodeURIComponent(reference)}/send`,
-      { method: 'POST', credentials: 'include' },
-    );
+    response = await fetch(`${API_URL}/leases/${encodeURIComponent(reference)}/send`, {
+      method: 'POST',
+      credentials: 'include',
+    });
   } catch {
     throw { message: 'Impossible de joindre le service.' } satisfies LeaseFailure;
   }

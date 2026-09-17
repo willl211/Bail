@@ -23,6 +23,7 @@ async function bootstrap() {
     rawBody: true,
   });
   const config = app.get(ConfigService);
+  app.enableShutdownHooks();
 
   const prefix = config.get<string>('apiPrefix', 'api/v1');
   app.setGlobalPrefix(prefix);

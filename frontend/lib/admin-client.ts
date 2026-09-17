@@ -126,6 +126,7 @@ export interface DiagnosticReview {
   issuedAt?: string;
   expiresAt?: string;
   energyRating?: string;
+  leadResult?: 'BELOW_THRESHOLD' | 'REQUIRES_RENEWAL';
 }
 
 export function decidePropertyDocument(

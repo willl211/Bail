@@ -1,6 +1,8 @@
 import { jest } from '@jest/globals';
 import request from 'supertest';
 import { Prisma } from '@prisma/client';
+import { Readable } from 'node:stream';
+import { StorageService } from '../src/modules/storage/storage.service';
 import { createHarness, resetDatabase, sessionCookie, type Harness } from './harness';
 import { createUser, TEST_PASSWORD } from './fixtures';
 import { fictionalPayslipPdf, samplePayslip } from './payslip-fixtures';
@@ -138,13 +140,12 @@ describe('Analyse des bulletins, du dépôt au contrôle admin', () => {
     expect(await h.prisma.payslipAnalysis.count({ where: { status: 'COMPLETED' } })).toBe(1);
   });
 
-  it('ne transmet pas un PDF invalide au fournisseur et garde le contrôle manuel', async () => {
-    const { tenantCookie, agentCookie, file } = await ready();
-    await upload(tenantCookie, 'invalide.pdf', Buffer.from('%PDF-1.4 faux fichier'));
+  it('ne transmet pas un ancien PDF devenu illisible au fournisseur et garde le contrôle manuel', async () => {
+    const { document, agentCookie } = await setup();
+    jest
+      .spyOn(h.app.get(StorageService), 'read')
+      .mockResolvedValueOnce(Readable.from([Buffer.from('%PDF-1.4 faux fichier')]));
     await worker().processNext();
-    const document = await h.prisma.tenantDocument.findFirstOrThrow({
-      where: { tenantFileId: file.id },
-    });
     const view = await read(document.id, agentCookie).expect(200);
     expect(view.body.status).toBe('FAILED');
     expect(view.body.extraction).toBeNull();

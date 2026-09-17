@@ -3,7 +3,6 @@ import {
   ApplicationStatus,
   DocumentStatus,
   DocumentType,
-  PreauthorizationStatus,
   PropertyStatus,
   VisitStatus,
   type EmploymentContractType,
@@ -263,7 +262,7 @@ export class OwnerApplicationsService {
   private async ownedOrFail(ownerId: string, applicationId: string) {
     const application = await this.prisma.application.findFirst({
       where: { id: applicationId, property: { ownerId } },
-      select: { id: true, status: true, readAt: true, tenantId: true },
+      select: { id: true, status: true, readAt: true, tenantId: true, propertyId: true },
     });
     if (!application) throw new NotFoundException('Candidature introuvable.');
     return application;
@@ -322,6 +321,7 @@ export class OwnerApplicationsService {
     }
 
     await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT "id" FROM "properties" WHERE "id" = ${application.propertyId} FOR UPDATE`;
       await tx.application.update({
         where: { id: application.id },
         data: {
@@ -339,9 +339,15 @@ export class OwnerApplicationsService {
           applicationId: application.id,
           status: { in: [VisitStatus.REQUESTED, VisitStatus.PENDING_CHECKS, VisitStatus.CONFIRMED] },
         },
-        select: { id: true },
+        select: { id: true, tenantId: true, agentId: true, property: { select: { ownerId: true } } },
       });
 
+      for (const visit of visits) {
+        for (const userId of [visit.tenantId, visit.property.ownerId, visit.agentId].filter((id): id is string => !!id)) {
+          await this.mail.enqueueInTransaction(tx, { template: EVENT.visitCancelled, userId, subjectRef: visit.id,
+            dedupeKey: 'visit-cancelled:' + visit.id + ':' + userId });
+        }
+      }
       if (visits.length > 0) {
         const ids = visits.map((visit) => visit.id);
         await tx.visit.updateMany({
@@ -350,7 +356,7 @@ export class OwnerApplicationsService {
             status: VisitStatus.CANCELLED,
             cancelledAt: new Date(),
             cancellationReason: 'Candidature écartée par le propriétaire',
-            preauthorizationStatus: PreauthorizationStatus.RELEASED,
+            videoRoomUrl: null,
           },
         });
         await tx.visitSlot.updateMany({

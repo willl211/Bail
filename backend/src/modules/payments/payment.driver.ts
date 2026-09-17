@@ -30,14 +30,47 @@ export interface SubscriptionInput {
   quantity: number;
   currency: string;
   label: string;
+  idempotencyKey?: string;
+  paymentMethodId?: string;
+  localSubscriptionId?: string;
 }
 
 export interface DriverSubscription {
   id: string;
   customerId: string;
-  status: 'trialing' | 'active' | 'past_due' | 'canceled';
+  status: 'incomplete' | 'trialing' | 'active' | 'past_due' | 'canceled';
   currentPeriodEnd: Date;
   quantity: number;
+  localSubscriptionId?: string;
+  cancelledAt?: Date | null;
+}
+
+export interface CheckoutInput {
+  mode: 'payment' | 'subscription' | 'setup';
+  userId: string;
+  resourceId: string;
+  email: string;
+  amountCents: number;
+  quantity: number;
+  label: string;
+  successUrl: string;
+  cancelUrl: string;
+  expiresAt: number;
+}
+
+export interface DriverCheckout {
+  id: string;
+  url: string | null;
+  status: 'open' | 'complete' | 'expired';
+  mode: string;
+  checkoutId: string | null;
+  amountCents: number | null;
+  currency: string | null;
+  paid: boolean;
+  paymentIntentId: string | null;
+  subscriptionId: string | null;
+  customerId: string | null;
+  setupIntentId: string | null;
 }
 
 export interface DriverPaymentIntent {
@@ -76,6 +109,13 @@ export interface PaymentDriver {
    * propriétaire de ce qu'il a payé.
    */
   cancelSubscription(subscriptionId: string, atPeriodEnd?: boolean): Promise<DriverSubscription>;
+  resumeSubscription(subscriptionId: string): Promise<DriverSubscription>;
+  createCheckout(input: CheckoutInput, key: string): Promise<DriverCheckout>;
+  retrieveCheckout(id: string): Promise<DriverCheckout>;
+  subscriptionFromCheckout(session: DriverCheckout, input: CheckoutInput, key: string): Promise<DriverSubscription>;
+  retrieveSubscription(id: string): Promise<DriverSubscription>;
+  retrieveInvoice(id: string): Promise<Record<string, unknown>>;
+  createPortal(customerId: string, returnUrl: string): Promise<{ url: string }>;
 
   /** Paiement unique — honoraires locataire, dépôt de garantie. */
   createPaymentIntent(input: {
@@ -84,6 +124,7 @@ export interface PaymentDriver {
     customerId?: string;
     description: string;
     metadata?: Record<string, string>;
+    captureMethod?: 'automatic' | 'manual';
   }): Promise<DriverPaymentIntent>;
 
   /**

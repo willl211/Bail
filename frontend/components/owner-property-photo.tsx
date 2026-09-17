@@ -7,14 +7,16 @@ export function OwnerPropertyPhoto({
   src,
   title,
   emptyLabel = 'Photo à ajouter',
+  className = '',
 }: {
   src: string | null;
   title: string;
   emptyLabel?: string;
+  className?: string;
 }) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   return (
-    <div className="owner-property-photo">
+    <div className={`owner-property-photo ${className}`}>
       {src && src !== failedSrc ? (
         // Les domaines de stockage changent suivant l'environnement.
         // eslint-disable-next-line @next/next/no-img-element

@@ -167,6 +167,10 @@ function PropertyControl({
           {property.savedCount} sauvegarde{property.savedCount > 1 ? 's' : ''}
         </p>
       </header>
+      <details className="admin-property-review__history">
+        <summary>Situation déclarée du logement à vérifier</summary>
+        <ul className="checklist mt-12">{property.diagnosticContext.map((line) => <li key={line}>{line}</li>)}</ul>
+      </details>
       <AdminDocumentReview
         documents={property.documents.map((doc) => ({
           ...doc,

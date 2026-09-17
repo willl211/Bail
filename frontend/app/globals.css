@@ -3,7 +3,7 @@
 /* =============================================================================
    whoma — palette méditerranéenne demandée le 7 septembre 2026.
    Pierre claire, crème, olive, sauge et bois, en accord avec la maison.
-   La structure et les typographies de la maquette restent la base du site.
+   Newsreader pour les titres, DM Sans pour l’interface et repères chiffrés en mono.
    Le thème reste clair, quelle que soit la préférence système.
    ============================================================================= */
 
@@ -92,7 +92,7 @@ body {
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font-sans), 'Helvetica Neue', Helvetica, Arial, sans-serif;
-  font-variation-settings: 'wdth' 100;
+  font-optical-sizing: auto;
   font-size: 15px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
@@ -274,27 +274,30 @@ p {
 }
 
 .d1 {
-  font-size: clamp(36px, 5.6vw, 72px);
-  line-height: 0.98;
-  letter-spacing: -0.035em;
-  font-variation-settings: 'wdth' 88;
-  font-weight: 600;
+  font-family: var(--font-display), Georgia, 'Times New Roman', serif;
+  font-optical-sizing: auto;
+  font-size: clamp(36px, 5.2vw, 68px);
+  line-height: 1.08;
+  letter-spacing: -0.025em;
+  font-weight: 500;
 }
 
 .d2 {
+  font-family: var(--font-display), Georgia, 'Times New Roman', serif;
+  font-optical-sizing: auto;
   font-size: clamp(26px, 3.3vw, 40px);
-  line-height: 1.06;
-  letter-spacing: -0.028em;
-  font-variation-settings: 'wdth' 92;
-  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-weight: 500;
 }
 
 .d3 {
+  font-family: var(--font-display), Georgia, 'Times New Roman', serif;
+  font-optical-sizing: auto;
   font-size: clamp(20px, 2.2vw, 27px);
   line-height: 1.14;
   letter-spacing: -0.022em;
-  font-variation-settings: 'wdth' 94;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .h {
@@ -840,7 +843,6 @@ p {
   font-size: 17px;
   font-weight: 700;
   letter-spacing: 0.2em;
-  font-variation-settings: 'wdth' 96;
 }
 
 .site-header__locality {
@@ -1053,12 +1055,13 @@ p {
 }
 
 .hero__title {
+  font-family: var(--font-display), Georgia, 'Times New Roman', serif;
+  font-optical-sizing: auto;
   color: var(--accent-text);
-  font-size: clamp(36px, 5.6vw, 72px);
-  line-height: 0.98;
-  letter-spacing: -0.035em;
-  font-variation-settings: 'wdth' 88;
-  font-weight: 600;
+  font-size: clamp(36px, 5.2vw, 68px);
+  line-height: 1.08;
+  letter-spacing: -0.025em;
+  font-weight: 500;
   margin: 0;
   text-wrap: balance;
 }
@@ -1325,14 +1328,15 @@ p {
 }
 
 .house-walkthrough__heading h2 {
+  font-family: var(--font-display), Georgia, 'Times New Roman', serif;
+  font-optical-sizing: auto;
   color: var(--accent-text);
   max-width: 24ch;
   margin: 12px 0;
   font-size: clamp(30px, 3.5vw, 48px);
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.1;
-  letter-spacing: -0.035em;
-  font-variation-settings: 'wdth' 92;
+  letter-spacing: -0.025em;
   text-wrap: balance;
 }
 
@@ -1601,11 +1605,12 @@ p {
 }
 
 .section__title {
+  font-family: var(--font-display), Georgia, 'Times New Roman', serif;
+  font-optical-sizing: auto;
   font-size: clamp(20px, 2.2vw, 27px);
   line-height: 1.14;
   letter-spacing: -0.022em;
-  font-variation-settings: 'wdth' 94;
-  font-weight: 600;
+  font-weight: 500;
   margin: 0;
 }
 
@@ -1767,12 +1772,13 @@ p {
 }
 
 .owner-pitch__title {
+  font-family: var(--font-display), Georgia, 'Times New Roman', serif;
+  font-optical-sizing: auto;
   color: var(--accent-text);
   font-size: clamp(26px, 3.3vw, 40px);
-  line-height: 1.06;
-  letter-spacing: -0.028em;
-  font-variation-settings: 'wdth' 92;
-  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-weight: 500;
   margin: 0 0 16px;
 }
 
@@ -2202,11 +2208,12 @@ p {
 }
 
 .listing__title {
+  font-family: var(--font-display), Georgia, 'Times New Roman', serif;
+  font-optical-sizing: auto;
   font-size: clamp(26px, 3.3vw, 40px);
-  line-height: 1.06;
-  letter-spacing: -0.028em;
-  font-variation-settings: 'wdth' 92;
-  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-weight: 500;
   margin: 0;
 }
 
@@ -2459,7 +2466,7 @@ p {
 }
 
 .form--2 {
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 
 .form__full {
@@ -2911,11 +2918,12 @@ textarea.field__box {
 }
 
 .notice__title {
+  font-family: var(--font-display), Georgia, 'Times New Roman', serif;
+  font-optical-sizing: auto;
   font-size: clamp(20px, 2.2vw, 27px);
   line-height: 1.14;
   letter-spacing: -0.022em;
-  font-variation-settings: 'wdth' 94;
-  font-weight: 600;
+  font-weight: 500;
   margin: 12px 0 10px;
 }
 
@@ -4060,6 +4068,25 @@ a.btn-block {
 .app:has(> .owner-aside) {
   grid-template-columns: 238px minmax(0, 1fr);
   column-gap: 30px;
+}
+
+/* Les motifs de contrôle doivent rester lisibles, même sur un écran étroit. */
+.property-form > *,
+.property-form .field {
+  min-width: 0;
+}
+
+.property-form .holding__checks .badge,
+.holding .holding__checks .badge {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+
+.property-form select.field__box {
+  width: 100%;
+  min-width: 0;
 }
 .app:has(> .owner-aside) > .body {
   padding-left: 0;

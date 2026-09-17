@@ -1,3 +1,4 @@
+import { visiblePropertyWhere } from '../properties/property-visibility';
 import {
   BadRequestException,
   ConflictException,
@@ -5,6 +6,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import {
   ApplicationStatus,
@@ -12,7 +14,6 @@ import {
   PaymentType,
   Prisma,
   PreauthorizationStatus,
-  PropertyStatus,
   VisitStatus,
   VisitType,
 } from '@prisma/client';
@@ -21,9 +22,12 @@ import { EVENT } from '../mail/event.templates';
 import { MailService } from '../mail/mail.service';
 import { PAYMENT_DRIVER, type PaymentDriver } from '../payments/payment.driver';
 import { TenantService } from '../tenant/tenant.service';
+import { aggregateDocumentStatus } from '../tenant/tenant-file.policy';
 import { VIDEO_DRIVER, type VideoDriver } from '../video/video.driver';
 import { BookVisitDto } from './dto/book-visit.dto';
 import {
+  LIVE_VISIT,
+  overlaps,
   DEFAULT_VISIT_POLICY,
   VISIT_DURATION_MINUTES,
   VISIT_SETTING_KEYS,
@@ -34,14 +38,6 @@ import {
 const VISITABLE: ApplicationStatus[] = [
   ApplicationStatus.SHORTLISTED,
   ApplicationStatus.VISIT_SCHEDULED,
-];
-
-/** Statuts de visite encore en cours — ils occupent le créneau. */
-const LIVE_VISIT: VisitStatus[] = [
-  VisitStatus.REQUESTED,
-  VisitStatus.PENDING_CHECKS,
-  VisitStatus.CONFIRMED,
-  VisitStatus.IN_PROGRESS,
 ];
 
 export interface BookableSlot {
@@ -131,7 +127,12 @@ export class VisitsService {
     const read = (key: string, fallback: number): number => {
       const value = settings.find((setting) => setting.key === key)?.value;
       const parsed = typeof value === 'string' ? Number(value) : value;
-      return typeof parsed === 'number' && Number.isFinite(parsed) ? parsed : fallback;
+      return typeof parsed === 'number' &&
+        Number.isSafeInteger(parsed) &&
+        parsed >= 0 &&
+        parsed <= 36500
+        ? parsed
+        : fallback;
     };
 
     return {
@@ -168,7 +169,7 @@ export class VisitsService {
     const property = await this.prisma.property.findFirst({
       where: {
         reference,
-        status: { in: [PropertyStatus.ONLINE, PropertyStatus.VISITS_IN_PROGRESS] },
+        ...visiblePropertyWhere(),
       },
       select: {
         id: true,
@@ -192,8 +193,7 @@ export class VisitsService {
     }>,
     cancellationDeadlineHours: number,
   ): VisitView {
-    const deadline =
-      visit.scheduledAt.getTime() - cancellationDeadlineHours * 3600 * 1000;
+    const deadline = visit.scheduledAt.getTime() - cancellationDeadlineHours * 3600 * 1000;
 
     return {
       id: visit.id,
@@ -205,10 +205,9 @@ export class VisitsService {
       status: visit.status,
       scheduledAt: visit.scheduledAt.toISOString(),
       durationMinutes: visit.durationMinutes,
-      agentName: visit.agent
-        ? `${visit.agent.firstName} ${visit.agent.lastName.charAt(0)}.`
-        : null,
-      videoRoomUrl: visit.videoRoomUrl,
+      agentName: visit.agent ? `${visit.agent.firstName} ${visit.agent.lastName.charAt(0)}.` : null,
+      // Aucun lien permanent ou simulé exposé aux listes.
+      videoRoomUrl: null,
       preauthorizationStatus: visit.preauthorizationStatus,
       preauthorizationAmountCents: visit.preauthorizationAmountCents,
       cancellable: LIVE_VISIT.includes(visit.status) && Date.now() < deadline,
@@ -275,7 +274,20 @@ export class VisitsService {
       blockers.push('Votre pièce d’identité doit être vérifiée avant tout rendez-vous.');
     }
 
-    if (slots.length === 0 && existing === null) {
+    const bookableSlots = slots
+      .map((slot) => ({
+        ...slot,
+        allowedTypes: slot.allowedTypes.filter(
+          (type) => type !== VisitType.VIDEO || this.video.name !== 'mock',
+        ),
+      }))
+      .filter((slot) => slot.allowedTypes.length > 0);
+    if (this.preauthorizationRequired() && existing === null) {
+      blockers.push(
+        'La réservation avec empreinte bancaire attend encore son activation. Contactez whoma.',
+      );
+    }
+    if (bookableSlots.length === 0 && existing === null) {
       blockers.push('Aucun créneau n’est ouvert sur ce bien pour l’instant.');
     }
 
@@ -289,7 +301,7 @@ export class VisitsService {
       applicationStatus: application?.status ?? null,
       blockers,
       prerequisites: this.prerequisitesOf(identityVerified, policy, existing),
-      slots: slots.map((slot) => ({
+      slots: bookableSlots.map((slot) => ({
         id: slot.id,
         startsAt: slot.startsAt.toISOString(),
         durationMinutes: slot.durationMinutes,
@@ -343,7 +355,10 @@ export class VisitsService {
       {
         key: 'camera',
         label: 'Caméra active pendant la visio',
-        detail: `Non désactivable. Enregistrement conservé ${policy.recordingRetentionDays} jours, puis purgé.`,
+        detail:
+          this.video.name === 'mock'
+            ? 'Les visites en visio ne sont pas encore disponibles.'
+            : `Le protocole de la visio doit être validé avant activation. Rétention prévue : ${policy.recordingRetentionDays} jours.`,
         state: 'info',
         blocking: false,
       },
@@ -375,117 +390,126 @@ export class VisitsService {
    * deux avec un rendez-vous. C'est la contrainte d'unicité sur `visitId` qui
    * tranche, pas une vérification préalable qui aurait le temps de mentir.
    */
-  async book(
-    tenantId: string,
-    reference: string,
-    dto: BookVisitDto,
-  ): Promise<VisitBookingView> {
+  async book(tenantId: string, reference: string, dto: BookVisitDto): Promise<VisitBookingView> {
+    if (dto.type === VisitType.VIDEO && this.video.name === 'mock') {
+      throw new ServiceUnavailableException(
+        'Les visites en visio ne sont pas encore disponibles. Choisissez une visite accompagnée.',
+      );
+    }
+    if (this.preauthorizationRequired()) {
+      throw new ServiceUnavailableException(
+        'La réservation avec empreinte bancaire attend encore son activation. Contactez whoma.',
+      );
+    }
     const property = await this.visitableProperty(reference);
     const [policy, file] = await Promise.all([this.policy(), this.tenant.getFile(tenantId)]);
 
-    const application = await this.prisma.application.findFirst({
-      where: { tenantId, propertyId: property.id },
-      select: { id: true, status: true },
-    });
-
-    // Revérifié côté serveur : l'écran a pu être chargé avant que le
-    // propriétaire ne change d'avis, et un bouton n'est pas un contrôle d'accès.
-    if (application === null || !VISITABLE.includes(application.status)) {
-      throw new BadRequestException(
-        'Votre candidature ne vous ouvre pas de rendez-vous sur ce bien.',
-      );
-    }
     if (file.groups.identity !== 'VERIFIED') {
       throw new BadRequestException(
         'Votre pièce d’identité doit être vérifiée avant tout rendez-vous.',
       );
     }
-
-    const alreadyBooked = await this.prisma.visit.findFirst({
-      where: { tenantId, propertyId: property.id, status: { in: LIVE_VISIT } },
-      select: { id: true },
-    });
-    if (alreadyBooked) {
-      throw new ConflictException(
-        'Vous avez déjà un rendez-vous sur ce bien. Annulez-le pour en choisir un autre.',
-      );
-    }
-
-    const slot = await this.prisma.visitSlot.findFirst({
-      where: { id: dto.slotId, propertyId: property.id, closedAt: null },
-      select: { id: true, startsAt: true, allowedTypes: true, visitId: true },
-    });
-    if (!slot) throw new NotFoundException('Créneau introuvable.');
-    if (slot.visitId !== null) {
-      throw new ConflictException('Ce créneau vient d’être réservé. Choisissez-en un autre.');
-    }
-    if (slot.startsAt.getTime() < Date.now()) {
-      throw new ConflictException('Ce créneau est passé.');
-    }
-    if (!slot.allowedTypes.includes(dto.type)) {
-      throw new BadRequestException('Ce créneau n’accepte pas ce type de visite.');
-    }
-
     const durationMinutes = VISIT_DURATION_MINUTES[dto.type];
     const preauthorizationRequired = this.preauthorizationRequired();
-
-    const visitId = await this.prisma.$transaction(async (tx) => {
+    const { visitId, startsAt } = await this.prisma.$transaction(async (tx) => {
+      // Sérialiser aussi deux créneaux différents du même locataire, puis les
+      // changements du calendrier du bien (ouverture, fermeture, réservation).
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(621, hashtext(${tenantId}))`;
+      await tx.$executeRaw`SELECT "id" FROM "properties" WHERE "id" = ${property.id} FOR UPDATE`;
+      await tx.$executeRaw`SELECT "id" FROM "tenant_files" WHERE "tenantId" = ${tenantId} FOR UPDATE`;
+      const identity = await tx.tenantDocument.findMany({
+        where: {
+          tenantFile: { tenantId },
+          type: { in: ['ID_CARD', 'PASSPORT'] },
+        },
+        select: { status: true },
+      });
+      if (aggregateDocumentStatus(identity) !== 'VERIFIED') {
+        throw new ConflictException('Votre identité doit être vérifiée avant de réserver.');
+      }
+      const visible = await tx.property.findFirst({
+        where: { id: property.id, ...visiblePropertyWhere() },
+      });
+      if (!visible) throw new ConflictException('Ce bien n’est plus visitable.');
+      const application = await tx.application.findFirst({
+        where: { tenantId, propertyId: property.id },
+      });
+      if (!application || !VISITABLE.includes(application.status)) {
+        throw new ConflictException(
+          'Votre candidature ne vous ouvre pas de rendez-vous sur ce bien.',
+        );
+      }
+      // Une décision propriétaire concurrente ne doit jamais être écrasée.
+      const eligible = await tx.application.updateMany({
+        where: { id: application.id, status: { in: VISITABLE } },
+        data: { status: ApplicationStatus.VISIT_SCHEDULED },
+      });
+      if (!eligible.count)
+        throw new ConflictException('Votre candidature a changé. Rechargez la page.');
+      const active = await tx.visit.findMany({ where: { tenantId, status: { in: LIVE_VISIT } } });
+      if (active.some((v) => v.propertyId === property.id)) {
+        throw new ConflictException(
+          'Vous avez déjà un rendez-vous sur ce bien. Annulez-le pour en choisir un autre.',
+        );
+      }
+      const slot = await tx.visitSlot.findFirst({
+        where: { id: dto.slotId, propertyId: property.id, closedAt: null },
+      });
+      if (!slot) throw new NotFoundException('Créneau introuvable.');
+      if (slot.visitId || slot.startsAt.getTime() <= Date.now())
+        throw new ConflictException('Ce créneau n’est plus disponible.');
+      if (!slot.allowedTypes.includes(dto.type) || slot.durationMinutes < durationMinutes) {
+        throw new BadRequestException('Ce créneau n’accepte pas ce type de visite.');
+      }
+      if (
+        active.some((v) =>
+          overlaps(
+            { startsAt: v.scheduledAt, durationMinutes: v.durationMinutes },
+            { startsAt: slot.startsAt, durationMinutes },
+          ),
+        )
+      ) {
+        throw new ConflictException('Vous avez déjà une visite à cet horaire.');
+      }
       const created = await tx.visit.create({
         data: {
           propertyId: property.id,
           tenantId,
           applicationId: application.id,
           type: dto.type,
-          // Sans empreinte à prendre, le rendez-vous est ferme d'emblée. Avec,
-          // il attend l'autorisation bancaire.
-          status: preauthorizationRequired
-            ? VisitStatus.PENDING_CHECKS
-            : VisitStatus.CONFIRMED,
+          status: preauthorizationRequired ? VisitStatus.PENDING_CHECKS : VisitStatus.CONFIRMED,
           scheduledAt: slot.startsAt,
           durationMinutes,
           preauthorizationStatus: preauthorizationRequired
             ? PreauthorizationStatus.PENDING
             : PreauthorizationStatus.NOT_REQUIRED,
-          preauthorizationAmountCents: policy.preauthorizationAmountCents,
+          preauthorizationAmountCents: preauthorizationRequired
+            ? policy.preauthorizationAmountCents
+            : null,
         },
-        select: { id: true },
       });
-
-      // `updateMany` avec `visitId: null` dans le filtre : si un autre
-      // locataire a pris le créneau entre-temps, zéro ligne est modifiée et on
-      // annule tout plutôt que d'ouvrir un second rendez-vous au même horaire.
       const taken = await tx.visitSlot.updateMany({
-        where: { id: slot.id, visitId: null },
+        where: { id: slot.id, visitId: null, closedAt: null, startsAt: { gt: new Date() } },
         data: { visitId: created.id },
       });
-      if (taken.count === 0) {
-        throw new ConflictException(
-          'Ce créneau vient d’être réservé. Choisissez-en un autre.',
-        );
+      if (!taken.count) throw new ConflictException('Ce créneau vient d’être réservé ou fermé.');
+      for (const userId of [property.ownerId, tenantId]) {
+        await this.mail.enqueueInTransaction(tx, {
+          template: EVENT.visitBooked,
+          userId,
+          subjectRef: created.id,
+          dedupeKey: `visit-booked:${created.id}:${userId}`,
+        });
       }
-
-      await tx.application.update({
-        where: { id: application.id },
-        data: { status: ApplicationStatus.VISIT_SCHEDULED },
-      });
-
-      return created.id;
+      return { visitId: created.id, startsAt: slot.startsAt };
     });
 
     if (dto.type === VisitType.VIDEO) {
-      await this.openVideoRoom(visitId, slot.startsAt, durationMinutes, policy);
+      await this.openVideoRoom(visitId, startsAt, durationMinutes, policy);
     }
     if (preauthorizationRequired) {
       await this.openPreauthorization(visitId, tenantId, property.id, policy);
     }
-
-    // Le propriétaire n'a rien à faire pour la visite — un agent whoma
-    // l'accompagne — mais il doit savoir que son bien est visité.
-    await this.mail.enqueue({
-      template: EVENT.visitBooked,
-      userId: property.ownerId,
-      subjectRef: visitId,
-    });
 
     return this.bookingView(tenantId, reference);
   }
@@ -544,6 +568,7 @@ export class VisitsService {
   ): Promise<void> {
     try {
       const intent = await this.payment.createPaymentIntent({
+        captureMethod: 'manual',
         amountCents: policy.preauthorizationAmountCents,
         currency: 'EUR',
         description: 'whoma — pré-autorisation avant visite',
@@ -596,66 +621,62 @@ export class VisitsService {
         scheduledAt: true,
         videoRoomId: true,
         applicationId: true,
+        propertyId: true,
+        agentId: true,
         property: { select: { ownerId: true } },
       },
     });
     // 404 et non 403 : « interdit » confirmerait que la visite existe ailleurs.
     if (!visit) throw new NotFoundException('Rendez-vous introuvable.');
 
-    if (!LIVE_VISIT.includes(visit.status)) {
-      throw new ConflictException('Ce rendez-vous n’est plus annulable.');
-    }
-
-    const deadline =
-      visit.scheduledAt.getTime() - policy.cancellationDeadlineHours * 3600 * 1000;
-    if (Date.now() >= deadline) {
-      throw new ConflictException(
-        `Un rendez-vous s’annule jusqu’à ${policy.cancellationDeadlineHours} heures avant. Contactez whoma.`,
-      );
-    }
-
+    if (visit.status === VisitStatus.CANCELLED) return this.listMine(tenantId);
     await this.prisma.$transaction(async (tx) => {
-      await tx.visit.update({
-        where: { id: visit.id },
-        data: {
-          status: VisitStatus.CANCELLED,
-          cancelledAt: new Date(),
-          cancellationReason: reason ?? null,
-          // L'empreinte est relâchée : elle garantissait un rendez-vous qui
-          // n'aura pas lieu.
-          preauthorizationStatus: PreauthorizationStatus.RELEASED,
-        },
-      });
-
-      await tx.visitSlot.updateMany({
-        where: { visitId: visit.id },
-        data: { visitId: null },
-      });
-
-      // La candidature repasse « retenue » : elle reste valable, c'est le
-      // rendez-vous qui est tombé.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(621, hashtext(${tenantId}))`;
+      await tx.$executeRaw`SELECT "id" FROM "properties" WHERE "id" = ${visit.propertyId} FOR UPDATE`;
+      const before = await tx.visit.findUniqueOrThrow({ where: { id: visitId } });
+      if (before.status === VisitStatus.CANCELLED) return;
       if (visit.applicationId) {
         await tx.application.updateMany({
           where: { id: visit.applicationId, status: ApplicationStatus.VISIT_SCHEDULED },
           data: { status: ApplicationStatus.SHORTLISTED },
         });
       }
-    });
-
-    if (visit.videoRoomId) {
-      // Hors transaction, et sans faire échouer l'annulation : la salle sera de
-      // toute façon rattrapée par la purge de rétention.
-      await this.video.deleteRoom(visit.videoRoomId).catch((error: Error) => {
-        this.logger.warn(`Salle ${visit.videoRoomId} non fermée : ${error.message}`);
+      const changed = await tx.visit.updateMany({
+        where: {
+          id: visitId,
+          status: {
+            in: [VisitStatus.REQUESTED, VisitStatus.PENDING_CHECKS, VisitStatus.CONFIRMED],
+          },
+          scheduledAt: { gt: new Date(Date.now() + policy.cancellationDeadlineHours * 3600_000) },
+        },
+        data: {
+          status: VisitStatus.CANCELLED,
+          cancelledAt: new Date(),
+          cancellationReason: reason ?? null,
+          videoRoomUrl: null,
+        },
       });
-    }
-
-    // C'est le locataire qui annule : c'est donc au propriétaire d'être
-    // prévenu, pour qu'il n'attende pas quelqu'un qui ne viendra pas.
-    await this.mail.enqueue({
-      template: EVENT.visitCancelled,
-      userId: visit.property.ownerId,
-      subjectRef: visit.id,
+      if (!changed.count) {
+        const current = await tx.visit.findUniqueOrThrow({ where: { id: visitId } });
+        if (current.status === VisitStatus.CANCELLED) return;
+        throw new ConflictException(
+          `Ce rendez-vous n’est plus annulable en ligne (délai : ${policy.cancellationDeadlineHours} heures). Contactez whoma.`,
+        );
+      }
+      await tx.visitSlot.updateMany({ where: { visitId }, data: { visitId: null } });
+      const current = await tx.visit.findUniqueOrThrow({ where: { id: visitId } });
+      for (const userId of new Set(
+        [tenantId, visit.property.ownerId, current.agentId].filter((id): id is string => !!id),
+      )) {
+        await this.mail.enqueueInTransaction(tx, {
+          template: EVENT.visitCancelled,
+          userId,
+          subjectRef: visitId,
+          dedupeKey: `visit-cancelled:${visitId}:${userId}`,
+        });
+      }
+      // La purge ferme les salles annulées et reprend les échecs. Une annulation
+      // ne signifie pas que l’empreinte bancaire a été libérée chez Stripe.
     });
 
     return this.listMine(tenantId);

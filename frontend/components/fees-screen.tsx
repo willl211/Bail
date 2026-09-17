@@ -5,6 +5,8 @@ import { useEffect, useState } from 'react';
 import type { FeeBenchmark, FeesView, PaymentStatus } from '@/lib/api';
 import * as fmt from '@/lib/format';
 import { startFeePayment, type FeesFailure } from '@/lib/fees-client';
+import { redirectToStripe } from '@/lib/stripe-redirect';
+import { PaymentReturn } from './payment-return';
 
 const PAYMENT_STATUS: Record<PaymentStatus, { label: string; tone: string }> = {
   PENDING: { label: 'Paiement en attente', tone: 'badge badge--pending' },
@@ -83,7 +85,7 @@ function FeeComparison({ benchmark }: { benchmark: FeeBenchmark }) {
  * PCI-DSS. Reproduire le formulaire de la maquette aurait été une faute.
  */
 export function FeesScreen({ initial }: { initial: FeesView }) {
-  const [fees, setFees] = useState(initial);
+  const fees = initial;
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<FeesFailure | null>(null);
 
@@ -95,7 +97,7 @@ export function FeesScreen({ initial }: { initial: FeesView }) {
     setError(null);
     try {
       const result = await startFeePayment(fees.leaseReference);
-      setFees(result.view);
+      redirectToStripe(result.checkoutUrl);
     } catch (failure) {
       setError(failure as FeesFailure);
     } finally {
@@ -123,6 +125,7 @@ export function FeesScreen({ initial }: { initial: FeesView }) {
         </span>
       </div>
 
+      <PaymentReturn confirmed={paid} />
       <div className="split split--wide mt-24">
         <div>
           <div className="panel panel--strong tick">
@@ -192,7 +195,7 @@ export function FeesScreen({ initial }: { initial: FeesView }) {
               sont collectées par le prestataire, dans son propre formulaire
               sécurisé. whoma ne les voit ni ne les conserve.
             </p>
-            {fees.paymentDriver === 'mock' ? (
+            {fees.paymentDriver === 'stripe' ? <p className="field__hint mt-10"><span className="badge badge--pending badge--nodot">Stripe · mode test</span></p> : fees.paymentDriver === 'mock' ? (
               <p className="field__hint mt-10">
                 <span className="badge badge--pending badge--nodot">
                   Prestataire simulé
@@ -246,8 +249,7 @@ export function FeesScreen({ initial }: { initial: FeesView }) {
               {paid ? (
                 <p className="p-sm">
                   Honoraires réglés
-                  {fees.payment?.paidAt ? ` le ${fmt.logStamp(fees.payment.paidAt)}` : ''}. Une
-                  facture nominative est disponible dans votre espace.
+                  {fees.payment?.paidAt ? ` le ${fmt.logStamp(fees.payment.paidAt)}` : ''}.
                 </p>
               ) : blocked ? (
                 <>
@@ -304,15 +306,8 @@ export function FeesScreen({ initial }: { initial: FeesView }) {
                   <div>
                     <span className="log__title">Dépôt de garantie</span>
                     <span className="log__note">
-                      Encaissé pour le compte du bailleur
+                      À régler selon les modalités convenues avec le bailleur
                     </span>
-                  </div>
-                </div>
-                <div className="log__entry">
-                  <span className="log__date">Puis</span>
-                  <div>
-                    <span className="log__title">Reversement au propriétaire</span>
-                    <span className="log__note">Sous 5 jours ouvrés</span>
                   </div>
                 </div>
                 <div className="log__entry">

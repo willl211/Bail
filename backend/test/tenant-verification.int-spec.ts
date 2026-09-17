@@ -1,5 +1,6 @@
 import { jest } from '@jest/globals';
 import request from 'supertest';
+import { testPdf } from './file-fixtures';
 import { DocumentStatus, DocumentType, TenantFileStatus, UserRole } from '@prisma/client';
 import { createHarness, resetDatabase, sessionCookie, type Harness } from './harness';
 import { createProperty, createUser, createVerifiedFile, TEST_PASSWORD } from './fixtures';
@@ -249,7 +250,9 @@ describe('Dossier locataire : versions, contrôles et confidentialité', () => {
 
   it('n’écrase pas une invalidation par le retour tardif du prestataire', async () => {
     const { file, tenantCookie } = await ready();
-    await h.prisma.tenantDocument.deleteMany({ where: { tenantFileId: file.id, type: 'EMPLOYMENT_CONTRACT' } });
+    await h.prisma.tenantDocument.deleteMany({
+      where: { tenantFileId: file.id, type: 'EMPLOYMENT_CONTRACT' },
+    });
     let release!: (outcome: VerificationOutcome) => void;
     let entered!: () => void;
     const started = new Promise<void>((resolve) => {
@@ -267,7 +270,7 @@ describe('Dossier locataire : versions, contrôles et confidentialité', () => {
       .post('/api/v1/tenant/file/documents')
       .set('Cookie', tenantCookie)
       .field('type', 'EMPLOYMENT_CONTRACT')
-      .attach('file', Buffer.from('%PDF-1.4\nDocument de test'), {
+      .attach('file', await testPdf(), {
         filename: 'bulletin.pdf',
         contentType: 'application/pdf',
       })
@@ -374,7 +377,7 @@ describe('Dossier locataire : versions, contrôles et confidentialité', () => {
       .post('/api/v1/tenant/file/documents')
       .set('Cookie', tenantCookie)
       .field('type', 'PAYSLIP')
-      .attach('file', Buffer.from('%PDF-1.4\nDocument de test'), {
+      .attach('file', await testPdf(), {
         filename: 'lecture.pdf',
         contentType: 'application/pdf',
       })

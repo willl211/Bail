@@ -32,7 +32,7 @@ async function toFailure(response: Response): Promise<FeesFailure> {
 
 export async function startFeePayment(
   reference: string,
-): Promise<{ clientSecret: string | null; view: FeesView }> {
+): Promise<{ checkoutUrl: string; view: FeesView }> {
   let response: Response;
   try {
     response = await fetch(
@@ -44,5 +44,5 @@ export async function startFeePayment(
   }
 
   if (!response.ok) throw await toFailure(response);
-  return (await response.json()) as { clientSecret: string | null; view: FeesView };
+  return (await response.json()) as { checkoutUrl: string; view: FeesView };
 }

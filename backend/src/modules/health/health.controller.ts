@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { Public } from '../auth/session.guard';
@@ -21,6 +21,7 @@ export class HealthController {
       database = 'down';
     }
 
+    if (database === 'down') throw new ServiceUnavailableException('Base de données indisponible.');
     return {
       status: database === 'up' ? 'ok' : 'degraded',
       environment: this.config.get('appEnv'),

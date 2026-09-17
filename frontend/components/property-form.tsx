@@ -55,6 +55,12 @@ interface FormState {
   furnished: boolean;
   energyRating: string;
   gesRating: string;
+  constructionYear: string;
+  electricalDiagnostic: 'UNKNOWN' | 'REQUIRED' | 'NOT_REQUIRED';
+  gasDiagnostic: 'UNKNOWN' | 'REQUIRED' | 'NOT_REQUIRED';
+  riskDiagnostic: 'UNKNOWN' | 'REQUIRED' | 'NOT_REQUIRED';
+  noiseDiagnostic: 'UNKNOWN' | 'REQUIRED' | 'NOT_REQUIRED';
+
   availableFrom: string;
   description: string;
   guarantorRequirement: string;
@@ -75,6 +81,12 @@ function initialState(property: OwnerPropertyDetail | null, districts: District[
     furnished: property?.furnished ?? false,
     energyRating: property?.energyRating ?? '',
     gesRating: property?.gesRating ?? '',
+    constructionYear: property?.constructionYear ? String(property.constructionYear) : '',
+    electricalDiagnostic: property?.electricalDiagnostic ?? 'UNKNOWN',
+    gasDiagnostic: property?.gasDiagnostic ?? 'UNKNOWN',
+    riskDiagnostic: property?.riskDiagnostic ?? 'UNKNOWN',
+    noiseDiagnostic: property?.noiseDiagnostic ?? 'UNKNOWN',
+
     // L'input date attend `AAAA-MM-JJ` ; l'API renvoie un ISO complet.
     availableFrom: property?.availableFrom ? property.availableFrom.slice(0, 10) : '',
     description: property?.description ?? '',
@@ -146,6 +158,11 @@ export function PropertyForm({
     furnished: form.furnished,
     ...(form.energyRating ? { energyRating: form.energyRating } : {}),
     ...(form.gesRating ? { gesRating: form.gesRating } : {}),
+    ...(toNumber(form.constructionYear) !== undefined ? { constructionYear: toNumber(form.constructionYear) } : {}),
+    electricalDiagnostic: form.electricalDiagnostic,
+    gasDiagnostic: form.gasDiagnostic,
+    riskDiagnostic: form.riskDiagnostic,
+    noiseDiagnostic: form.noiseDiagnostic,
     availableFrom: form.availableFrom,
     guarantorRequirement: form.guarantorRequirement,
     acceptedContractTypes: form.acceptedContractTypes,
@@ -196,7 +213,7 @@ export function PropertyForm({
   };
 
   return (
-    <div className="split mt-24">
+    <div className="split property-form mt-24">
       <div>
         <h2 className="h mb-12">Le bien</h2>
         <div className="panel" style={{ padding: '19px 20px' }}>
@@ -398,6 +415,46 @@ export function PropertyForm({
             </label>
           </div>
 
+          <div className="form form--2 mt-16">
+            <label className="field">
+              <span className="label label--ink">Année de construction</span>
+              <input className="field__box" type="number" min={1700} max={2100} value={form.constructionYear} onChange={set('constructionYear')} disabled={readOnly} />
+              <span className="field__hint">Avant 1949 : un constat plomb est nécessaire.</span>
+            </label>
+            <label className="field form__full">
+              <span className="label label--ink">Installation électrique de plus de 15 ans</span>
+              <select className="field__box" value={form.electricalDiagnostic} onChange={set('electricalDiagnostic')} disabled={readOnly}>
+                <option value="UNKNOWN">À vérifier</option>
+                <option value="REQUIRED">Oui : diagnostic à fournir</option>
+                <option value="NOT_REQUIRED">Non : installation de 15 ans ou moins</option>
+              </select>
+            </label>
+            <label className="field form__full">
+              <span className="label label--ink">Installation de gaz de plus de 15 ans</span>
+              <select className="field__box" value={form.gasDiagnostic} onChange={set('gasDiagnostic')} disabled={readOnly}>
+                <option value="UNKNOWN">À vérifier</option>
+                <option value="REQUIRED">Oui : diagnostic à fournir</option>
+                <option value="NOT_REQUIRED">Non : pas de gaz ou installation de 15 ans ou moins</option>
+              </select>
+            </label>
+            <label className="field form__full">
+              <span className="label label--ink">Logement situé dans une zone à risques</span>
+              <select className="field__box" value={form.riskDiagnostic} onChange={set('riskDiagnostic')} disabled={readOnly}>
+                <option value="UNKNOWN">À vérifier</option>
+                <option value="REQUIRED">Oui : diagnostic à fournir</option>
+                <option value="NOT_REQUIRED">Non : vérifié sur Géorisques</option>
+              </select>
+            </label>
+            <label className="field form__full">
+              <span className="label label--ink">Zone de bruit des aéroports</span>
+              <select className="field__box" value={form.noiseDiagnostic} onChange={set('noiseDiagnostic')} disabled={readOnly}>
+                <option value="UNKNOWN">À vérifier</option>
+                <option value="REQUIRED">Oui : diagnostic à fournir</option>
+                <option value="NOT_REQUIRED">Non : hors du plan d’exposition au bruit</option>
+              </select>
+            </label>
+          </div>
+          <p className="p-sm mt-16">Pour le circuit standard de location en métropole, whoma demande les diagnostics applicables avant diffusion. Les situations particulières et exemptions doivent être examinées avec l’équipe. Vérifiez les risques sur <a className="link" href="https://www.georisques.gouv.fr/" target="_blank" rel="noreferrer">Géorisques</a> et le bruit auprès de la mairie.</p>
           <p className="p-sm mt-16">
             La classe affichée sur l’annonce est saisie ici ; le fichier du diagnostic
             se dépose ci-dessous. Les deux sont nécessaires : l’agent qui contrôle
@@ -408,6 +465,14 @@ export function PropertyForm({
         <div className="mt-16">
           <DiagnosticsUploader
             reference={reference}
+            requiredTypes={[
+              'DPE',
+              ...(Number(form.constructionYear) > 0 && Number(form.constructionYear) < 1949 ? ['LEAD'] : []),
+              ...(form.electricalDiagnostic === 'REQUIRED' ? ['ELECTRICAL'] : []),
+              ...(form.gasDiagnostic === 'REQUIRED' ? ['GAS'] : []),
+              ...(form.riskDiagnostic === 'REQUIRED' ? ['ERP'] : []),
+              ...(form.noiseDiagnostic === 'REQUIRED' ? ['NOISE'] : []),
+            ]}
             documents={property?.documents ?? []}
             readOnly={readOnly}
           />

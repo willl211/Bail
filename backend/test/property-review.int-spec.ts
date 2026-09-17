@@ -1,4 +1,5 @@
 import request from 'supertest';
+import { testPdf } from './file-fixtures';
 import { PropertyStatus, UserRole } from '@prisma/client';
 import { createHarness, resetDatabase, sessionCookie, type Harness } from './harness';
 import { createProperty, createUser, TEST_PASSWORD } from './fixtures';
@@ -23,12 +24,13 @@ describe('Contrôle des diagnostics par les agents', () => {
     const ownerCookie = await login(owner.email);
     const agentCookie = await login(agent.email);
     const property = await createProperty(h.prisma, owner.id, { status: PropertyStatus.DRAFT });
+    const pdf = await testPdf();
     const upload = (name = 'dpe.pdf') =>
       api()
         .post(`/api/v1/owner/properties/${property.reference}/documents`)
         .set('Cookie', ownerCookie)
         .field('type', 'DPE')
-        .attach('file', Buffer.from('%PDF-1.4\nDiagnostic test'), {
+        .attach('file', pdf, {
           filename: name,
           contentType: 'application/pdf',
         });
@@ -135,6 +137,8 @@ describe('Contrôle des diagnostics par les agents', () => {
   it.each([
     ['dates absentes', { decision: 'VERIFY', energyRating: 'C' }],
     ['date inexistante', { ...valid, issuedAt: '2026-02-30' }],
+    ['ancien DPE prolongé', { ...valid, issuedAt: '2021-06-30' }],
+    ['durée DPE excessive', { ...valid, expiresAt: '2040-01-01' }],
     ['réalisation future', { ...valid, issuedAt: '2099-01-01' }],
     ['DPE expiré', { ...valid, expiresAt: '2020-01-01' }],
     ['classe différente', { ...valid, energyRating: 'D' }],
@@ -162,6 +166,12 @@ describe('Contrôle des diagnostics par les agents', () => {
     const response = await c.review();
     expect(response.status).toBe(400);
     expect(response.body.message).toContain('Fichier indisponible');
+  });
+
+  it('permet de reprendre une ancienne validation sans dates', async () => {
+    const c = await ready();
+    await h.prisma.propertyDocument.update({ where: { id: c.document.id }, data: { status: 'VERIFIED', issuedAt: null, expiresAt: null } });
+    expect((await c.review()).status).toBe(200);
   });
 
   it('conserve le refus après remplacement et remet les dates et la validation à zéro', async () => {

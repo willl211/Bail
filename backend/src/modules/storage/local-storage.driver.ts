@@ -81,11 +81,11 @@ export class LocalStorageDriver implements StorageDriver {
 
   async delete(scope: StorageScope, key: string): Promise<void> {
     const target = this.resolveWithinRoot(scope, key);
-    if (!target) return;
+    if (!target) throw new Error('Clé de stockage invalide.');
     try {
       await unlink(target);
-    } catch {
-      // Fichier déjà supprimé, ou jamais écrit : rien à faire.
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
   }
 

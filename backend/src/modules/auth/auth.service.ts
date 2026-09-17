@@ -22,6 +22,8 @@ export interface PublicUser {
    */
   emailVerified: boolean;
   createdAt: string;
+  mfaRequired?: boolean;
+  mfaEnrolled?: boolean;
 }
 
 export interface SessionResult {
@@ -74,7 +76,8 @@ export class AuthService {
     // Le cookie porte un secret aléatoire ; la base ne garde que son empreinte
     // (voir `tokens.ts`).
     const token = newSecret();
-    const expiresAt = new Date(Date.now() + this.ttlMs);
+    const requiresMfa = user.role === UserRole.AGENT && this.config.get<boolean>('auth.adminMfaRequired', true);
+    const expiresAt = new Date(Date.now() + (requiresMfa ? 10 * 60_000 : this.ttlMs));
 
     await this.prisma.session.create({
       data: {
@@ -91,7 +94,8 @@ export class AuthService {
       data: { lastLoginAt: new Date() },
     });
 
-    return { user: toPublicUser(user), token, expiresAt };
+    return { user: { ...toPublicUser(user), mfaRequired: requiresMfa,
+      mfaEnrolled: !!(await this.prisma.mfaCredential.findUnique({ where: { userId: user.id } }))?.enabledAt }, token, expiresAt };
   }
 
   async register(dto: RegisterDto, context: SessionContext): Promise<SessionResult> {
@@ -162,7 +166,10 @@ export class AuthService {
       });
     }
 
-    return toPublicUser(session.user);
+    const enforced = session.user.role === UserRole.AGENT && this.config.get<boolean>('auth.adminMfaRequired', true);
+    if (enforced && !session.mfaVerifiedAt && session.createdAt.getTime() < Date.now() - 10 * 60_000) return null;
+    const credential = enforced ? await this.prisma.mfaCredential.findUnique({ where: { userId: session.userId } }) : null;
+    return { ...toPublicUser(session.user), mfaRequired: enforced && (!session.mfaVerifiedAt || !credential?.enabledAt), mfaEnrolled: !!credential?.enabledAt };
   }
 
   /** Révoque la session portée par ce secret. Idempotent. */

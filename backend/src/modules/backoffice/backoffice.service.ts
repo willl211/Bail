@@ -1,3 +1,5 @@
+import { LIVE_VISIT, overlaps } from '../visits/visit.policy';
+import { diagnosticDateError, DIAGNOSTIC_QUESTIONS } from '../owner/diagnostic-policy';
 import {
   BadRequestException,
   ConflictException,
@@ -17,7 +19,7 @@ import {
   VisitStatus,
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { publicationChecks, diagnosticStatus } from '../owner/property.checks';
+import { publicationChecks, diagnosticStatus, isCurrentDiagnostic } from '../owner/property.checks';
 import {
   advancePropertyRevision,
   recordPropertyEvent,
@@ -105,6 +107,7 @@ export interface AdminFileRow {
 }
 
 export interface AdminPropertyRow {
+  diagnosticContext: string[];
   reference: string;
   revision: number;
   addressLine: string;
@@ -554,7 +557,7 @@ export class BackofficeService {
     const verified = dto.decision === 'VERIFY';
     if (!verified && !dto.reason?.trim())
       throw new BadRequestException('Un refus doit être motivé.');
-    if (verified && document.status === DocumentStatus.VERIFIED)
+    if (verified && isCurrentDiagnostic(document))
       throw new ConflictException('Ce diagnostic est déjà vérifié.');
 
     const date = (value: string | undefined) => {
@@ -568,7 +571,11 @@ export class BackofficeService {
     // Une date de fin inclut la journée indiquée. Aucun délai légal n'est deviné.
     const expiryDay = date(dto.expiresAt);
     const expiresAt = expiryDay ? new Date(expiryDay.getTime() + 86_400_000 - 1) : null;
+    const leadNoRisk = dto.leadResult === 'BELOW_THRESHOLD';
     if (verified) {
+      const dateError = diagnosticDateError(document.type, issuedAt, expiresAt, leadNoRisk);
+      if (dateError) throw new BadRequestException(dateError);
+      if (document.type === 'LEAD' && !dto.leadResult) throw new BadRequestException('Confirmez le résultat du CREP.');
       if (document.type === 'DPE' && (!issuedAt || !expiresAt))
         throw new BadRequestException(
           'Renseignez les dates de réalisation et de fin de validité du DPE.',
@@ -596,6 +603,7 @@ export class BackofficeService {
               verifiedAt: new Date(),
               issuedAt,
               expiresAt,
+              leadNoRisk,
               rejectionReason: null,
               verificationNote: 'Contrôle manuel par un agent whoma',
             }
@@ -618,6 +626,7 @@ export class BackofficeService {
           addressLine: property.addressLine,
           energyRating: property.energyRating,
           surfaceM2: property.surfaceM2,
+          leadNoRisk,
           issuedAt: issuedAt?.toISOString() ?? null,
           expiresAt: expiresAt?.toISOString() ?? null,
         },
@@ -644,6 +653,10 @@ export class BackofficeService {
     return properties.map((property) => ({
       reference: property.reference,
       revision: property.reviewRevision,
+      diagnosticContext: [
+        `Construction : ${property.constructionYear ?? 'année à renseigner'}`,
+        ...Object.entries(DIAGNOSTIC_QUESTIONS).map(([key, rule]) => `${rule.label} : ${property[key as keyof typeof DIAGNOSTIC_QUESTIONS] === 'REQUIRED' ? 'oui' : property[key as keyof typeof DIAGNOSTIC_QUESTIONS] === 'NOT_REQUIRED' ? 'non déclaré par le propriétaire' : 'à vérifier'}`),
+      ],
       addressLine: property.addressLine,
       energyRating: property.energyRating,
       reviewNote: property.reviewNote,
@@ -709,10 +722,12 @@ export class BackofficeService {
       }
 
       await this.prisma.$transaction(async (tx) => {
+        await this.subscriptions.assertPublicationAllowed(tx, property.ownerId);
         const revision = await advancePropertyRevision(tx, property, {
           status: PropertyStatus.ONLINE,
           publishedAt: new Date(),
           reviewNote: null,
+          publicationBillingSyncPending: true,
         });
         await recordPropertyEvent(tx, property.id, revision, actor, {
           action: 'PROPERTY_PUBLISHED',
@@ -827,20 +842,32 @@ export class BackofficeService {
 
   /** Affecte un agent à une visite — sans quoi personne n'ouvre le logement. */
   async assignVisit(visitId: string, agentId: string): Promise<AdminVisitRow[]> {
-    const [visit, agent] = await Promise.all([
-      this.prisma.visit.findUnique({ where: { id: visitId }, select: { id: true, status: true } }),
-      this.prisma.user.findFirst({
-        where: { id: agentId, role: UserRole.AGENT },
-        select: { id: true },
-      }),
-    ]);
-    if (!visit) throw new NotFoundException('Visite introuvable.');
-    if (!agent) throw new BadRequestException('Cet agent n’existe pas.');
-    if (visit.status === VisitStatus.CANCELLED || visit.status === VisitStatus.COMPLETED) {
-      throw new ConflictException('Cette visite est close.');
-    }
-
-    await this.prisma.visit.update({ where: { id: visit.id }, data: { agentId: agent.id } });
+    const target = await this.prisma.visit.findUnique({ where: { id: visitId }, select: { propertyId: true } });
+    if (!target) throw new NotFoundException('Visite introuvable.');
+    await this.prisma.$transaction(async tx => {
+      await tx.$executeRaw`SELECT "id" FROM "properties" WHERE "id" = ${target.propertyId} FOR UPDATE`;
+      await tx.$executeRaw`SELECT "id" FROM "users" WHERE "id" = ${agentId} FOR UPDATE`;
+      await tx.$executeRaw`SELECT "id" FROM "visits" WHERE "id" = ${visitId} FOR UPDATE`;
+      const agent = await tx.user.findFirst({ where: { id: agentId, role: UserRole.AGENT, isActive: true } });
+      const visit = await tx.visit.findUnique({ where: { id: visitId } });
+      if (!agent) throw new BadRequestException('Cet agent est indisponible.');
+      if (!visit) throw new NotFoundException('Visite introuvable.');
+      if (!LIVE_VISIT.includes(visit.status) || visit.scheduledAt.getTime() <= Date.now()) throw new ConflictException('Cette visite est close ou déjà commencée.');
+      if (visit.agentId === agentId) return;
+      const occupied = await tx.visit.findMany({ where: { agentId, id: { not: visitId }, status: { in: LIVE_VISIT } } });
+      if (occupied.some(v => overlaps({ startsAt: v.scheduledAt, durationMinutes: v.durationMinutes }, { startsAt: visit.scheduledAt, durationMinutes: visit.durationMinutes }))) {
+        throw new ConflictException('Cet agent accompagne déjà une visite à cet horaire.');
+      }
+      const updated = await tx.visit.update({ where: { id: visitId }, data: { agentId } });
+      if (visit.agentId) {
+        await this.mail.enqueueInTransaction(tx, { template: EVENT.visitUnassigned, userId: visit.agentId, subjectRef: visitId,
+          dedupeKey: 'visit-unassigned:' + visitId + ':' + updated.updatedAt.toISOString() + ':' + visit.agentId });
+      }
+      for (const userId of [agentId, visit.tenantId]) {
+        await this.mail.enqueueInTransaction(tx, { template: EVENT.visitAssigned, userId, subjectRef: visitId,
+          dedupeKey: 'visit-assigned:' + visitId + ':' + updated.updatedAt.toISOString() + ':' + userId });
+      }
+    });
     return this.listVisits();
   }
 

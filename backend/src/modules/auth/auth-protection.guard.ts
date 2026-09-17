@@ -17,7 +17,7 @@ import { AuthRateLimitService, type AuthQuota } from './auth-rate-limit.service'
 import type { RequestWithUser } from './session.guard';
 
 type AuthAction =
-  'login' | 'register' | 'recovery' | 'verification' | 'credential' | 'token' | 'logout';
+  'login' | 'register' | 'recovery' | 'verification' | 'credential' | 'token' | 'logout' | 'mfa';
 const AUTH_ACTION = 'auth:action';
 export const AuthThrottle = (action: AuthAction) => SetMetadata(AUTH_ACTION, action);
 
@@ -99,11 +99,11 @@ export class AuthProtectionGuard implements CanActivate {
         windowSeconds: 900,
       });
     }
-    if (request.currentUser && (action === 'credential' || action === 'verification')) {
+    if (request.currentUser && (action === 'credential' || action === 'verification' || action === 'mfa')) {
       quotas.push({
         scope: `${action}:user`,
         subject: request.currentUser.id,
-        limit: action === 'credential' ? 5 : 3,
+        limit: action === 'mfa' ? 8 : action === 'credential' ? 5 : 3,
         windowSeconds: 900,
       });
     }

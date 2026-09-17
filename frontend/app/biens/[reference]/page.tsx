@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { PhotoPlaceholder } from '@/components/photo-placeholder';
+import { OwnerPropertyPhoto } from '@/components/owner-property-photo';
 import { SaveButton } from '@/components/save-button';
-import { ApiError, getCurrentUser, getSavedReferences, getMarketSnapshot, getProperty } from '@/lib/api';
+import { ApiError, getCurrentUser, getSavedReferences, getProperty } from '@/lib/api';
 import * as fmt from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
@@ -37,16 +37,12 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 
 export default async function PropertyPage({ params, searchParams }: Params) {
   const [{ reference }, query] = await Promise.all([params, searchParams]);
-  const [property, market, user, savedReferences] = await Promise.all([
+  const [property, user, savedReferences] = await Promise.all([
     loadProperty(reference),
-    getMarketSnapshot().catch(() => null),
     getCurrentUser(),
     getSavedReferences(),
   ]);
   const saved = savedReferences.includes(reference);
-
-  const responseDelay =
-    market?.metrics.find((metric) => metric.key === 'averageResponseDelay')?.value ?? null;
 
   const visiting = property.status === 'VISITS_IN_PROGRESS';
   const fees = property.tenantFees;
@@ -85,7 +81,7 @@ export default async function PropertyPage({ params, searchParams }: Params) {
       ? {
           key: 'Revenus nets mensuels minimum',
           value: fmt.euros(property.ownerCriteria.minMonthlyIncomeCents),
-          tag: '3 × le loyer',
+          tag: 'Critère du propriétaire',
         }
       : null,
     {
@@ -115,12 +111,15 @@ export default async function PropertyPage({ params, searchParams }: Params) {
 
       <div className="listing__gallery anim-rise">
         {property.photos.map((photo, index) => (
-          <PhotoPlaceholder
+          <OwnerPropertyPhoto
             key={`${photo.storageKey}-${index}`}
-            label={`${String(index + 1).padStart(2, '0')} · ${photo.label}`}
-            scale={index === 0}
+            src={photo.url}
+            title={`${property.title} · ${photo.label}`}
+            emptyLabel="Photo indisponible"
+            className="photo listing__photo"
           />
         ))}
+        {property.photos.length === 0 ? <OwnerPropertyPhoto src={null} title={property.title} emptyLabel="Photos à venir" className="photo listing__photo" /> : null}
       </div>
 
       <div className="listing__columns">
@@ -230,25 +229,12 @@ export default async function PropertyPage({ params, searchParams }: Params) {
                   autoSave={query.sauvegarder === '1'}
                 />
               </div>
-              {responseDelay ? (
-                <p className="booking__response">Réponse moyenne sous {responseDelay}</p>
-              ) : null}
-
               <hr className="rule mt-20 mb-12" />
 
-              <span className="label label--ink">Prendre rendez-vous de visite</span>
-              <div className="mt-10">
-                <Link href="/dossier" className="slot">
-                  <span>Visite accompagnée</span>
-                  <span className="slot__type">Sur place</span>
-                </Link>
-                <Link href="/dossier" className="slot">
-                  <span>Visite en visio</span>
-                  <span className="slot__type">En direct</span>
-                </Link>
-              </div>
+              <span className="label label--ink">Visite accompagnée</span>
               <p className="p-sm mt-10">
-                Vérification d’identité requise avant le rendez-vous.
+                Après acceptation de la candidature, les créneaux disponibles sont proposés
+                dans le parcours de visite. Le dossier doit être validé avant le rendez-vous.
               </p>
             </div>
           </div>

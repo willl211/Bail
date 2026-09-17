@@ -31,7 +31,7 @@ it('demande la lecture, les dates et la classe du DPE avant de transmettre la d�
   const validate = screen.getByRole('button', { name: 'Valider cette pièce' });
   expect(validate).toBeDisabled();
   fireEvent.change(screen.getByLabelText(/Réalisé le/), { target: { value: '2026-01-10' } });
-  fireEvent.change(screen.getByLabelText(/Valable jusqu/), { target: { value: '2030-01-10' } });
+  fireEvent.change(screen.getByLabelText(/Dernier jour de validité/), { target: { value: '2030-01-10' } });
   await userEvent.selectOptions(screen.getByLabelText(/Classe lue/), 'C');
   expect(validate).toBeEnabled();
   await userEvent.click(validate);

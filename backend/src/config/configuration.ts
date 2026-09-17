@@ -41,6 +41,8 @@ export default () => ({
    * bulletins de salaire.
    */
   auth: {
+    adminMfaRequired: !(process.env.NODE_ENV === 'test' && process.env.ADMIN_MFA_REQUIRED === 'false'),
+    mfaEncryptionKey: process.env.MFA_ENCRYPTION_KEY,
     /** Nom du cookie de session. */
     cookieName: process.env.SESSION_COOKIE_NAME ?? 'bail_session',
     /** Durée de vie d'une session, en jours. */
@@ -139,10 +141,12 @@ export default () => ({
         userId: process.env.DOCUSIGN_USER_ID,
         accountId: process.env.DOCUSIGN_ACCOUNT_ID,
         privateKey: process.env.DOCUSIGN_PRIVATE_KEY,
+        hmacSecret: process.env.DOCUSIGN_HMAC_SECRET,
       },
     },
     payment: {
       driver: process.env.PAYMENT_DRIVER ?? 'mock',
+      returnOrigin: process.env.PAYMENT_RETURN_ORIGIN ?? 'http://localhost:3000',
       stripe: {
         secretKey: process.env.STRIPE_SECRET_KEY,
         webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,

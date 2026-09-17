@@ -320,7 +320,7 @@ export function CandidacyScreen({
               <p className="p-sm">Aucune candidature envoyée pour l’instant.</p>
             </div>
           ) : (
-            <div className="tbl__scroll">
+            <div className="tbl__scroll" tabIndex={0} role="region" aria-label="Candidatures — tableau à défilement horizontal">
               <table className="tbl">
                 <thead>
                   <tr>

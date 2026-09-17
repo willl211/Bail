@@ -1,3 +1,4 @@
+import { visiblePropertyWhere } from '../properties/property-visibility';
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma, PropertyStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -27,12 +28,6 @@ export interface SavedPropertyItem {
   available: boolean;
   savedAt: string;
 }
-
-/** Statuts pour lesquels une candidature est encore possible. */
-const OPEN_STATUSES: PropertyStatus[] = [
-  PropertyStatus.ONLINE,
-  PropertyStatus.VISITS_IN_PROGRESS,
-];
 
 @Injectable()
 export class SavedService {
@@ -125,6 +120,9 @@ export class SavedService {
       },
     });
 
+    const visible = new Set((await this.prisma.property.findMany({
+      where: { id: { in: rows.map((row) => row.propertyId) }, ...visiblePropertyWhere() }, select: { id: true },
+    })).map((property) => property.id));
     return rows.map(({ property, createdAt }) => ({
       reference: property.reference,
       title: property.title,
@@ -138,7 +136,7 @@ export class SavedService {
         ? this.storage.publicUrl('public', property.photos[0].storageKey)
         : null,
       status: property.status,
-      available: OPEN_STATUSES.includes(property.status),
+      available: visible.has(property.id),
       savedAt: createdAt.toISOString(),
     }));
   }

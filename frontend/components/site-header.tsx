@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { ScrollProgress } from './scroll-progress';
 import { LogoutButton } from './logout-button';
+import { SiteNavigation } from './site-navigation';
 import { getCurrentUser, type CurrentUser } from '@/lib/api';
 
 interface NavLink {
@@ -58,7 +59,7 @@ function profileFor(user: CurrentUser | null): Profile {
 
   if (user.role === 'AGENT') {
     return {
-      links: [{ label: 'Registre', href: '/back-office' }],
+      links: [{ label: 'Registre', href: '/back-office' }, { label: 'Exploitation', href: '/back-office/exploitation' }],
       account: { ...account, href: '/back-office' },
       internal: true,
     };
@@ -89,7 +90,7 @@ export async function SiteHeader() {
           )}
         </Link>
 
-        <nav className="site-header__nav">
+        <SiteNavigation>
           {profile.links.map((link) => (
             <Link key={link.href + link.label} href={link.href} className="site-header__link">
               {link.label}
@@ -114,8 +115,8 @@ export async function SiteHeader() {
               <span className="site-header__account-name">{profile.account.name}</span>
             </Link>
           ) : null}
-          {profile.internal ? <span className="site-header__logout"><LogoutButton /></span> : null}
-        </nav>
+          {profile.account ? <span className="site-header__logout"><LogoutButton /></span> : null}
+        </SiteNavigation>
       </div>
       <ScrollProgress />
     </header>

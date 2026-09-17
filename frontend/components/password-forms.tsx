@@ -48,7 +48,7 @@ export function ForgotPasswordForm() {
           l’orthographe de l’adresse.
         </p>
         <div className="flex gap-12 wrap mt-20">
-          <Link href="/dossier" className="btn btn--ghost">
+          <Link href="/connexion" className="btn btn--ghost">
             Retour à la connexion
           </Link>
         </div>
@@ -88,7 +88,7 @@ export function ForgotPasswordForm() {
           <button type="submit" className="btn" disabled={pending}>
             {pending ? 'Envoi…' : 'M’envoyer un lien'}
           </button>
-          <Link href="/dossier" className="link">
+          <Link href="/connexion" className="link">
             Je me souviens de mon mot de passe
           </Link>
         </div>

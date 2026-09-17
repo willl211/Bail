@@ -58,7 +58,7 @@ export function EmailConfirmation({ token }: { token: string | null }) {
   };
 
   return (
-    <div className="page page--narrow">
+    <main className="page page--narrow">
       <div className="panel panel--strong pad-lg">
         {state.step === 'pending' ? (
           <>
@@ -131,6 +131,6 @@ export function EmailConfirmation({ token }: { token: string | null }) {
           </>
         ) : null}
       </div>
-    </div>
+    </main>
   );
 }

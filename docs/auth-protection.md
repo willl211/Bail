@@ -86,9 +86,10 @@ Les quotas s'appliquent aussi aux adresses inconnues et la connexion renvoie
 la même erreur pour un mot de passe incorrect ou un compte désactivé. Un cookie
 JSON inattendu n'entraîne plus d'erreur serveur.
 
-Cette protection ne constitue pas une protection DDoS réseau et n'ajoute pas de
-double authentification. L'accès interne pourra être renforcé par une MFA avec
-un parcours d'enrôlement et de récupération dédié. Les limites par compte
+Cette protection ne constitue pas une protection DDoS réseau. Depuis l’étape 7,
+l’accès interne impose aussi une MFA TOTP avec enrôlement et codes de secours ;
+voir [la configuration et les limites de récupération](operations.md).
+Les limites par compte
 peuvent temporairement gêner un utilisateur ciblé ; elles expirent et la
 récupération de mot de passe dispose d'un quota distinct.
 

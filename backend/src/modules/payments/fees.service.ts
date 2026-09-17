@@ -3,19 +3,16 @@ import {
   ConflictException,
   Inject,
   Injectable,
-  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import {
-  FundsStatus,
   LeaseStatus,
-  PaymentMethod,
   PaymentStatus,
   PaymentType,
-  Prisma,
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PAYMENT_DRIVER, type PaymentDriver } from './payment.driver';
+import { CheckoutService } from './checkout.service';
 
 /**
  * Honoraires à la charge du locataire — écran 7 du build-order.
@@ -92,11 +89,10 @@ export interface FeesView {
 
 @Injectable()
 export class FeesService {
-  private readonly logger = new Logger(FeesService.name);
-
   constructor(
     private readonly prisma: PrismaService,
     @Inject(PAYMENT_DRIVER) private readonly payment: PaymentDriver,
+    private readonly checkout: CheckoutService,
   ) {}
 
   private async readSetting(key: string, fallback: number): Promise<number> {
@@ -120,7 +116,7 @@ export class FeesService {
   async getFees(reference: string, tenantId: string): Promise<FeesView> {
     const lease = await this.leaseOf(reference, tenantId);
 
-    const [feeSchedule, agencyPerSqm, payment] = await Promise.all([
+    const [activeSchedule, agencyPerSqm, payment] = await Promise.all([
       this.prisma.feeSchedule.findFirst({
         where: { isActive: true },
         orderBy: { effectiveFrom: 'desc' },
@@ -129,16 +125,20 @@ export class FeesService {
       this.prisma.payment.findFirst({
         where: { leaseId: lease.id, type: PaymentType.TENANT_FEE },
         orderBy: { createdAt: 'desc' },
+        include: { feeSchedule: true },
       }),
     ]);
 
-    const surface = lease.property.surfaceM2;
-    const draftingCents = feeSchedule
+    const frozen = payment && payment.status !== 'CANCELLED';
+    const feeSchedule = frozen ? payment.feeSchedule ?? activeSchedule : activeSchedule;
+    const snapshot = frozen ? payment.providerPayload as { surfaceM2?: number; draftingCents?: number; inventoryCents?: number } | null : null;
+    const surface = snapshot?.surfaceM2 ?? lease.property.surfaceM2;
+    const draftingCents = snapshot?.draftingCents ?? (feeSchedule
       ? Math.round(surface * feeSchedule.tenantVisitFeeCentsPerSqm)
-      : 0;
-    const inventoryCents = feeSchedule
+      : 0);
+    const inventoryCents = snapshot?.inventoryCents ?? (feeSchedule
       ? Math.round(surface * feeSchedule.tenantInventoryFeeCentsPerSqm)
-      : 0;
+      : 0);
     const totalCents = draftingCents + inventoryCents;
 
     const blockers: string[] = [];
@@ -229,17 +229,6 @@ export class FeesService {
     };
   }
 
-  private async nextReference(tx: Prisma.TransactionClient): Promise<string> {
-    const prefix = `HON-${new Date().getFullYear()}-`;
-    const last = await tx.payment.findFirst({
-      where: { reference: { startsWith: prefix } },
-      orderBy: { reference: 'desc' },
-      select: { reference: true },
-    });
-    const current = last ? parseInt(last.reference.slice(prefix.length), 10) : 0;
-    return `${prefix}${String(current + 1).padStart(4, '0')}`;
-  }
-
   /**
    * Ouvre le règlement des honoraires.
    *
@@ -252,7 +241,7 @@ export class FeesService {
   async startPayment(
     reference: string,
     tenantId: string,
-  ): Promise<{ clientSecret: string | null; view: FeesView }> {
+  ): Promise<{ checkoutUrl: string; view: FeesView }> {
     const view = await this.getFees(reference, tenantId);
 
     if (view.blockers.length > 0) {
@@ -266,46 +255,9 @@ export class FeesService {
       throw new ConflictException('Ces honoraires sont déjà réglés.');
     }
 
-    const lease = await this.leaseOf(reference, tenantId);
-    const feeSchedule = await this.prisma.feeSchedule.findFirst({
-      where: { isActive: true },
-      orderBy: { effectiveFrom: 'desc' },
-    });
-
-    const intent = await this.payment.createPaymentIntent({
-      amountCents: view.totalCents,
-      currency: 'EUR',
-      description: `whoma — honoraires locataire ${lease.reference}`,
-      metadata: { leaseReference: lease.reference },
-    });
-
-    await this.prisma.$transaction(async (tx) => {
-      await tx.payment.create({
-        data: {
-          reference: await this.nextReference(tx),
-          type: PaymentType.TENANT_FEE,
-          status: PaymentStatus.PENDING,
-          payerId: tenantId,
-          propertyId: lease.propertyId,
-          leaseId: lease.id,
-          applicationId: lease.applicationId,
-          amountCents: view.totalCents,
-          tenantShareCents: view.totalCents,
-          ownerShareCents: 0,
-          feeScheduleId: feeSchedule?.id ?? null,
-          method: PaymentMethod.CARD,
-          // Les honoraires sont encaissés pour compte propre : ils ne
-          // transitent pas vers le propriétaire, contrairement au dépôt de
-          // garantie et aux loyers (docs/legal-context.md).
-          fundsStatus: FundsStatus.NOT_APPLICABLE,
-          stripePaymentIntentId: intent.id,
-        },
-      });
-    });
-
-    this.logger.log(`Honoraires ouverts pour ${lease.reference} : ${intent.id}`);
+    const result = await this.checkout.startFees(reference, tenantId);
     return {
-      clientSecret: intent.clientSecret,
+      checkoutUrl: result.checkoutUrl,
       view: await this.getFees(reference, tenantId),
     };
   }

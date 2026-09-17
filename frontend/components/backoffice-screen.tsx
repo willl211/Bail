@@ -126,7 +126,7 @@ export function BackofficeScreen({
   ];
 
   return (
-    <div className="page" style={{ paddingBottom: 0 }}>
+    <main className="page" style={{ paddingBottom: 0 }}>
       <div className="page__head">
         <div>
           <span className="label label--accent">Back-office · agence whoma Metz</span>
@@ -228,7 +228,8 @@ export function BackofficeScreen({
       {pane === 'dossiers' ? (
         <div className="admin-file-review">
           <div>
-            <div className="tbl__scroll">
+            <p className="table-hint">Sélectionnez un dossier pour l’examiner. Sur petit écran, faites défiler le tableau horizontalement.</p>
+            <div className="tbl__scroll" tabIndex={0} role="region" aria-label="Liste des dossiers">
               <table className="tbl">
                 <thead>
                   <tr>
@@ -536,7 +537,7 @@ export function BackofficeScreen({
               <p className="p-sm">Aucun bail ouvert.</p>
             </div>
           ) : (
-            <div className="tbl__scroll">
+            <div className="tbl__scroll" tabIndex={0} role="region" aria-label="Baux et paiements — tableau à défilement horizontal">
               <table className="tbl">
                 <thead>
                   <tr>
@@ -576,11 +577,9 @@ export function BackofficeScreen({
           <div className="panel pad mt-16 wash">
             <span className="label label--accent">Circuit des fonds</span>
             <p className="p-sm mt-8">
-              La plateforme encaisse dépôts de garantie et premiers loyers pour le compte du
-              propriétaire — d’où le besoin d’une carte G en plus de la carte T. Chaque ligne suit
-              trois états successifs : <b className="mono">reçu</b>,{' '}
-              <b className="mono">à reverser</b>, <b className="mono">reversé</b>. Les honoraires,
-              eux, sont encaissés pour compte propre et ne transitent pas.
+              Le circuit des dépôts de garantie et des premiers loyers reste à finaliser.
+              Ces états de suivi ne confirment pas un virement bancaire. Les honoraires
+              suivent un paiement distinct, à confirmer par le prestataire.
             </p>
             <p className="field__hint mt-10">
               En attente de reversement : {fmt.euros(summary.pendingPayoutCents)}.
@@ -655,6 +654,6 @@ export function BackofficeScreen({
           </aside>
         </div>
       ) : null}
-    </div>
+    </main>
   );
 }

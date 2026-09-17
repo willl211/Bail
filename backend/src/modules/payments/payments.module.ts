@@ -8,6 +8,7 @@ import { FeesService } from './fees.service';
 import { SubscriptionService } from './subscription.service';
 import { SubscriptionController } from './subscription.controller';
 import { PaymentWebhookController } from './webhook.controller';
+import { CheckoutService } from './checkout.service';
 
 /**
  * Module de paiement.
@@ -25,6 +26,7 @@ import { PaymentWebhookController } from './webhook.controller';
 @Module({
   controllers: [SubscriptionController, PaymentWebhookController, FeesController],
   providers: [
+    CheckoutService,
     SubscriptionService,
     FeesService,
     {

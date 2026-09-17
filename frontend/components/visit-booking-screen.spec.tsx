@@ -3,11 +3,12 @@ import userEvent from '@testing-library/user-event';
 import { VisitBookingScreen } from './visit-booking-screen';
 import { routerMock } from '../test/setup-components';
 import type { VisitBookingView, VisitView } from '@/lib/api';
-import { bookVisit, cancelVisit } from '@/lib/visits-client';
+import { bookVisit, cancelVisit, getVisitBooking } from '@/lib/visits-client';
 
 jest.mock('@/lib/visits-client', () => ({
   bookVisit: jest.fn(),
   cancelVisit: jest.fn(),
+  getVisitBooking: jest.fn(),
 }));
 const mockBook = bookVisit as jest.MockedFunction<typeof bookVisit>;
 const mockCancel = cancelVisit as jest.MockedFunction<typeof cancelVisit>;
@@ -97,18 +98,24 @@ describe('VisitBookingScreen', () => {
     expect(routerMock.refresh).toHaveBeenCalled();
   });
 
-  it('n’offre que les deux types du MVP', () => {
+  it('ne propose pas la visio sans prestataire disponible', () => {
     // Pas de visite autonome par boîtier connecté : c'est un point tranché,
     // pas une option à réévaluer (CLAUDE.md règle 1).
     render(<VisitBookingScreen reference="MZ-0155" initial={view()} visits={[]} />);
 
     expect(screen.getByText('Visite accompagnée')).toBeInTheDocument();
-    expect(screen.getByText('Visite en visio')).toBeInTheDocument();
+    expect(screen.queryByText('Visite en visio')).not.toBeInTheDocument();
     expect(screen.queryByText(/autonome|boîtier|clé/i)).not.toBeInTheDocument();
   });
 
   it('désactive un créneau qui n’accepte pas le type choisi', async () => {
-    render(<VisitBookingScreen reference="MZ-0155" initial={view()} visits={[]} />);
+    render(
+      <VisitBookingScreen
+        reference="MZ-0155"
+        initial={view({ drivers: { video: 'test-provider', payment: 'mock' } })}
+        visits={[]}
+      />,
+    );
 
     // En visio, le créneau réservé à l'accompagnée devient inaccessible.
     await userEvent.click(screen.getByText('Visite en visio'));
@@ -120,7 +127,13 @@ describe('VisitBookingScreen', () => {
   it('relâche le créneau retenu si le type change', async () => {
     // Le créneau choisi peut ne pas accepter le nouveau type : le garder
     // ferait réserver un rendez-vous impossible.
-    render(<VisitBookingScreen reference="MZ-0155" initial={view()} visits={[]} />);
+    render(
+      <VisitBookingScreen
+        reference="MZ-0155"
+        initial={view({ drivers: { video: 'test-provider', payment: 'mock' } })}
+        visits={[]}
+      />,
+    );
 
     await userEvent.click(slot('16:00'));
     expect(confirm()).toBeEnabled();
@@ -173,17 +186,18 @@ describe('VisitBookingScreen', () => {
   describe('rendez-vous déjà pris', () => {
     it('permet de l’annuler dans le délai', async () => {
       mockCancel.mockResolvedValue([]);
+      (getVisitBooking as jest.MockedFunction<typeof getVisitBooking>).mockResolvedValue(view());
       render(
-        <VisitBookingScreen
-          reference="MZ-0155"
-          initial={view({ visit: visit() })}
-          visits={[]}
-        />,
+        <VisitBookingScreen reference="MZ-0155" initial={view({ visit: visit() })} visits={[]} />,
       );
 
       await userEvent.click(screen.getByRole('button', { name: /annuler le rendez-vous/i }));
 
       await waitFor(() => expect(mockCancel).toHaveBeenCalledWith('visite-1'));
+      await waitFor(() => expect(confirm()).toBeInTheDocument());
+      expect(
+        screen.queryByRole('button', { name: /annuler le rendez-vous/i }),
+      ).not.toBeInTheDocument();
     });
 
     it('renvoie vers Bail une fois le délai passé', () => {
@@ -222,11 +236,7 @@ describe('VisitBookingScreen', () => {
 
     it('ne rouvre pas le planning', () => {
       render(
-        <VisitBookingScreen
-          reference="MZ-0155"
-          initial={view({ visit: visit() })}
-          visits={[]}
-        />,
+        <VisitBookingScreen reference="MZ-0155" initial={view({ visit: visit() })} visits={[]} />,
       );
 
       expect(screen.queryByRole('button', { name: '16:00' })).not.toBeInTheDocument();

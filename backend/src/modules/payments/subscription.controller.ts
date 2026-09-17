@@ -15,6 +15,12 @@ import { SubscriptionService } from './subscription.service';
 export class SubscriptionController {
   constructor(private readonly subscriptions: SubscriptionService) {}
 
+  @Post('portal')
+  @HttpCode(200)
+  portal(@CurrentUser() user: PublicUser) {
+    return this.subscriptions.portal(user.id);
+  }
+
   @Get()
   overview(@CurrentUser() user: PublicUser) {
     return this.subscriptions.getOverview(user.id);

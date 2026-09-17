@@ -10,8 +10,8 @@ export default async function ResetPasswordPage({
 }) {
   const { jeton } = await searchParams;
   return (
-    <div className="page page--narrow">
+    <main className="page page--narrow">
       <ResetPasswordForm token={jeton ?? null} />
-    </div>
+    </main>
   );
 }

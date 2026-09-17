@@ -21,6 +21,7 @@ import { SignatureModule } from './modules/signature/signature.module';
 import { LeaseModule } from './modules/lease/lease.module';
 import { BackofficeModule } from './modules/backoffice/backoffice.module';
 import { SavedModule } from './modules/saved/saved.module';
+import { OperationsModule } from './modules/operations/operations.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { SavedModule } from './modules/saved/saved.module';
     LeaseModule,
     BackofficeModule,
     SavedModule,
+    OperationsModule,
   ],
 })
 export class AppModule {}

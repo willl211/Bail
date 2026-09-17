@@ -11,6 +11,8 @@ import { propertyChecks, type CheckableProperty } from './property.checks';
 function complete(overrides: Partial<CheckableProperty> = {}): CheckableProperty {
   return {
     energyRating: 'C',
+    constructionYear: 2005,
+    electricalDiagnostic: 'NOT_REQUIRED', gasDiagnostic: 'NOT_REQUIRED', riskDiagnostic: 'NOT_REQUIRED', noiseDiagnostic: 'NOT_REQUIRED',
     photos: new Array(6).fill({}),
     documents: [{ type: 'DPE' }],
     description:
@@ -112,6 +114,6 @@ describe('propertyChecks', () => {
       rentCents: 0,
     });
 
-    expect(blockers).toHaveLength(6);
+    expect(blockers).toHaveLength(11);
   });
 });

@@ -12,7 +12,7 @@ import type {
   VisitView,
 } from '@/lib/api';
 import * as fmt from '@/lib/format';
-import { bookVisit, cancelVisit, type VisitFailure } from '@/lib/visits-client';
+import { bookVisit, cancelVisit, getVisitBooking, type VisitFailure } from '@/lib/visits-client';
 
 const TYPES: {
   value: VisitType;
@@ -124,12 +124,11 @@ export function VisitBookingScreen({
     setError(null);
     try {
       await cancelVisit(view.visit.id);
+      setView(await getVisitBooking(reference));
       router.refresh();
-      // L'annulation renvoie la liste des visites, pas l'écran de réservation :
-      // on le recharge pour retrouver le créneau libéré.
-      window.location.reload();
     } catch (failure) {
       setError(failure as VisitFailure);
+    } finally {
       setPending(false);
     }
   };
@@ -141,9 +140,7 @@ export function VisitBookingScreen({
           <span className="label label--accent">
             Visite · {view.property.reference} · {view.property.addressLine}
           </span>
-          <h1 className="d3 mt-8">
-            {view.visit ? 'Votre rendez-vous' : 'Choisir un créneau'}
-          </h1>
+          <h1 className="d3 mt-8">{view.visit ? 'Votre rendez-vous' : 'Choisir un créneau'}</h1>
         </div>
         {view.applicationStatus === 'SHORTLISTED' ||
         view.applicationStatus === 'VISIT_SCHEDULED' ? (
@@ -176,7 +173,9 @@ export function VisitBookingScreen({
             <>
               <h2 className="h mb-12">Type de visite</h2>
               <div className="opts">
-                {TYPES.map((option) => (
+                {TYPES.filter(
+                  (option) => option.value !== 'VIDEO' || view.drivers.video !== 'mock',
+                ).map((option) => (
                   <button
                     key={option.value}
                     type="button"
@@ -221,9 +220,7 @@ export function VisitBookingScreen({
                           className="slot"
                           aria-pressed={slotId === slot.id}
                           disabled={!allowed}
-                          title={
-                            allowed ? undefined : 'Ce créneau n’accepte pas ce type de visite'
-                          }
+                          title={allowed ? undefined : 'Ce créneau n’accepte pas ce type de visite'}
                           onClick={() => setSlotId(slot.id)}
                         >
                           {fmt.timeOfDay(slot.startsAt)}
@@ -242,24 +239,28 @@ export function VisitBookingScreen({
 
           <h2 className="h mt-32 mb-12">Avant le rendez-vous</h2>
           <div className="panel panel--strong">
-            {view.prerequisites.map((prerequisite) => (
-              <div key={prerequisite.key} className="doc">
-                <div className="doc__head">
-                  <div>
-                    <div className="doc__n">{prerequisite.label}</div>
-                    <div className="doc__m">
-                      {prerequisite.blocking ? 'Obligatoire' : 'Pour information'}
+            {view.prerequisites
+              .filter(
+                (item) => item.key !== 'camera' || view.visit?.type === 'VIDEO' || type === 'VIDEO',
+              )
+              .map((prerequisite) => (
+                <div key={prerequisite.key} className="doc">
+                  <div className="doc__head">
+                    <div>
+                      <div className="doc__n">{prerequisite.label}</div>
+                      <div className="doc__m">
+                        {prerequisite.blocking ? 'Obligatoire' : 'Pour information'}
+                      </div>
+                    </div>
+                    <div className="doc__c">{prerequisite.detail}</div>
+                    <div className="doc__a">
+                      <span className={PREREQ_TONE[prerequisite.state]}>
+                        {PREREQ_LABEL[prerequisite.state]}
+                      </span>
                     </div>
                   </div>
-                  <div className="doc__c">{prerequisite.detail}</div>
-                  <div className="doc__a">
-                    <span className={PREREQ_TONE[prerequisite.state]}>
-                      {PREREQ_LABEL[prerequisite.state]}
-                    </span>
-                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
           </div>
         </div>
 
@@ -311,9 +312,7 @@ export function VisitBookingScreen({
                   <span className="kv__k">Lien visio</span>
                   <span className="kv__v">
                     {view.drivers.video === 'mock' ? (
-                      <span className="badge badge--pending badge--nodot">
-                        Prestataire simulé
-                      </span>
+                      <span className="badge badge--pending badge--nodot">Prestataire simulé</span>
                     ) : (
                       <a className="link" href={view.visit.videoRoomUrl}>
                         Rejoindre
@@ -334,8 +333,8 @@ export function VisitBookingScreen({
               {view.visit ? (
                 <>
                   <p className="p-sm">
-                    Rendez-vous enregistré. Vous recevrez un rappel deux heures avant,
-                    avec l’adresse exacte et le numéro de l’agent.
+                    Rendez-vous enregistré. Un rappel par e-mail est prévu dans les deux heures
+                    précédant la visite confirmée. Retrouvez ici l’adresse et l’agent affecté.
                   </p>
                   {view.visit.cancellable ? (
                     <button
@@ -365,7 +364,7 @@ export function VisitBookingScreen({
                   <p className="field__hint mt-10">
                     {slotId === null
                       ? 'Choisissez d’abord un créneau.'
-                      : 'Vous recevrez un rappel deux heures avant, avec l’adresse exacte et le numéro de l’agent.'}
+                      : 'Un rappel par e-mail est prévu dans les deux heures précédant la visite confirmée.'}
                   </p>
                 </>
               )}
@@ -389,9 +388,7 @@ export function VisitBookingScreen({
                           : 'pending'
                     }`}
                   >
-                    <span className="log__date">
-                      {fmt.logStamp(visit.scheduledAt)}
-                    </span>
+                    <span className="log__date">{fmt.logStamp(visit.scheduledAt)}</span>
                     <div>
                       <span className="log__title">
                         <b>{visit.propertyReference}</b> — {visit.district}

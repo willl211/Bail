@@ -34,7 +34,7 @@ export class MockSignatureDriver implements SignatureDriver {
       throw new BadRequestException('Document vide : rien à signer.');
     }
 
-    const id = `env_${randomUUID().replace(/-/g, '').slice(0, 24)}`;
+    const id = `env_${(input.transactionId ?? randomUUID()).replace(/-/g, '').slice(0, 24)}`;
     const expiresAt = new Date(Date.now() + input.expiresInDays * 24 * 3600 * 1000);
 
     this.logger.log(

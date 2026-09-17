@@ -1,4 +1,5 @@
 import { Prisma, PropertyStatus } from '@prisma/client';
+import { diagnosticVisibilityWhere } from '../owner/diagnostic-policy';
 
 /**
  * Ce qui rend une annonce visible du public.
@@ -13,7 +14,8 @@ export const VISIBLE_STATUSES: PropertyStatus[] = [
   PropertyStatus.VISITS_IN_PROGRESS,
 ];
 
-export const visiblePropertyWhere = (): Prisma.PropertyWhereInput => ({
+export const visiblePropertyWhere = (now = new Date()): Prisma.PropertyWhereInput => ({
+  ...diagnosticVisibilityWhere(now),
   status: { in: VISIBLE_STATUSES },
   publishedAt: { not: null },
 });

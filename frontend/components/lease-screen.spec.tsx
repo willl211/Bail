@@ -3,9 +3,12 @@ import userEvent from '@testing-library/user-event';
 import { LeaseScreen } from './lease-screen';
 import { routerMock } from '../test/setup-components';
 import type { LeaseView } from '@/lib/api';
-import { sendLeaseForSignature } from '@/lib/lease-client';
+import { sendLeaseForSignature, downloadSignedLease } from '@/lib/lease-client';
 
-jest.mock('@/lib/lease-client', () => ({ sendLeaseForSignature: jest.fn() }));
+jest.mock('@/lib/lease-client', () => ({
+  sendLeaseForSignature: jest.fn(),
+  downloadSignedLease: jest.fn(),
+}));
 const mockSend = sendLeaseForSignature as jest.MockedFunction<typeof sendLeaseForSignature>;
 
 const lease = (overrides: Partial<LeaseView> = {}): LeaseView => ({
@@ -69,6 +72,44 @@ const sendButton = () => screen.getByRole('button', { name: /envoyer en signatur
  * dire, pas laisser un bouton promettre l'inverse.
  */
 describe('LeaseScreen', () => {
+  it('affiche les signatures nouvelles reçues après actualisation du serveur', () => {
+    const { rerender } = render(
+      <LeaseScreen
+        initial={lease({
+          signatureDriver: 'docusign',
+          status: 'SENT_FOR_SIGNATURE',
+          sentForSignatureAt: '2026-09-15T10:00:00Z',
+        })}
+        canSend
+      />,
+    );
+    expect(
+      screen.queryByRole('button', { name: /télécharger le bail signé/i }),
+    ).not.toBeInTheDocument();
+    rerender(
+      <LeaseScreen initial={lease({ signatureDriver: 'docusign', status: 'SIGNED' })} canSend />,
+    );
+    expect(screen.getByRole('button', { name: /télécharger le bail signé/i })).toBeEnabled();
+  });
+
+  it('permet de reprendre un téléchargement refusé sans annoncer de succès', async () => {
+    const download = downloadSignedLease as jest.MockedFunction<typeof downloadSignedLease>;
+    download
+      .mockRejectedValueOnce({ message: 'Document temporairement indisponible.' })
+      .mockResolvedValueOnce();
+    render(
+      <LeaseScreen initial={lease({ signatureDriver: 'docusign', status: 'SIGNED' })} canSend />,
+    );
+    const button = screen.getByRole('button', { name: /télécharger le bail signé/i });
+    await userEvent.click(button);
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Document temporairement indisponible.',
+    );
+    await userEvent.click(button);
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+    expect(download).toHaveBeenCalledWith('BAIL-2026-0007');
+  });
+
   it('envoie l’acte en signature et rafraîchit l’écran', async () => {
     mockSend.mockResolvedValue(
       lease({ status: 'SENT_FOR_SIGNATURE', sentForSignatureAt: '2026-09-20T09:00:00.000Z' }),
@@ -169,8 +210,12 @@ describe('LeaseScreen', () => {
 
     const { unmount } = render(
       <LeaseScreen
-        initial={lease({ status: 'SENT_FOR_SIGNATURE', sentForSignatureAt: '2026-09-20T09:00:00.000Z' })}
+        initial={lease({
+          status: 'SENT_FOR_SIGNATURE',
+          sentForSignatureAt: '2026-09-20T09:00:00.000Z',
+        })}
         canSend={false}
+        canPay
       />,
     );
     expect(honoraires()).not.toBeInTheDocument();
@@ -184,6 +229,7 @@ describe('LeaseScreen', () => {
           signedAt: '2026-09-21T09:00:00.000Z',
         })}
         canSend={false}
+        canPay
       />,
     );
     expect(honoraires()).toHaveAttribute('href', '/baux/BAIL-2026-0007/honoraires');
@@ -202,8 +248,17 @@ describe('LeaseScreen', () => {
       />,
     );
 
-    expect(
-      screen.queryByRole('link', { name: /régler les honoraires/i }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /régler les honoraires/i })).not.toBeInTheDocument();
+  });
+
+  it('permet à un agent de télécharger le bail signé sans lui proposer de payer', () => {
+    render(
+      <LeaseScreen
+        initial={lease({ status: 'SIGNED', signatureDriver: 'docusign' })}
+        canSend={false}
+      />,
+    );
+    expect(screen.getByRole('button', { name: /télécharger le bail signé/i })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /régler les honoraires/i })).not.toBeInTheDocument();
   });
 });

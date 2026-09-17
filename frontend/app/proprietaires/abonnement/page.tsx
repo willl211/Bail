@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation';
 import { CostComparison } from '@/components/cost-comparison';
 import { OwnerAside } from '@/components/owner-aside';
 import { SubscriptionActions } from '@/components/subscription-actions';
+import { SubscriptionPortal } from '@/components/subscription-portal';
+import { PaymentReturn } from '@/components/payment-return';
 import { getCurrentUser, getOwnerSummary, getSubscription } from '@/lib/api';
 import type { PaymentStatus, SubscriptionStatus } from '@/lib/api';
 import * as fmt from '@/lib/format';
@@ -13,6 +15,7 @@ export const metadata: Metadata = { title: 'Abonnement' };
 
 /** Statut de l'abonnement, tel qu'affiché en tête de la formule. */
 const PLAN_BADGE: Record<SubscriptionStatus, { label: string; tone: string }> = {
+  INCOMPLETE: { label: 'À finaliser dans Stripe', tone: 'badge badge--pending' },
   TRIALING: { label: 'Période d’essai', tone: 'badge badge--pending' },
   ACTIVE: { label: 'Actif', tone: 'badge badge--ok' },
   PAST_DUE: { label: 'Paiement en retard', tone: 'badge badge--reject' },
@@ -43,7 +46,7 @@ export default async function OwnerSubscriptionPage() {
 
   const cancelled = subscription.cancelledAt !== null;
   const state =
-    subscription.status === null || subscription.status === 'CANCELLED'
+    subscription.status === null || subscription.status === 'CANCELLED' || subscription.status === 'INCOMPLETE'
       ? 'none'
       : cancelled
         ? 'cancelled'
@@ -68,6 +71,7 @@ export default async function OwnerSubscriptionPage() {
         <OwnerAside user={user} summary={summary} current="subscription" />
 
         <div className="body">
+          <PaymentReturn confirmed={subscription.status === 'ACTIVE' || subscription.status === 'TRIALING'} />
           <div className="page__head">
             <div>
               <span className="label label--accent">Facturation</span>
@@ -160,7 +164,7 @@ export default async function OwnerSubscriptionPage() {
 
               {state === 'none' ? (
                 <div className="panel pad mt-16">
-                  <SubscriptionActions state="none" endsAt={null} />
+                  <SubscriptionActions state="none" endsAt={null} incomplete={subscription.status === 'INCOMPLETE'} />
                   <p className="field__hint mt-12">
                     Sans engagement, résiliable à tout moment. La facturation démarre
                     quand une annonce passe en diffusion.
@@ -169,7 +173,7 @@ export default async function OwnerSubscriptionPage() {
               ) : null}
 
               <h2 className="h mt-32 mb-12">Moyen de paiement</h2>
-              {subscription.paymentMethod === null ? (
+              {subscription.driver === 'stripe' && subscription.status && subscription.status !== 'INCOMPLETE' ? <SubscriptionPortal /> : subscription.paymentMethod === null ? (
                 <div className="panel pad">
                   <p className="p-sm">
                     Aucun moyen de paiement : il sera demandé à la souscription.
@@ -219,7 +223,7 @@ export default async function OwnerSubscriptionPage() {
                   </p>
                 </div>
               ) : (
-                <div className="tbl__scroll">
+                <div className="tbl__scroll" tabIndex={0} role="region" aria-label="Factures — tableau à défilement horizontal">
                   <table className="tbl">
                     <thead>
                       <tr>

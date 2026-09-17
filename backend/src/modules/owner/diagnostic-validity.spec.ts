@@ -8,7 +8,7 @@ describe('Validité commune aux diagnostics de publication et de bail', () => {
     );
   });
   it('cesse de compter une pièce à son expiration exacte', () => {
-    const document = { type: 'DPE' as const, status: 'VERIFIED' as const, expiresAt: now };
+    const document = { type: 'DPE' as const, status: 'VERIFIED' as const, issuedAt: new Date('2026-01-01'), expiresAt: now };
     expect(isCurrentDiagnostic(document, now)).toBe(false);
     expect(diagnosticStatus(document, now)).toBe('EXPIRED');
     expect(isCurrentDiagnostic(document, new Date(now.getTime() - 1))).toBe(true);

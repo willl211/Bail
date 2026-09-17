@@ -28,6 +28,7 @@ export default async function BackofficePage() {
   const user = await getCurrentUser();
   if (!user) redirect('/connexion');
   if (user.role !== 'AGENT') redirect('/');
+  if (user.mfaRequired) redirect('/securite');
 
   const [summary, providers, files, properties, leases, visits, agents, journal] =
     await Promise.all([

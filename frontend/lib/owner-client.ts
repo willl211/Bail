@@ -65,6 +65,11 @@ export interface PropertyDraft {
   energyRating?: string;
   gesRating?: string;
   constructionYear?: number;
+  electricalDiagnostic?: 'UNKNOWN' | 'REQUIRED' | 'NOT_REQUIRED';
+  gasDiagnostic?: 'UNKNOWN' | 'REQUIRED' | 'NOT_REQUIRED';
+  riskDiagnostic?: 'UNKNOWN' | 'REQUIRED' | 'NOT_REQUIRED';
+  noiseDiagnostic?: 'UNKNOWN' | 'REQUIRED' | 'NOT_REQUIRED';
+
   rentCents?: number;
   chargesCents?: number;
   availableFrom?: string;
@@ -131,6 +136,7 @@ export type PropertyDocumentType =
   | 'LEAD'
   | 'ERP'
   | 'ELECTRICAL'
+  | 'NOISE'
   | 'GAS'
   | 'OTHER';
 
@@ -184,6 +190,10 @@ export function documentFileUrl(reference: string, documentId: string) {
  */
 export function subscribe<T>() {
   return send<T>('POST', '/owner/subscription');
+}
+
+export function openBillingPortal() {
+  return send<{ url: string }>('POST', '/owner/subscription/portal');
 }
 
 export function cancelSubscription<T>() {

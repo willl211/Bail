@@ -76,7 +76,14 @@ export function register(payload: RegisterPayload) {
 }
 
 export function login(email: string, password: string) {
-  return post<{ user: { id: string; role: string } }>('/auth/login', { email, password });
+  return post<{ user: { id: string; role: string; mfaRequired?: boolean } }>('/auth/login', { email, password });
+}
+
+export function setupMfa(password: string) {
+  return post<{ secret: string; uri: string }>('/auth/mfa/setup', { password });
+}
+export function verifyMfa(code: string) {
+  return post<{ recoveryCodes: string[] }>('/auth/mfa/verify', { code });
 }
 
 export function logout() {

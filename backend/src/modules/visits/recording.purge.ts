@@ -1,7 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
+import { VIDEO_DRIVER, type VideoDriver } from '../video/video.driver';
 
 /** Enregistrements traités par passage, pour ne pas bloquer sur un gros retard. */
 const BATCH_SIZE = 50;
@@ -19,9 +20,8 @@ const BATCH_SIZE = 50;
  * passage : sans `recordingPurgedAt`, on ne pourrait pas prouver que l'effacement
  * a bien eu lieu — or c'est précisément ce qu'une autorité de contrôle demande.
  *
- * Une heure fixe plutôt qu'un intervalle : le passage doit être identifiable
- * dans un journal d'exploitation, et une purge quotidienne à 3 h du matin se
- * raconte, contrairement à « toutes les 30 minutes ».
+ * Un passage par minute traite aussi les salles annulées. Un échec reste en
+ * attente : seul un effacement confirmé permet de retirer les références.
  */
 @Injectable()
 export class RecordingPurge {
@@ -31,9 +31,10 @@ export class RecordingPurge {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    @Inject(VIDEO_DRIVER) private readonly video: VideoDriver,
   ) {}
 
-  @Cron(CronExpression.EVERY_DAY_AT_3AM, { name: 'recording-purge' })
+  @Cron(CronExpression.EVERY_MINUTE, { name: 'recording-purge' })
   async purge(): Promise<void> {
     if (this.running) return;
     this.running = true;
@@ -41,12 +42,15 @@ export class RecordingPurge {
     try {
       const expired = await this.prisma.visit.findMany({
         where: {
-          recordingStorageKey: { not: null },
           recordingPurgedAt: null,
-          recordingExpiresAt: { lte: new Date() },
+          AND: [
+            { OR: [{ recordingStorageKey: { not: null } }, { videoRoomId: { not: null } }] },
+            { OR: [{ recordingExpiresAt: { lte: new Date() } }, { status: 'CANCELLED' }] },
+          ],
         },
+        orderBy: { updatedAt: 'asc' },
         take: BATCH_SIZE,
-        select: { id: true, recordingStorageKey: true },
+        select: { id: true, recordingStorageKey: true, videoRoomId: true, videoProvider: true },
       });
 
       if (expired.length === 0) return;
@@ -54,19 +58,36 @@ export class RecordingPurge {
       let purged = 0;
       for (const visit of expired) {
         try {
-          await this.storage.remove('private', visit.recordingStorageKey as string);
+          if (visit.videoRoomId) {
+            if (visit.videoProvider !== this.video.name)
+              throw new Error('Prestataire de la salle indisponible.');
+            await this.video.deleteRoom(visit.videoRoomId);
+          }
+          if (visit.recordingStorageKey)
+            await this.storage.removeRequired('private', visit.recordingStorageKey);
         } catch (error) {
-          // Un fichier déjà absent n'empêche pas de clore la purge : ce qui
-          // compte est qu'il ne soit plus là, pas qu'on l'ait supprimé
-          // nous-mêmes. En revanche, la clé doit disparaître de la base.
-          this.logger.warn(
-            `Enregistrement ${visit.id} introuvable au stockage : ${(error as Error).message}`,
-          );
+          this.logger.warn(`Purge ${visit.id} à reprendre : ${(error as Error).message}`);
+          // Garder les références pour réessayer, sans bloquer tout le lot.
+          await this.prisma.visit.update({
+            where: { id: visit.id },
+            data: { updatedAt: new Date() },
+          });
+          continue;
         }
 
-        await this.prisma.visit.update({
-          where: { id: visit.id },
-          data: { recordingStorageKey: null, recordingPurgedAt: new Date() },
+        await this.prisma.visit.updateMany({
+          where: {
+            id: visit.id,
+            recordingStorageKey: visit.recordingStorageKey,
+            videoRoomId: visit.videoRoomId,
+            recordingPurgedAt: null,
+          },
+          data: {
+            recordingStorageKey: null,
+            videoRoomId: null,
+            videoRoomUrl: null,
+            recordingPurgedAt: new Date(),
+          },
         });
         purged += 1;
       }

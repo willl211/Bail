@@ -1,0 +1,10 @@
+{
+  "model": "gpt-5-mini",
+  "billedModels": ["gpt-5-mini", "gpt-5-mini-2025-08-07"],
+  "checkedAt": "2026-09-15",
+  "source": "https://developers.openai.com/api/docs/models/gpt-5-mini",
+  "inputUsdPerMillion": 0.25,
+  "cachedUsdPerMillion": 0.025,
+  "outputUsdPerMillion": 2,
+  "maxInputTokens": 400000
+}

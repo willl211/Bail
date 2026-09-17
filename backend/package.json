@@ -8,12 +8,13 @@
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main.js",
-    "lint": "eslint \"src/**/*.ts\" --max-warnings 0",
+    "lint": "eslint \"src/**/*.ts\" \"evaluation/**/*.ts\" --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "test": "npm run test:unit && npm run test:int",
     "test:unit": "jest --selectProjects unit",
     "test:int": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --selectProjects integration --runInBand",
     "test:watch": "jest --selectProjects unit --watch",
+    "eval:documents": "tsx evaluation/run.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
@@ -38,6 +39,7 @@
     "pdf-lib": "^1.17.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
+    "sharp": "0.35.4",
     "stripe": "^22.6.1"
   },
   "devDependencies": {

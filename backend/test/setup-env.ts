@@ -22,6 +22,8 @@ process.env.KYC_DRIVER = 'mock';
 process.env.PAYMENT_DRIVER = 'mock';
 process.env.SIGNATURE_DRIVER = 'mock';
 process.env.VIDEO_DRIVER = 'mock';
+process.env.ADMIN_MFA_REQUIRED = 'false'; // Dérogation limitée à NODE_ENV=test ; la suite MFA l’active explicitement.
+process.env.MFA_ENCRYPTION_KEY = 'ab'.repeat(32);
 process.env.PUBLIC_SITE_URL = 'http://localhost:3000';
 process.env.SESSION_COOKIE_SECURE = 'false';
 process.env.TRUSTED_PROXY_CIDRS = '';

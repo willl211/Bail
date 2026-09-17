@@ -1,30 +1,41 @@
 import type { Metadata, Viewport } from 'next';
-import { Archivo, IBM_Plex_Mono } from 'next/font/google';
+import localFont from 'next/font/local';
 import { Suspense } from 'react';
 import { SiteHeader } from '@/components/site-header';
 import { SiteFooter } from '@/components/site-footer';
 import { RevealObserver } from '@/components/reveal-observer';
 import './globals.css';
+import './responsive.css';
 
-// Les deux familles de la maquette : Archivo pour le texte — son axe de chasse
-// variable sert les titres serrés (`wdth` 88) autant que le texte courant —
-// et IBM Plex Mono pour toute donnée chiffrée (surface, loyer, statut,
-// référence). C'est cette règle qui tient le système visuel.
-// Archivo est chargée en fonte variable (pas de `weight` figé) : c'est la
-// condition pour exposer l'axe de chasse `wdth`, dont le système se sert pour
-// resserrer les titres (`font-variation-settings: 'wdth' 88`).
-const archivo = Archivo({
-  subsets: ['latin'],
-  axes: ['wdth'],
+// Fichiers et licences versionnés : aucun téléchargement à la compilation.
+// Titres chaleureux, interface sobre et repères chiffrés alignés.
+const dmSans = localFont({
+  src: './fonts/dm-sans-latin.woff2',
+  weight: '400 700',
+  style: 'normal',
   variable: '--font-sans',
   display: 'swap',
 });
 
-const ibmPlexMono = IBM_Plex_Mono({
-  subsets: ['latin'],
-  weight: ['400', '500', '600'],
+const newsreader = localFont({
+  src: './fonts/newsreader-latin.woff2',
+  weight: '400 600',
+  style: 'normal',
+  variable: '--font-display',
+  display: 'swap',
+  adjustFontFallback: 'Times New Roman',
+});
+
+const ibmPlexMono = localFont({
+  src: [
+    { path: './fonts/ibm-plex-mono-400-latin.woff2', weight: '400', style: 'normal' },
+    { path: './fonts/ibm-plex-mono-500-latin.woff2', weight: '500', style: 'normal' },
+    { path: './fonts/ibm-plex-mono-600-latin.woff2', weight: '600', style: 'normal' },
+  ],
   variable: '--font-mono',
   display: 'swap',
+  preload: false,
+  adjustFontFallback: false,
 });
 
 export const metadata: Metadata = {
@@ -55,11 +66,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html
       lang="fr"
       data-scroll-behavior="smooth"
-      className={`${archivo.variable} ${ibmPlexMono.variable}`}
+      className={`${dmSans.variable} ${newsreader.variable} ${ibmPlexMono.variable}`}
     >
       <body>
+        <a className="skip-link" href="#page-content">Aller au contenu</a>
         <SiteHeader />
-        {children}
+        <div id="page-content" tabIndex={-1}>{children}</div>
         <SiteFooter />
         <Suspense fallback={null}>
           <RevealObserver />

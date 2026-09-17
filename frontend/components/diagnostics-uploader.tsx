@@ -23,26 +23,21 @@ interface PropertyDocument {
 }
 
 /**
- * Diagnostics attendus, dans l'ordre où la maquette les présente.
- *
- * Seul le DPE est marqué obligatoire : c'est le seul dont l'absence empêche de
- * diffuser une annonce de location. Les autres dépendent du bien (année de
- * construction, présence de gaz, zone) — les exiger tous bloquerait des dépôts
- * légitimes.
+ * Diagnostics proposés. Les mentions « requis » suivent les réponses du
+ * propriétaire ; le serveur contrôle les mêmes obligations à la soumission.
  */
 const EXPECTED: {
   type: PropertyDocumentType;
   label: string;
   hint: string;
-  required?: boolean;
 }[] = [
   {
     type: 'DPE',
     label: 'Diagnostic de performance énergétique',
     hint: 'Obligatoire pour diffuser l’annonce.',
-    required: true,
   },
-  { type: 'ASBESTOS', label: 'Amiante', hint: 'Immeubles construits avant 1997.' },
+  { type: 'ASBESTOS', label: 'Amiante', hint: 'À tenir à disposition sur demande lorsque applicable ; non annexé automatiquement au bail.' },
+  { type: 'NOISE', label: 'Bruit des aéroports', hint: 'Si le logement est dans un plan d’exposition au bruit.' },
   { type: 'LEAD', label: 'Plomb (CREP)', hint: 'Immeubles construits avant 1949.' },
   { type: 'ERP', label: 'État des risques et pollutions', hint: 'Selon la commune.' },
   { type: 'ELECTRICAL', label: 'Installation électrique', hint: 'Si elle a plus de 15 ans.' },
@@ -80,10 +75,12 @@ const MAX_BYTES = 15 * 1024 * 1024;
 
 export function DiagnosticsUploader({
   reference,
+  requiredTypes,
   documents,
   readOnly,
 }: {
   reference: string | null;
+  requiredTypes: string[];
   documents: PropertyDocument[];
   readOnly: boolean;
 }) {
@@ -150,7 +147,7 @@ export function DiagnosticsUploader({
             <div>
               <div className="doc-row__name">
                 {expected.label}
-                {expected.required ? <span className="doc-row__required">requis</span> : null}
+                {requiredTypes.includes(expected.type) ? <span className="doc-row__required">requis</span> : null}
               </div>
               <div className="doc-row__meta">
                 {document

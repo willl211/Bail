@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import Link from 'next/link';
 
 /**
  * Écran d'erreur.
@@ -22,17 +23,16 @@ export default function Error({
   return (
     <main className="page">
       <div className="notice">
-        <h1 className="notice__title">Les annonces ne peuvent pas être chargées</h1>
+        <h1 className="notice__title">Cette page est momentanément indisponible</h1>
         <p className="notice__text">
-          L&apos;API n&apos;a pas répondu. En développement, vérifiez que la base et le backend
-          tournent :
+          Nous n’avons pas pu charger les informations. Réessayez dans quelques instants.
         </p>
-        <code className="notice__code">{`npm run db:up\nnpm run dev:backend`}</code>
-        <p className="notice__text" style={{ marginTop: 18 }}>
+        <div className="flex gap-12 wrap ai-c mt-16">
           <button type="button" className="btn btn-sm" onClick={reset}>
             Réessayer
           </button>
-        </p>
+          <Link href="/" className="link">Retour à l’accueil</Link>
+        </div>
       </div>
     </main>
   );

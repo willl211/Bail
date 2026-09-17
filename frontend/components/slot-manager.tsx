@@ -46,7 +46,7 @@ export function SlotManager({
     return isoDate(tomorrow);
   });
   const [hours, setHours] = useState<string[]>(['18:00']);
-  const [types, setTypes] = useState<VisitType[]>(['ACCOMPANIED', 'VIDEO']);
+  const [types, setTypes] = useState<VisitType[]>(['ACCOMPANIED']);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<VisitFailure | null>(null);
 
@@ -57,9 +57,7 @@ export function SlotManager({
 
   const toggleType = (type: VisitType) =>
     setTypes((current) =>
-      current.includes(type)
-        ? current.filter((t) => t !== type)
-        : [...current, type],
+      current.includes(type) ? current.filter((t) => t !== type) : [...current, type],
     );
 
   const submit = async () => {
@@ -115,12 +113,7 @@ export function SlotManager({
           <div className="field">
             <span className="label label--ink">Type de visite accepté</span>
             <div className="flex gap-10 wrap mt-8">
-              {(
-                [
-                  ['ACCOMPANIED', 'Accompagnée'],
-                  ['VIDEO', 'Visio'],
-                ] as const
-              ).map(([value, label]) => (
+              {([['ACCOMPANIED', 'Accompagnée']] as const).map(([value, label]) => (
                 <button
                   key={value}
                   type="button"
@@ -152,8 +145,8 @@ export function SlotManager({
               ))}
             </div>
             <span className="field__hint">
-              Une visite accompagnée dure 30 minutes, une visio 20. Deux créneaux
-              qui se chevauchent ne peuvent pas être ouverts ensemble.
+              Une visite accompagnée dure 30 minutes, une visio 20. Deux créneaux qui se chevauchent
+              ne peuvent pas être ouverts ensemble.
             </span>
           </div>
 
@@ -184,8 +177,8 @@ export function SlotManager({
       {upcoming.length === 0 ? (
         <div className="panel pad">
           <p className="p-sm">
-            Aucun créneau à venir. Les candidats retenus ne peuvent pas prendre
-            rendez-vous tant que vous n’en ouvrez pas.
+            Aucun créneau à venir. Les candidats retenus ne peuvent pas prendre rendez-vous tant que
+            vous n’en ouvrez pas.
           </p>
         </div>
       ) : (
@@ -194,9 +187,7 @@ export function SlotManager({
             <div key={slot.id} className="doc">
               <div className="doc__head">
                 <div>
-                  <div className="doc__n">
-                    {fmt.appointment(slot.startsAt)}
-                  </div>
+                  <div className="doc__n">{fmt.appointment(slot.startsAt)}</div>
                   <div className="doc__m">
                     {slot.durationMinutes} min ·{' '}
                     {slot.allowedTypes

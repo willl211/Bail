@@ -31,5 +31,7 @@ export default async function LeasePage({ params }: Params) {
     throw error;
   }
 
-  return <LeaseScreen initial={lease} canSend={user.role === 'OWNER'} />;
+  return (
+    <LeaseScreen initial={lease} canSend={user.role === 'OWNER'} canPay={user.role === 'TENANT'} />
+  );
 }

@@ -69,7 +69,7 @@ prestataire. Sans Mailpit démarré, l'API le signale au lancement et les envois
 ## Tests
 
 ```bash
-npm test          # tout : 545 tests
+npm test          # tout : 718 tests
 ```
 
 Deux campagnes, séparées par ce qu'elles exigent pour tourner.
@@ -275,6 +275,11 @@ candidats, tous avec le mot de passe **`Demo1234!`** :
 | `camille.ferry@bail.local`, `noah.bertrand@bail.local`, `ines.lemoine@bail.local`, `theo.marchand@bail.local` | locataires candidats |
 
 Ces comptes n'existent que dans le seed de développement.
+
+Depuis l’étape 7, le compte agent doit aussi configurer sa double authentification
+sur `/securite` avant d’accéder au back-office. Conserver les codes de secours
+affichés à l’enrôlement. `MFA_ENCRYPTION_KEY` doit être configurée côté serveur ;
+voir [les procédures d’administration et d’exploitation](docs/operations.md).
 
 Le seed dépose aussi, pour chacun des 8 biens, un **DPE de démonstration** —
 un PDF d'une page qui annonce en première ligne qu'il n'est pas un diagnostic.

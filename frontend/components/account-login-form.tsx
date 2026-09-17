@@ -24,7 +24,7 @@ export function AccountLoginForm({ intent = {} }: { intent?: AccountIntent }) {
     setError('');
     try {
       const { user } = await login(email.trim(), password);
-      router.replace(accountDestination(user.role, intent));
+      router.replace(user.mfaRequired ? '/securite' : accountDestination(user.role, intent));
       router.refresh();
     } catch (failure) {
       setError((failure as AuthFailure).message);

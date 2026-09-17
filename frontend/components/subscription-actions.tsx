@@ -8,6 +8,7 @@ import {
   subscribe,
   type ApiFailure,
 } from '@/lib/owner-client';
+import { redirectToStripe } from '@/lib/stripe-redirect';
 
 type Action = 'subscribe' | 'cancel' | 'resume';
 
@@ -21,10 +22,12 @@ type Action = 'subscribe' | 'cancel' | 'resume';
 export function SubscriptionActions({
   state,
   endsAt,
+  incomplete = false,
 }: {
   state: 'none' | 'active' | 'cancelled';
   /** Date de fin effective, affichée dans la confirmation de résiliation. */
   endsAt: string | null;
+  incomplete?: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<Action | null>(null);
@@ -35,7 +38,10 @@ export function SubscriptionActions({
     setBusy(action);
     setError(null);
     try {
-      if (action === 'subscribe') await subscribe();
+      if (action === 'subscribe') {
+        const result = await subscribe<{ checkoutUrl?: string }>();
+        if (result.checkoutUrl) redirectToStripe(result.checkoutUrl);
+      }
       else if (action === 'cancel') await cancelSubscription();
       else await resumeSubscription();
       setConfirming(false);
@@ -62,7 +68,7 @@ export function SubscriptionActions({
           onClick={() => run('subscribe')}
           disabled={busy !== null}
         >
-          {busy === 'subscribe' ? 'Souscription…' : 'Souscrire l’abonnement'}
+          {busy === 'subscribe' ? 'Ouverture…' : incomplete ? 'Reprendre dans Stripe' : 'Souscrire l’abonnement'}
         </button>
       ) : null}
 
@@ -70,7 +76,7 @@ export function SubscriptionActions({
         confirming ? (
           <>
             <p className="p-sm mb-12">
-              À confirmer : vos annonces sortent de la diffusion
+              La résiliation prendra effet
               {endsAt ? ` le ${endsAt}` : ' à la fin de la période en cours'}. Les baux
               déjà signés restent accessibles.
             </p>

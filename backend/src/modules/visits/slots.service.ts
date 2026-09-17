@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -8,6 +9,7 @@ import { PropertyStatus, VisitStatus, VisitType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { OpenSlotsDto } from './dto/open-slots.dto';
 import { VISIT_DURATION_MINUTES, overlaps } from './visit.policy';
+import { VIDEO_DRIVER, type VideoDriver } from '../video/video.driver';
 
 /** Créneau tel que son propriétaire le voit. */
 export interface OwnerSlotView {
@@ -32,7 +34,10 @@ const MAX_HORIZON_DAYS = 90;
 
 @Injectable()
 export class SlotsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(VIDEO_DRIVER) private readonly video: VideoDriver,
+  ) {}
 
   /**
    * Bien du propriétaire connecté.
@@ -79,9 +84,7 @@ export class SlotsService {
       durationMinutes: slot.durationMinutes,
       allowedTypes: slot.allowedTypes,
       booked: slot.visit !== null,
-      bookedBy: slot.visit
-        ? `${slot.visit.tenant.firstName} ${slot.visit.tenant.lastName}`
-        : null,
+      bookedBy: slot.visit ? `${slot.visit.tenant.firstName} ${slot.visit.tenant.lastName}` : null,
       visitStatus: slot.visit?.status ?? null,
       past: slot.startsAt.getTime() < now,
     }));
@@ -95,17 +98,17 @@ export class SlotsService {
    * en silence plutôt que de faire échouer tout le lot — rouvrir une semaine
    * déjà partiellement ouverte est un geste normal.
    */
-  async open(
-    ownerId: string,
-    reference: string,
-    dto: OpenSlotsDto,
-  ): Promise<OwnerSlotView[]> {
+  async open(ownerId: string, reference: string, dto: OpenSlotsDto): Promise<OwnerSlotView[]> {
     const property = await this.ownedOrFail(ownerId, reference);
 
     if (property.status === PropertyStatus.DRAFT) {
       throw new ConflictException(
         'Publiez d’abord ce bien : un brouillon ne reçoit pas de visite.',
       );
+    }
+
+    if (dto.allowedTypes.includes(VisitType.VIDEO) && this.video.name === 'mock') {
+      throw new BadRequestException('La visio n’est pas disponible. Ouvrez un créneau accompagné.');
     }
 
     const horizon = Date.now() + MAX_HORIZON_DAYS * 24 * 3600 * 1000;
@@ -131,45 +134,52 @@ export class SlotsService {
       ...dto.allowedTypes.map((type) => VISIT_DURATION_MINUTES[type]),
     );
 
-    const existing = await this.prisma.visitSlot.findMany({
-      where: { propertyId: property.id, closedAt: null },
-      select: { startsAt: true, durationMinutes: true },
-    });
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT "id" FROM "properties" WHERE "id" = ${property.id} FOR UPDATE`;
+      const existing = await tx.visitSlot.findMany({
+        where: { propertyId: property.id, OR: [{ closedAt: null }, { visitId: { not: null } }] },
+        select: { startsAt: true, durationMinutes: true },
+      });
 
-    const kept: Date[] = [];
-    for (const startsAt of requested.sort((a, b) => a.getTime() - b.getTime())) {
-      const candidate = { startsAt, durationMinutes };
-      const clashes =
-        existing.some((slot) => overlaps(slot, candidate)) ||
-        kept.some((other) => overlaps({ startsAt: other, durationMinutes }, candidate));
-      if (!clashes) {
-        kept.push(startsAt);
-        existing.push(candidate);
+      const kept: Date[] = [];
+      for (const startsAt of requested.sort((a, b) => a.getTime() - b.getTime())) {
+        const candidate = { startsAt, durationMinutes };
+        const clashes =
+          existing.some((slot) => overlaps(slot, candidate)) ||
+          kept.some((other) => overlaps({ startsAt: other, durationMinutes }, candidate));
+        if (!clashes) {
+          kept.push(startsAt);
+          existing.push(candidate);
+        }
       }
-    }
 
-    if (kept.length === 0) {
-      throw new ConflictException(
-        'Ces horaires chevauchent des créneaux déjà ouverts sur ce bien.',
-      );
-    }
-    if (kept.length > MAX_OPEN_SLOTS) {
-      throw new BadRequestException(
-        `Pas plus de ${MAX_OPEN_SLOTS} créneaux ouverts d’un coup.`,
-      );
-    }
+      if (kept.length === 0) {
+        throw new ConflictException(
+          'Ces horaires chevauchent des créneaux déjà ouverts sur ce bien.',
+        );
+      }
+      if (kept.length > MAX_OPEN_SLOTS) {
+        throw new BadRequestException(`Pas plus de ${MAX_OPEN_SLOTS} créneaux ouverts d’un coup.`);
+      }
 
-    await this.prisma.visitSlot.createMany({
-      data: kept.map((startsAt) => ({
-        propertyId: property.id,
-        openedById: ownerId,
-        startsAt,
-        durationMinutes,
-        allowedTypes: dto.allowedTypes,
-      })),
-      // Filet contre la contrainte `@@unique([propertyId, startsAt])` : un
-      // créneau fermé puis rouvert au même horaire existe encore en base.
-      skipDuplicates: true,
+      for (const startsAt of kept) {
+        await tx.visitSlot.upsert({
+          where: { propertyId_startsAt: { propertyId: property.id, startsAt } },
+          update: {
+            closedAt: null,
+            durationMinutes,
+            allowedTypes: dto.allowedTypes,
+            openedById: ownerId,
+          },
+          create: {
+            propertyId: property.id,
+            startsAt,
+            durationMinutes,
+            allowedTypes: dto.allowedTypes,
+            openedById: ownerId,
+          },
+        });
+      }
     });
 
     return this.listForProperty(property.id);
@@ -181,28 +191,22 @@ export class SlotsService {
    * Un créneau réservé ne se retire pas : c'est un rendez-vous pris avec
    * quelqu'un. Il faut annuler la visite, ce qui prévient le locataire.
    */
-  async close(
-    ownerId: string,
-    reference: string,
-    slotId: string,
-  ): Promise<OwnerSlotView[]> {
+  async close(ownerId: string, reference: string, slotId: string): Promise<OwnerSlotView[]> {
     const property = await this.ownedOrFail(ownerId, reference);
 
-    const slot = await this.prisma.visitSlot.findFirst({
-      where: { id: slotId, propertyId: property.id, closedAt: null },
-      select: { id: true, visitId: true },
-    });
-    if (!slot) throw new NotFoundException('Créneau introuvable.');
-
-    if (slot.visitId !== null) {
-      throw new ConflictException(
-        'Ce créneau est réservé. Annulez la visite pour le libérer — le locataire en sera informé.',
-      );
-    }
-
-    await this.prisma.visitSlot.update({
-      where: { id: slot.id },
-      data: { closedAt: new Date() },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT "id" FROM "properties" WHERE "id" = ${property.id} FOR UPDATE`;
+      const slot = await tx.visitSlot.findFirst({
+        where: { id: slotId, propertyId: property.id, closedAt: null },
+      });
+      if (!slot) throw new NotFoundException('Créneau introuvable.');
+      if (slot.visitId)
+        throw new ConflictException('Ce créneau est réservé. Annulez la visite pour le libérer.');
+      const closed = await tx.visitSlot.updateMany({
+        where: { id: slot.id, visitId: null, closedAt: null },
+        data: { closedAt: new Date() },
+      });
+      if (!closed.count) throw new ConflictException('Ce créneau vient d’être réservé.');
     });
 
     return this.listForProperty(property.id);

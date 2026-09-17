@@ -229,6 +229,8 @@ export function getOwnerSubscriptionPricing() {
 export type UserRole = 'OWNER' | 'TENANT' | 'AGENT';
 
 export interface CurrentUser {
+  mfaRequired?: boolean;
+  mfaEnrolled?: boolean;
   id: string;
   email: string;
   role: UserRole;
@@ -314,6 +316,11 @@ export interface OwnerPropertyDetail extends Omit<OwnerProperty, 'district'> {
   floor: string | null;
   gesRating: string | null;
   constructionYear: number | null;
+  electricalDiagnostic: 'UNKNOWN' | 'REQUIRED' | 'NOT_REQUIRED';
+  gasDiagnostic: 'UNKNOWN' | 'REQUIRED' | 'NOT_REQUIRED';
+  riskDiagnostic: 'UNKNOWN' | 'REQUIRED' | 'NOT_REQUIRED';
+  noiseDiagnostic: 'UNKNOWN' | 'REQUIRED' | 'NOT_REQUIRED';
+
   depositCents: number;
   availableFrom: string | null;
   availableImmediately: boolean;
@@ -405,7 +412,7 @@ export async function getSavedReferences(): Promise<string[]> {
 
 // --- Abonnement propriétaire -------------------------------------------------
 
-export type SubscriptionStatus = 'TRIALING' | 'ACTIVE' | 'PAST_DUE' | 'CANCELLED';
+export type SubscriptionStatus = 'INCOMPLETE' | 'TRIALING' | 'ACTIVE' | 'PAST_DUE' | 'CANCELLED';
 
 export type PaymentStatus =
   | 'PENDING'
@@ -1009,6 +1016,7 @@ export interface AdminFileRow {
 }
 
 export interface AdminPropertyRow {
+  diagnosticContext: string[];
   reference: string;
   revision: number;
   addressLine: string;
