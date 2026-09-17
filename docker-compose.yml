@@ -40,8 +40,14 @@ services:
   # il permet de vérifier réellement le driver — écriture, lecture, suppression,
   # cloisonnement public/privé — sans compte chez un hébergeur. Le protocole est
   # le même que celui d'OVH Object Storage, seules les variables changent.
+  #
+  # Images tirées de quay.io, versions épinglées : MinIO a retiré `minio/minio` et
+  # `minio/mc` de Docker Hub (404 constaté le 17 septembre 2026). Une machine qui
+  # avait l'image en cache continuait de fonctionner ; une machine vierge — la CI,
+  # un nouveau poste — ne pouvait plus démarrer le service. `latest` n'est pas
+  # repris : c'est précisément une étiquette mouvante qui a cassé sans prévenir.
   minio:
-    image: minio/minio:latest
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: bail-minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
@@ -63,7 +69,7 @@ services:
   # public. Le privé — pièces d'identité, bulletins de salaire — ne doit être
   # accessible que par une route applicative qui vérifie qui demande quoi.
   minio-init:
-    image: minio/mc:latest
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
     container_name: bail-minio-init
     depends_on:
       minio:
